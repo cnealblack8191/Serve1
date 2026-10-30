@@ -23,12 +23,19 @@ export function useJobSignature(jobId: string | undefined) {
   return { ...all, data };
 }
 
-/** Short-lived display link for a stored file. Refreshed before signed links expire. */
+/**
+ * Short-lived display link for a stored file. Amplify signed links last 15 minutes,
+ * so the link is fetched again every 10 minutes and when the tab comes back into view.
+ */
+const URL_REFRESH_MS = 10 * 60_000;
 export function useFileUrl(path: string | undefined) {
   return useQuery({
     queryKey: ["serv1", "fileUrl", path ?? ""],
     queryFn: () => fileUrl(path!),
     enabled: !!path,
-    staleTime: 10 * 60_000,
+    staleTime: URL_REFRESH_MS,
+    refetchInterval: URL_REFRESH_MS,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
   });
 }

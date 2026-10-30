@@ -1,24 +1,34 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { type Job, useJobMutations } from "@/data";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 
-/** Notes textarea saved to the job (on "Save notes" or when the field loses focus). */
+/**
+ * Notes textarea saved to the job (on "Save notes" or when the field loses focus).
+ * The draft is local: a refresh of the job only replaces it while nothing unsaved is typed.
+ */
 export function JobNotes({ job }: { job: Job }) {
   const { update } = useJobMutations();
   const [text, setText] = useState(job.notes ?? "");
   const [saved, setSaved] = useState(true);
+  const draft = useRef(text);
 
   useEffect(() => {
-    setText(job.notes ?? "");
-    setSaved(true);
-  }, [job.id, job.notes]);
+    if (!saved) return;
+    draft.current = job.notes ?? "";
+    setText(draft.current);
+  }, [job.id, job.notes, saved]);
 
   const save = async () => {
-    if ((job.notes ?? "") === text) return setSaved(true);
-    await update.mutateAsync({ id: job.id, patch: { notes: text.trim() ? text : null } });
-    setSaved(true);
+    const submitted = draft.current;
+    if ((job.notes ?? "") === submitted) return setSaved(true);
+    await update.mutateAsync({
+      id: job.id,
+      patch: { notes: submitted.trim() ? submitted : null },
+    });
+    // Typing that happened while the save was running stays unsaved.
+    if (draft.current === submitted) setSaved(true);
   };
 
   return (
@@ -33,6 +43,7 @@ export function JobNotes({ job }: { job: Job }) {
         className="text-base"
         placeholder="What did you find? What did you do?"
         onChange={(e) => {
+          draft.current = e.target.value;
           setText(e.target.value);
           setSaved(false);
         }}
