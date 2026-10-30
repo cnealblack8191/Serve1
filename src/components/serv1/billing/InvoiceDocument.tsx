@@ -1,6 +1,6 @@
 import type { Customer, Invoice, Job, Site } from "@/data";
-import { StatusBadge } from "@/components/eci/primitives";
 
+import { InvoiceStatusBadge } from "./InvoiceStatusBadge";
 import { money, shortDate } from "./format";
 
 /**
@@ -42,7 +42,7 @@ export function InvoiceDocument({
           <p className="text-sm">{invoice.invoiceNumber}</p>
           <p className="text-sm text-muted-foreground">{shortDate(invoice.createdAt)}</p>
           <div className="mt-1">
-            <StatusBadge status={invoice.status} />
+            <InvoiceStatusBadge status={invoice.status} />
           </div>
         </div>
       </div>

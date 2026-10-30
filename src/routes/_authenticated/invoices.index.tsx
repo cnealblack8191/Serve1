@@ -1,7 +1,8 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 
-import { EmptyState, PageHeader, SectionHeading, StatusBadge } from "@/components/eci/primitives";
+import { EmptyState, PageHeader, SectionHeading } from "@/components/eci/primitives";
+import { InvoiceStatusBadge } from "@/components/serv1/billing/InvoiceStatusBadge";
 import { money, shortDate } from "@/components/serv1/billing/format";
 import { ReadyToInvoice } from "@/components/serv1/billing/ReadyToInvoice";
 import { Input } from "@/components/ui/input";
@@ -94,7 +95,7 @@ function Page() {
                     <td className="p-3">{jobNumber}</td>
                     <td className="p-3 text-right tabular-nums">{money(inv.total)}</td>
                     <td className="p-3">
-                      <StatusBadge status={inv.status} />
+                      <InvoiceStatusBadge status={inv.status} />
                     </td>
                     <td className="p-3">{shortDate(inv.createdAt)}</td>
                   </tr>
