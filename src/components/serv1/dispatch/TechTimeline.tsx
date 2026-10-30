@@ -149,6 +149,7 @@ export function TechTimeline({
                       site={job.siteId ? sites.get(job.siteId) : undefined}
                       timeLabel={`${formatSlot(start)} – ${formatSlot(end)}`}
                       compact
+                      short={bottom - top < SLOT_PX * 2}
                       onAssign={onAssign}
                       onDragStart={onDragStart}
                       onDragEnd={onDragEnd}

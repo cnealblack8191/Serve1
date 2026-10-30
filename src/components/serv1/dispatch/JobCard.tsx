@@ -1,3 +1,4 @@
+import { CalendarClock } from "lucide-react";
 import type { DragEvent } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -14,6 +15,7 @@ export function JobCard({
   site,
   timeLabel,
   compact,
+  short,
   onAssign,
   onDragStart,
   onDragEnd,
@@ -25,6 +27,8 @@ export function JobCard({
   site?: Site;
   timeLabel?: string;
   compact?: boolean;
+  /** Too short for more than one line (30-minute jobs): title and Assign only. */
+  short?: boolean;
   onAssign: (job: Job) => void;
   onDragStart?: (job: Job) => void;
   onDragEnd?: () => void;
@@ -39,63 +43,109 @@ export function JobCard({
     onDragStart?.(job);
   };
 
+  const assignLabel = `Assign ${jobLabel(job)}`;
+  const urgent = job.priority === "Emergency" || job.priority === "High";
+  const statusBadge = (
+    <span
+      className={cn(
+        "shrink-0 rounded px-1.5 py-0.5 text-[11px] font-medium ring-1",
+        JOB_STATUS_CLASS[job.status],
+      )}
+    >
+      {JOB_STATUS_LABEL[job.status]}
+    </span>
+  );
+
   return (
     <article
       aria-label={`${jobLabel(job)} ${customer?.name ?? ""}`.trim()}
       draggable={movable}
       onDragStart={movable ? handleDragStart : undefined}
       onDragEnd={onDragEnd}
+      title={short && timeLabel ? timeLabel : undefined}
       className={cn(
-        "flex flex-col gap-1 overflow-hidden rounded-md border border-l-4 bg-card p-2 text-left text-xs shadow-sm",
+        "flex flex-col overflow-hidden rounded-md border border-l-4 bg-card text-left text-xs shadow-sm",
+        compact ? "gap-0.5 px-1.5 py-1" : "gap-1 p-2",
         movable ? "cursor-grab active:cursor-grabbing" : "cursor-default opacity-90",
         className,
       )}
       style={{ borderLeftColor: JOB_STATUS_HEX[job.status], ...style }}
     >
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          <p className="truncate font-semibold text-foreground">
-            {jobLabel(job)} · {customer?.name ?? "Unknown customer"}
-          </p>
-          {timeLabel ? <p className="text-muted-foreground">{timeLabel}</p> : null}
-        </div>
-        <span
-          className={cn(
-            "shrink-0 rounded px-1.5 py-0.5 text-[11px] font-medium ring-1",
-            JOB_STATUS_CLASS[job.status],
+      {compact ? (
+        <>
+          {/* First line holds the Assign button so even a 30-minute card can reopen the dialog. */}
+          <div className="flex min-h-6 items-center gap-1">
+            <p className="min-w-0 flex-1 truncate font-semibold text-foreground">
+              {jobLabel(job)} · {customer?.name ?? "Unknown customer"}
+            </p>
+            {movable ? (
+              <Button
+                type="button"
+                size="icon"
+                variant="ghost"
+                className="size-6 shrink-0"
+                aria-label={assignLabel}
+                title={assignLabel}
+                onClick={() => onAssign(job)}
+              >
+                <CalendarClock className="size-3.5" />
+              </Button>
+            ) : null}
+          </div>
+          {short ? null : (
+            <>
+              <div className="flex items-center gap-2">
+                {statusBadge}
+                {timeLabel ? (
+                  <span className="truncate text-muted-foreground">{timeLabel}</span>
+                ) : null}
+              </div>
+              <p className="line-clamp-2 text-foreground">{job.description}</p>
+              {urgent ? (
+                <p className="font-medium text-red-700 dark:text-red-400">
+                  {PRIORITY_LABEL[job.priority]} priority
+                </p>
+              ) : null}
+            </>
           )}
-        >
-          {JOB_STATUS_LABEL[job.status]}
-        </span>
-      </div>
-      {!compact && site ? <p className="truncate text-muted-foreground">{site.address}</p> : null}
-      <p className={cn("text-foreground", compact ? "line-clamp-1" : "line-clamp-2")}>
-        {job.description}
-      </p>
-      <div className="mt-auto flex items-center justify-between gap-2 pt-1">
-        <span
-          className={cn(
-            "font-medium",
-            job.priority === "Emergency" || job.priority === "High"
-              ? "text-red-700 dark:text-red-400"
-              : "text-muted-foreground",
-          )}
-        >
-          {PRIORITY_LABEL[job.priority]} priority
-        </span>
-        {movable ? (
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            className="h-7 px-2 text-xs"
-            aria-label={`Assign ${jobLabel(job)}`}
-            onClick={() => onAssign(job)}
-          >
-            Assign…
-          </Button>
-        ) : null}
-      </div>
+        </>
+      ) : (
+        <>
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <p className="truncate font-semibold text-foreground">
+                {jobLabel(job)} · {customer?.name ?? "Unknown customer"}
+              </p>
+              {timeLabel ? <p className="text-muted-foreground">{timeLabel}</p> : null}
+            </div>
+            {statusBadge}
+          </div>
+          {site ? <p className="truncate text-muted-foreground">{site.address}</p> : null}
+          <p className="line-clamp-2 text-foreground">{job.description}</p>
+          <div className="mt-auto flex items-center justify-between gap-2 pt-1">
+            <span
+              className={cn(
+                "font-medium",
+                urgent ? "text-red-700 dark:text-red-400" : "text-muted-foreground",
+              )}
+            >
+              {PRIORITY_LABEL[job.priority]} priority
+            </span>
+            {movable ? (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="h-7 px-2 text-xs"
+                aria-label={assignLabel}
+                onClick={() => onAssign(job)}
+              >
+                Assign…
+              </Button>
+            ) : null}
+          </div>
+        </>
+      )}
     </article>
   );
 }
