@@ -1,0 +1,103 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >-
+  Serv1 build role (SPEC.md section 7.3). Role serv1-builder deploys the Amplify Gen 2
+  backend (sandbox and, later, hosting) in us-east-1 only, and may be assumed only by the
+  existing AI session user eci-ai-session (decision 78 pattern). Applied by the owner in
+  CloudShell; see RUNBOOK.md next to this file.
+
+Parameters:
+  SessionUserName:
+    Type: String
+    Default: eci-ai-session
+    Description: The IAM user that may assume the role (the one standing AI session credential).
+
+Resources:
+  Serv1BuilderRole:
+    Type: AWS::IAM::Role
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: >-
+          Amplify Gen 2 deploys through CloudFormation and needs to create the resources the
+          backend defines (Cognito, AppSync, DynamoDB, S3, the IAM roles those services use).
+          AmplifyBackendDeployFullAccess is AWS's purpose-built policy for exactly that, scoped
+          to amplify-* resources. The inline guard pins the region and forbids stop, terminate
+          and database deletes (decision 80 spirit).
+        must:
+          - Trust only the AI session user.
+          - us-east-1 only, apart from global services.
+          - No stop, reboot, terminate; no RDS or EC2 deletes.
+    Properties:
+      RoleName: serv1-builder
+      Description: Serv1 Amplify Gen 2 build role; assumed by eci-ai-session; us-east-1 only
+      MaxSessionDuration: 3600
+      Tags:
+        - Key: Project
+          Value: serv1
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:user/${SessionUserName}
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - !Sub arn:${AWS::Partition}:iam::aws:policy/AmplifyBackendDeployFullAccess
+      Policies:
+        - PolicyName: Serv1BuilderGuard
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: UsEast1Only
+                Effect: Deny
+                NotAction:
+                  - iam:*
+                  - sts:*
+                  - cloudfront:*
+                  - route53:*
+                  - support:*
+                  - budgets:*
+                Resource: "*"
+                Condition:
+                  StringNotEquals:
+                    aws:RequestedRegion: us-east-1
+              - Sid: NoStopTerminateOrDataDeletes
+                Effect: Deny
+                Action:
+                  - ec2:StopInstances
+                  - ec2:RebootInstances
+                  - ec2:TerminateInstances
+                  - ec2:DeleteVolume
+                  - ec2:DeleteSnapshot
+                  - rds:Delete*
+                  - rds:Stop*
+                  - rds:Reboot*
+                  - dynamodb:DeleteBackup
+                  - backup:Delete*
+                  - s3:DeleteBucket
+                  - cognito-idp:DeleteUserPool
+                Resource: "*"
+
+  SessionUserMayAssumeServ1Builder:
+    Type: AWS::IAM::Policy
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: >-
+          The ai-access stack's user policy allows sts:AssumeRole on the two tier roles and denies
+          everything that is not sts:AssumeRole. This extra inline policy adds one more assumable
+          role without editing that stack.
+    Properties:
+      PolicyName: AssumeServ1Builder
+      Users:
+        - !Ref SessionUserName
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: AssumeServ1Builder
+            Effect: Allow
+            Action: sts:AssumeRole
+            Resource: !GetAtt Serv1BuilderRole.Arn
+
+Outputs:
+  RoleArn:
+    Description: Give this ARN to the Serv1 session as SERV1_BUILDER_ROLE_ARN.
+    Value: !GetAtt Serv1BuilderRole.Arn
