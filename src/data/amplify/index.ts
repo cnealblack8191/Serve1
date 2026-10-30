@@ -183,7 +183,7 @@ export function createAmplifyBackend(outputs: object): Backend {
     signedAt: r.signedAt,
   });
   const mapInvoice = (r: Row<"Invoice">): Invoice => ({
-    id: r.id,
+    id: r.jobId,
     createdAt: r.createdAt,
     updatedAt: r.updatedAt,
     invoiceNumber: text(r.invoiceNumber),
@@ -207,10 +207,10 @@ export function createAmplifyBackend(outputs: object): Backend {
     list: (
       args?: object,
     ) => Promise<{ data: R[]; errors?: { message: string }[]; nextToken?: string | null }>;
-    get: (args: { id: string }) => Promise<{ data: R | null; errors?: { message: string }[] }>;
+    get: (args: object) => Promise<{ data: R | null; errors?: { message: string }[] }>;
     create: (args: object) => Promise<{ data: R | null; errors?: { message: string }[] }>;
     update: (args: object) => Promise<{ data: R | null; errors?: { message: string }[] }>;
-    delete: (args: { id: string }) => Promise<{ errors?: { message: string }[] }>;
+    delete: (args: object) => Promise<{ errors?: { message: string }[] }>;
     onCreate: () => Sub;
     onUpdate: () => Sub;
     onDelete: () => Sub;
@@ -219,6 +219,8 @@ export function createAmplifyBackend(outputs: object): Backend {
     table: TableName,
     model: K,
     map: (r: Row<K>) => T,
+    /** Field that identifies a row in the model ("id", or "jobId" for Invoice). */
+    keyField: string,
     encode: (n: Partial<N>) => object,
   ): Repo<T, N> {
     // The generated model types are very deep; the glue is loosely typed here and
@@ -251,7 +253,7 @@ export function createAmplifyBackend(outputs: object): Backend {
         return out;
       },
       async get(id) {
-        const r = await m.get({ id });
+        const r = await m.get({ [keyField]: id });
         fail(r.errors);
         return r.data ? map(r.data) : null;
       },
@@ -263,14 +265,14 @@ export function createAmplifyBackend(outputs: object): Backend {
         return map(r.data);
       },
       async update(id, patch) {
-        const r = await m.update({ id, ...encode(patch) });
+        const r = await m.update({ [keyField]: id, ...encode(patch) });
         fail(r.errors);
         if (!r.data) throw new Error(`${table}: update returned no row`);
         notify(table);
         return map(r.data);
       },
       async remove(id) {
-        const r = await m.delete({ id });
+        const r = await m.delete({ [keyField]: id });
         fail(r.errors);
         notify(table);
       },
@@ -321,7 +323,7 @@ export function createAmplifyBackend(outputs: object): Backend {
       notify(name === "Attachment" ? "attachments" : "signatures");
     }
   };
-  const jobsRepo = repo<"Job", Job, NewJob>("jobs", "Job", mapJob, plain);
+  const jobsRepo = repo<"Job", Job, NewJob>("jobs", "Job", mapJob, "id", plain);
   const jobs: Repo<Job, NewJob> = {
     ...jobsRepo,
     async update(id, patch) {
@@ -336,26 +338,35 @@ export function createAmplifyBackend(outputs: object): Backend {
   return {
     kind: "amplify",
     auth,
-    users: repo<"User", User, NewUser>("users", "User", mapUser, plain),
-    customers: repo<"Customer", Customer, NewCustomer>("customers", "Customer", mapCustomer, plain),
-    sites: repo<"Site", Site, NewSite>("sites", "Site", mapSite, plain),
+    users: repo<"User", User, NewUser>("users", "User", mapUser, "id", plain),
+    customers: repo<"Customer", Customer, NewCustomer>(
+      "customers",
+      "Customer",
+      mapCustomer,
+      "id",
+      plain,
+    ),
+    sites: repo<"Site", Site, NewSite>("sites", "Site", mapSite, "id", plain),
     jobs,
     attachments: repo<"Attachment", Attachment, NewAttachment>(
       "attachments",
       "Attachment",
       mapAttachment,
+      "id",
       plain,
     ),
     signatures: repo<"Signature", Signature, NewSignature>(
       "signatures",
       "Signature",
       mapSignature,
+      "id",
       plain,
     ),
     invoices: repo<"Invoice", Invoice, NewInvoice>(
       "invoices",
       "Invoice",
       mapInvoice,
+      "jobId",
       invoiceEncode,
     ),
     files: filesApi,
