@@ -3,7 +3,10 @@ import { StatusBadge } from "@/components/eci/primitives";
 
 import { money, shortDate } from "./format";
 
-/** Hides everything except the invoice when printing / saving as PDF. */
+/**
+ * Hides the app chrome (sidebar, top bar, nav) when printing / saving as PDF.
+ * The invoice's own heading is a <div>, so these element selectors never match it.
+ */
 const PRINT_CSS = `
 @media print {
   aside, header, nav, .no-print { display: none !important; }
@@ -26,7 +29,7 @@ export function InvoiceDocument({
   return (
     <article className="invoice-doc eci-card mx-auto max-w-3xl space-y-6 p-8">
       <style>{PRINT_CSS}</style>
-      <header className="flex flex-wrap items-start justify-between gap-4">
+      <div className="invoice-header flex flex-wrap items-start justify-between gap-4">
         <div className="flex items-center gap-3">
           <img src="/logo.png" alt="Serv1" className="h-12 w-auto" />
           <div>
@@ -42,7 +45,7 @@ export function InvoiceDocument({
             <StatusBadge status={invoice.status} />
           </div>
         </div>
-      </header>
+      </div>
 
       <section className="grid gap-4 sm:grid-cols-2">
         <div>

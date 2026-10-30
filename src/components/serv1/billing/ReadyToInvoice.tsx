@@ -5,7 +5,15 @@ import { Button } from "@/components/ui/button";
 import { useCreateInvoiceFromJob, type Customer, type Job } from "@/data";
 import { useNavigate } from "@tanstack/react-router";
 
-export function ReadyToInvoice({ jobs, customers }: { jobs: Job[]; customers: Customer[] }) {
+export function ReadyToInvoice({
+  jobs,
+  customers,
+  canCreate,
+}: {
+  jobs: Job[];
+  customers: Customer[];
+  canCreate: boolean;
+}) {
   const create = useCreateInvoiceFromJob();
   const navigate = useNavigate();
   const customerName = (id: string) =>
@@ -29,20 +37,24 @@ export function ReadyToInvoice({ jobs, customers }: { jobs: Job[]; customers: Cu
             </p>
             <p className="truncate text-sm text-muted-foreground">{job.description}</p>
           </div>
-          <Button
-            disabled={create.isPending}
-            onClick={() =>
-              create.mutate(job, {
-                onSuccess: (inv) => {
-                  toast.success(`${inv.invoiceNumber} created`);
-                  void navigate({ to: "/invoices/$id", params: { id: inv.id } });
-                },
-                onError: () => toast.error("Could not create the invoice. Please try again."),
-              })
-            }
-          >
-            Create invoice
-          </Button>
+          {canCreate ? (
+            <Button
+              disabled={create.isPending}
+              onClick={() =>
+                create.mutate(job, {
+                  onSuccess: (inv) => {
+                    toast.success(`${inv.invoiceNumber} created`);
+                    void navigate({ to: "/invoices/$id", params: { id: inv.id } });
+                  },
+                  onError: () => toast.error("Could not create the invoice. Please try again."),
+                })
+              }
+            >
+              Create invoice
+            </Button>
+          ) : (
+            <span className="text-sm text-muted-foreground">Office creates invoices</span>
+          )}
         </li>
       ))}
     </ul>

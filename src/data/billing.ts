@@ -27,20 +27,45 @@ export function buildLineItems(job: Job): InvoiceLineItem[] {
   ];
 }
 
-/** SPEC W4: one click makes a Draft invoice from a Complete job and marks the job Invoiced. */
+/**
+ * Invoice numbers are INV-YYMM-NNNN with a random 4-digit suffix, so deleting an
+ * invoice can never cause a number to be reused (a row count would). Pilot-level:
+ * we also re-draw if the number happens to exist already.
+ */
+function newInvoiceNumber(taken: Set<string | null>): string {
+  const now = new Date();
+  const yymm = `${String(now.getFullYear()).slice(2)}${String(now.getMonth() + 1).padStart(2, "0")}`;
+  for (;;) {
+    const n = `INV-${yymm}-${1000 + Math.floor(Math.random() * 9000)}`;
+    if (!taken.has(n)) return n;
+  }
+}
+
+/**
+ * SPEC W4: one click makes a Draft invoice from a Complete job and marks the job Invoiced.
+ * Safe to call again: if the job already has an invoice it is returned (and the job status
+ * is finished if an earlier attempt failed halfway), so a double click or retry never
+ * creates a second invoice.
+ */
 export async function createInvoiceFromJob(job: Job): Promise<Invoice> {
   const existing = await backend().invoices.list();
-  const lineItems = buildLineItems(job);
-  const invoice = await backend().invoices.create({
-    invoiceNumber: `INV-${1000 + existing.length + 1}`,
-    jobId: job.id,
-    customerId: job.customerId,
-    lineItems,
-    total: lineItems.reduce((sum, l) => sum + l.total, 0),
-    status: "Draft",
-    pdfPath: null,
-  });
-  await backend().jobs.update(job.id, { status: "Invoiced" });
+  let invoice = existing.find((i) => i.jobId === job.id);
+  if (!invoice) {
+    const lineItems = buildLineItems(job);
+    invoice = await backend().invoices.create({
+      invoiceNumber: newInvoiceNumber(new Set(existing.map((i) => i.invoiceNumber))),
+      jobId: job.id,
+      customerId: job.customerId,
+      lineItems,
+      total: lineItems.reduce((sum, l) => sum + l.total, 0),
+      status: "Draft",
+      pdfPath: null,
+    });
+  }
+  const current = await backend().jobs.get(job.id);
+  if (current && current.status === "Complete") {
+    await backend().jobs.update(job.id, { status: "Invoiced" });
+  }
   return invoice;
 }
 

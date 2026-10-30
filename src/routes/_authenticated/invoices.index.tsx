@@ -5,7 +5,7 @@ import { EmptyState, PageHeader, SectionHeading, StatusBadge } from "@/component
 import { money, shortDate } from "@/components/serv1/billing/format";
 import { ReadyToInvoice } from "@/components/serv1/billing/ReadyToInvoice";
 import { Input } from "@/components/ui/input";
-import { useCustomers, useInvoices, useJobs } from "@/data";
+import { useCurrentUser, useCustomers, useInvoices, useJobs } from "@/data";
 
 export const Route = createFileRoute("/_authenticated/invoices/")({
   component: Page,
@@ -15,15 +15,13 @@ function Page() {
   const jobs = useJobs();
   const invoices = useInvoices();
   const customers = useCustomers();
+  const me = useCurrentUser();
+  const canCreate = !!me.data?.roles.some((r) => r === "Admin" || r === "Office");
   const [search, setSearch] = useState("");
 
-  const invoicedJobIds = useMemo(
-    () => new Set((invoices.data ?? []).map((i) => i.jobId)),
-    [invoices.data],
-  );
-  const ready = (jobs.data ?? []).filter(
-    (j) => j.status === "Complete" && !invoicedJobIds.has(j.id),
-  );
+  // A Complete job is still waiting even if an earlier click saved the invoice but not the
+  // job status; clicking again finishes the job (createInvoiceFromJob is safe to repeat).
+  const ready = (jobs.data ?? []).filter((j) => j.status === "Complete");
 
   const rows = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -50,7 +48,7 @@ function Page() {
 
       <section className="space-y-3">
         <SectionHeading title="Ready to invoice" />
-        <ReadyToInvoice jobs={ready} customers={customers.data ?? []} />
+        <ReadyToInvoice jobs={ready} customers={customers.data ?? []} canCreate={canCreate} />
       </section>
 
       <section className="space-y-3">
