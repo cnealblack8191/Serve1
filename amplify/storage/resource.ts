@@ -8,6 +8,9 @@ import { defineStorage } from "@aws-amplify/backend";
  *  - jobs/{jobId}/...                 office uploads; office read/write, owner read, techs none.
  *  - tech-files/{entity_id}/{jobId}/... a tech's own photos and signatures. {entity_id} is the
  *    caller's Cognito identity, so a tech can never read or write another tech's files.
+ *    Because techs assume the Tech group role, the matching per-tech permission is
+ *    attached to that role in backend.ts; the entity rule below covers any signed-in
+ *    user who is in no group.
  *  - invoices/{invoiceId}/...          invoice PDFs; office read/write, owner read.
  */
 export const storage = defineStorage({

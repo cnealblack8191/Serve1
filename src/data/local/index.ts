@@ -90,11 +90,14 @@ export function createLocalBackend(): Backend {
   }
   const files = new LocalFileStore(); // blobs persist in IndexedDB; see file-store.ts
 
+  /** Writes the store. A failed write (quota, blocked storage) rejects the mutation and
+   *  drops the unsaved change so the screen never reports unsaved work as saved. */
   const persist = (table: TableName) => {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(tables));
     } catch {
-      /* quota or private mode: keep in memory */
+      tables = load();
+      throw new Error("Could not save: this browser's storage is full or blocked.");
     }
     listeners.forEach((l) => l(table));
   };

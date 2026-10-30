@@ -243,6 +243,21 @@ describe("local backend: technician isolation", () => {
     assert.equal((await tabA.jobs.get("job-3"))?.notes, "from tab B");
   });
 
+  it("a failed save is reported as an error and leaves the old data in place", async () => {
+    await as(b, "office@serv1.demo");
+    const ls = (globalThis as unknown as { localStorage: Storage }).localStorage;
+    const realSet = ls.setItem;
+    ls.setItem = () => {
+      throw new Error("QuotaExceededError");
+    };
+    try {
+      await assert.rejects(b.jobs.update("job-1", { notes: "will not fit" }), /Could not save/);
+    } finally {
+      ls.setItem = realSet;
+    }
+    assert.equal((await b.jobs.get("job-1"))?.notes, null);
+  });
+
   it("owners read everything but cannot change jobs; office can", async () => {
     await as(b, "owner@serv1.demo");
     assert.ok((await b.jobs.list()).length >= 6);
