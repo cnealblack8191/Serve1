@@ -22,6 +22,7 @@ import { useCommsActions, useThread, useThreads } from "@/lib/comms/useComms";
 import { MAIL_FOLDERS, type MailFolder, type Message } from "@/lib/comms/types";
 import { RECORD_TYPE_LABELS } from "@/lib/sharepoint/types";
 import { cn } from "@/lib/utils";
+import { mailPreviewHtml, safeHref, sanitizeMailHtml } from "@/lib/untrusted-content";
 
 export const Route = createFileRoute("/_authenticated/communications")({
   head: () => ({
@@ -255,8 +256,10 @@ function CommunicationsPage() {
                     </p>
                     <div
                       className="prose prose-sm mt-2 max-w-none text-sm text-foreground"
-                      // Message bodies come from the shared mailbox mirror.
-                      dangerouslySetInnerHTML={{ __html: m.bodyHtml || `<p>${m.bodyPreview}</p>` }}
+                      // Mail bodies are written by whoever sent the email: sanitise before rendering.
+                      dangerouslySetInnerHTML={{
+                        __html: sanitizeMailHtml(m.bodyHtml) || mailPreviewHtml(m.bodyPreview),
+                      }}
                     />
                     {m.attachments.length > 0 ? (
                       <ul className="mt-2 flex flex-wrap gap-2">
@@ -266,8 +269,12 @@ function CommunicationsPage() {
                             className="flex items-center gap-1.5 rounded bg-muted px-2 py-1 text-xs"
                           >
                             <Paperclip className="size-3" />
-                            {a.webUrl ? (
-                              <a href={a.webUrl} target="_blank" rel="noopener noreferrer">
+                            {safeHref(a.webUrl) ? (
+                              <a
+                                href={safeHref(a.webUrl)}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                              >
                                 {a.name}
                               </a>
                             ) : (

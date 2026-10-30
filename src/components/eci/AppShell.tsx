@@ -43,7 +43,7 @@ import { ROLES, ROLE_PRESETS, type Permission } from "@/lib/eci/types";
  * "documents" is a virtual entry: anyone who can see a record can see its files.
  * "owner" is the hidden account-owner gate for sensitive setup screens (not a role).
  */
-type NavPerm = Permission | "documents" | "owner";
+type NavPerm = Permission | "documents" | "comms" | "owner";
 
 const DOCUMENT_PERMS: Permission[] = ["crm", "bids", "jobs", "invoices", "field"];
 
@@ -56,23 +56,27 @@ const NAV: { to: string; label: string; icon: typeof LayoutDashboard; perm: NavP
   { to: "/materials", label: "Materials", icon: Boxes, perm: "materials" },
   { to: "/invoices", label: "Invoices & Accounting", icon: Receipt, perm: "invoices" },
   { to: "/documents", label: "Documents", icon: FolderOpen, perm: "documents" },
-  { to: "/communications", label: "Communications", icon: Mail, perm: "documents" },
+  { to: "/communications", label: "Communications", icon: Mail, perm: "comms" },
   { to: "/alerts", label: "Overdue Action Items", icon: AlertTriangle, perm: "dashboard" },
   { to: "/integrations", label: "Microsoft 365", icon: PlugZap, perm: "owner" },
 ];
 
 function NavList({ onNavigate }: { onNavigate?: (() => void) | undefined }) {
-  const { can, isOwner } = useEci();
+  const { can, isOwner, role } = useEci();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
+
+  const visible = (perm: NavPerm) => {
+    if (perm === "owner") return isOwner;
+    if (perm === "documents") return DOCUMENT_PERMS.some((p) => can(p));
+    // The shared mailbox is office correspondence, and RLS denies it to
+    // technicians, so don't offer them a page that would render empty.
+    if (perm === "comms") return role !== "Field" && DOCUMENT_PERMS.some((p) => can(p));
+    return can(perm);
+  };
+
   return (
     <nav className="flex-1 space-y-1 px-3">
-      {NAV.filter((n) =>
-        n.perm === "owner"
-          ? isOwner
-          : n.perm === "documents"
-            ? DOCUMENT_PERMS.some((p) => can(p))
-            : can(n.perm),
-      ).map((item) => {
+      {NAV.filter((n) => visible(n.perm)).map((item) => {
         const active =
           item.to === "/" ? pathname === "/" : pathname.startsWith(item.to);
         const Icon = item.icon;
@@ -219,9 +223,31 @@ function NotificationsMenu() {
 }
 
 export function AppShell({ children }: { children: ReactNode }) {
-  const { role, setRole, currentUser, session, signOut, accountRole } = useEci();
-  const canManage = ROLE_PRESETS[accountRole].includes("manage_permissions");
+  const { role, setRole, currentUser, session, signOut, accountRole, roleReady, hasRole } =
+    useEci();
+  const canManage = hasRole && ROLE_PRESETS[accountRole].includes("manage_permissions");
   const [mobileOpen, setMobileOpen] = useState(false);
+
+  // An admin has created the account but not assigned a role yet. RLS already
+  // denies every table, so render the reason rather than an app full of empty
+  // screens and failed queries.
+  if (roleReady && !hasRole) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background p-6">
+        <div className="max-w-md rounded-lg border border-border p-6 text-center">
+          <h1 className="text-lg font-semibold tracking-tight">Access not set up yet</h1>
+          <p className="mt-2 text-sm text-muted-foreground">
+            You are signed in as {currentUser}, but no role has been assigned to this account yet.
+            An ECI administrator needs to add you to the team roster before the workspace becomes
+            available.
+          </p>
+          <Button variant="outline" className="mt-4" onClick={() => void signOut()}>
+            Sign out
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex min-h-screen bg-background text-foreground">

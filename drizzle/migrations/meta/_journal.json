@@ -120,6 +120,20 @@
       "when": 1789876130014,
       "tag": "0016_material_purposes",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1789876190014,
+      "tag": "0017_admin_only_accounts",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1789876250014,
+      "tag": "0018_field_scope",
+      "breakpoints": true
     }
   ]
 }

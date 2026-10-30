@@ -10,6 +10,7 @@
  */
 
 import { EMPTY_EXTRACTION, type IntakeExtraction, type IntakeLink } from "./types";
+import { assertExternalAiAllowed } from "@/lib/external-ai";
 
 export interface ClassifyInput {
   subject: string;
@@ -171,6 +172,7 @@ export function looksLikeBidInvitation(subject: string, body: string): boolean {
 }
 
 export async function classifyBidEmail(input: ClassifyInput): Promise<ClassifyResult> {
+  assertExternalAiAllowed();
   const apiKey = process.env["LOVABLE_API_KEY"];
   if (!apiKey) throw new Error("AI is not configured for this project.");
 

@@ -144,6 +144,8 @@ interface StoreValue {
   authReady: boolean;
   accountRole: Role;
   roleReady: boolean;
+  /** False when the account has no role row yet: signed in, but no permissions. */
+  hasRole: boolean;
   /** Account owner: unlocks sensitive setup screens. Not a role. */
   isOwner: boolean;
   signOut: () => Promise<void>;
@@ -408,6 +410,9 @@ export function EciProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [authReady, setAuthReady] = useState(false);
   const [accountRole, setAccountRole] = useState<Role>("Field");
+  // Starts true so an established session never flashes the no-access screen
+  // while ensure_profile is still in flight.
+  const [hasRole, setHasRole] = useState(true);
   const [roleReady, setRoleReady] = useState(false);
   const [isOwner, setIsOwner] = useState(false);
   const [profileName, setProfileName] = useState<string>("");
@@ -447,7 +452,11 @@ export function EciProvider({ children }: { children: ReactNode }) {
         email: string;
         is_owner?: boolean;
       } | null;
+      // ensure_profile returns a null role for an account an admin has created
+      // but not yet assigned. accountRole keeps its placeholder for typing; the
+      // hasRole flag is what gates access.
       if (p?.role) setAccountRole(p.role);
+      setHasRole(!!p?.role);
       setIsOwner(!!p?.is_owner);
       setRoleReady(true);
       setProfileName(p?.full_name || p?.email || "");
@@ -551,7 +560,7 @@ export function EciProvider({ children }: { children: ReactNode }) {
     (oppsT.isLoading || bidsT.isLoading || jobsT.isLoading || wosT.isLoading);
 
   /* ---- role & permissions ---- */
-  const canManage = ROLE_PRESETS[accountRole].includes("manage_permissions");
+  const canManage = hasRole && ROLE_PRESETS[accountRole].includes("manage_permissions");
   const role: Role = canManage && viewAs ? viewAs : accountRole;
   const setRole = (r: Role) => {
     if (canManage) setViewAs(r === accountRole ? null : r);
@@ -560,10 +569,12 @@ export function EciProvider({ children }: { children: ReactNode }) {
   const currentUser = profileName || session?.user.email || "ECI User";
 
   const permissions = useMemo(() => {
+    // No role row means no permissions at all - exceptions must not re-grant any.
+    if (!hasRole) return [];
     const base = new Set(ROLE_PRESETS[role]);
     exceptions.forEach((p) => (base.has(p) ? base.delete(p) : base.add(p)));
     return [...base];
-  }, [role, exceptions]);
+  }, [hasRole, role, exceptions]);
 
   const can = useCallback((p: Permission) => permissions.includes(p), [permissions]);
 
@@ -1282,6 +1293,7 @@ export function EciProvider({ children }: { children: ReactNode }) {
     authReady,
     accountRole,
     roleReady,
+    hasRole,
     isOwner,
     signOut,
     role,

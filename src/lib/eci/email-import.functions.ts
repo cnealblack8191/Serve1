@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import type { RateType } from "./types";
+import { assertExternalAiAllowed } from "@/lib/external-ai";
 
 export const EMAIL_IMPORT_STORAGE_KEY = "eci:email-import-draft";
 
@@ -139,6 +140,7 @@ export const parseBidEmail = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data: unknown) => InputSchema.parse(data))
   .handler(async ({ data }): Promise<EmailImportResult> => {
+    assertExternalAiAllowed();
     const apiKey = process.env["LOVABLE_API_KEY"];
     if (!apiKey) throw new Error("AI is not configured for this project.");
 

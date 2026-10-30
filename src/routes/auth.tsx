@@ -27,12 +27,9 @@ export const Route = createFileRoute("/auth")({
 
 function AuthPage() {
   const navigate = useNavigate();
-  const [mode, setMode] = useState<"signin" | "signup">("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [fullName, setFullName] = useState("");
   const [busy, setBusy] = useState(false);
-  const [checkEmail, setCheckEmail] = useState(false);
 
   useEffect(() => {
     void supabase.auth.getSession().then(({ data }) => {
@@ -40,31 +37,17 @@ function AuthPage() {
     });
   }, [navigate]);
 
+  // Accounts are created by an administrator; there is deliberately no
+  // self-service sign-up path here.
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     setBusy(true);
     try {
-      if (mode === "signup") {
-        const { data, error } = await supabase.auth.signUp({
-          email,
-          password,
-          options: {
-            emailRedirectTo: window.location.origin,
-            data: { full_name: fullName.trim() },
-          },
-        });
-        if (error) throw error;
-        if (!data.session) {
-          setCheckEmail(true);
-          return;
-        }
-      } else {
-        const { error } = await supabase.auth.signInWithPassword({ email, password });
-        if (error) throw error;
-      }
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) throw error;
       void navigate({ to: "/", replace: true });
     } catch (err) {
-      toast.error(mode === "signup" ? "Couldn't create account" : "Couldn't sign in", {
+      toast.error("Couldn't sign in", {
         description: err instanceof Error ? err.message : "Please try again.",
       });
     } finally {
@@ -100,77 +83,43 @@ function AuthPage() {
             <span className="mt-1 text-sm uppercase tracking-[0.3em] text-muted-foreground">Serve One</span>
           </div>
 
-          {checkEmail ? (
-            <div className="rounded-lg border border-border p-6">
-              <h2 className="text-lg font-semibold">Check your email</h2>
-              <p className="mt-2 text-sm text-muted-foreground">
-                We sent a confirmation link to <span className="font-medium text-foreground">{email}</span>.
-                Open it to finish creating your account, then come back and sign in.
+          <form onSubmit={submit} className="space-y-4">
+            <div>
+              <h2 className="text-xl font-semibold tracking-tight">Sign in</h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Use your ECI email and password.
               </p>
-              <Button
-                variant="outline"
-                className="mt-4"
-                onClick={() => {
-                  setCheckEmail(false);
-                  setMode("signin");
-                }}
-              >
-                Back to sign in
-              </Button>
             </div>
-          ) : (
-            <form onSubmit={submit} className="space-y-4">
-              <div>
-                <h2 className="text-xl font-semibold tracking-tight">
-                  {mode === "signin" ? "Sign in" : "Create your account"}
-                </h2>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  {mode === "signin"
-                    ? "Use your ECI email and password."
-                    : "Use your ECI email. Your role is assigned from the team roster."}
-                </p>
-              </div>
-              {mode === "signup" ? (
-                <div className="space-y-1.5">
-                  <Label htmlFor="name">Full name</Label>
-                  <Input id="name" value={fullName} onChange={(e) => setFullName(e.target.value)} required />
-                </div>
-              ) : null}
-              <div className="space-y-1.5">
-                <Label htmlFor="email">Email</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  autoComplete="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="password">Password</Label>
-                <Input
-                  id="password"
-                  type="password"
-                  autoComplete={mode === "signin" ? "current-password" : "new-password"}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  minLength={6}
-                  required
-                />
-              </div>
-              <Button type="submit" className="w-full" disabled={busy}>
-                {busy ? "Please wait…" : mode === "signin" ? "Sign in" : "Create account"}
-              </Button>
-              <button
-                type="button"
-                className="w-full text-center text-sm text-eci-copper hover:underline"
-                onClick={() => setMode(mode === "signin" ? "signup" : "signin")}
-              >
-                {mode === "signin" ? "New here? Create an account" : "Already have an account? Sign in"}
-              </button>
-            </form>
-          )}
+            <div className="space-y-1.5">
+              <Label htmlFor="email">Email</Label>
+              <Input
+                id="email"
+                type="email"
+                autoComplete="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="password">Password</Label>
+              <Input
+                id="password"
+                type="password"
+                autoComplete="current-password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                minLength={6}
+                required
+              />
+            </div>
+            <Button type="submit" className="w-full" disabled={busy}>
+              {busy ? "Please wait\u2026" : "Sign in"}
+            </Button>
+            <p className="text-center text-sm text-muted-foreground">
+              Need an account? Ask your ECI administrator to create one for you.
+            </p>
+          </form>
         </div>
       </div>
     </div>

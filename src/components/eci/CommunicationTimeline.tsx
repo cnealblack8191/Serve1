@@ -6,6 +6,7 @@ import {
   type TimelineEntry,
 } from "@/lib/comms/types";
 import { RECORD_TYPE_LABELS } from "@/lib/sharepoint/types";
+import { safeHref } from "@/lib/untrusted-content";
 
 const when = (raw: string) => {
   if (!raw) return "";
@@ -80,9 +81,9 @@ export function CommunicationTimeline({
                   </p>
                 ) : null}
               </div>
-              {e.webUrl ? (
+              {safeHref(e.webUrl) ? (
                 <a
-                  href={e.webUrl}
+                  href={safeHref(e.webUrl)}
                   target="_blank"
                   rel="noreferrer"
                   className="mt-0.5 text-muted-foreground hover:text-foreground"

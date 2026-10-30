@@ -2,6 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { ExternalLink, Inbox, Paperclip, RefreshCw } from "lucide-react";
 import { AppShell } from "@/components/eci/AppShell";
+import { safeHref } from "@/lib/untrusted-content";
 import { PageHeader } from "@/components/eci/primitives";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -397,8 +398,13 @@ function IntakeDetail({
                   <Paperclip className="h-4 w-4 text-muted-foreground" />
                   {a.name}
                 </span>
-                {a.webUrl ? (
-                  <a href={a.webUrl} target="_blank" rel="noreferrer" className="text-xs underline">
+                {safeHref(a.webUrl) ? (
+                  <a
+                    href={safeHref(a.webUrl)}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-xs underline"
+                  >
                     Open
                   </a>
                 ) : (
@@ -412,9 +418,18 @@ function IntakeDetail({
                   <ExternalLink className="h-4 w-4 text-muted-foreground" />
                   {l.label}
                 </span>
-                <a href={l.url} target="_blank" rel="noreferrer" className="text-xs underline">
-                  Open
-                </a>
+                {safeHref(l.url) ? (
+                  <a
+                    href={safeHref(l.url)}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-xs underline"
+                  >
+                    Open
+                  </a>
+                ) : (
+                  <span className="text-xs text-muted-foreground">Unsupported link</span>
+                )}
               </div>
             ))}
           </div>

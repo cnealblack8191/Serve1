@@ -1,3 +1,16 @@
+node_modules/
+.expo/
+dist/
+web-build/
+.env
+.env.*
+*.pem
+amplify_outputs.json
+.amplify/
+test-results/
+playwright-report/
+logs/*.log
+.DS_Store
 # Logs
 logs
 *.log
@@ -6,7 +19,6 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
-
 node_modules
 dist
 dist-ssr
@@ -15,27 +27,19 @@ dist-ssr
 .tanstack/**
 .nitro
 *.local
-
 # Wrangler / Cloudflare
 .wrangler/
 .dev.vars
-
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
 .idea
-.DS_Store
 *.suo
 *.ntvs*
 *.njsproj
 *.sln
 *.sw?
-
 # Local secrets (never commit)
-.env
-.env.*
 !.env.example
-
 # Amplify Gen 2 sandbox outputs
 amplify_outputs*.json
-.amplify/
