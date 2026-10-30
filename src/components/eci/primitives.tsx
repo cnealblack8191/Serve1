@@ -1,4 +1,4 @@
-import { Link } from "@tanstack/react-router";
+import { Link, type LinkProps } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 import { Cell, Pie, PieChart } from "recharts";
 import { cn } from "@/lib/utils";
@@ -45,13 +45,7 @@ const STATUS_TONE: Record<string, keyof typeof TONES> = {
   "Non-Contract": "copper",
 };
 
-export function StatusBadge({
-  status,
-  className,
-}: {
-  status: string;
-  className?: string;
-}) {
+export function StatusBadge({ status, className }: { status: string; className?: string }) {
   const tone = TONES[STATUS_TONE[status] ?? "zinc"];
   return (
     <span
@@ -85,7 +79,7 @@ export function SummaryCard({
   chartValue?: number;
   chartTotal?: number;
   chartLabel?: string;
-  to?: "/crm" | "/bids" | "/jobs" | "/invoices" | "/materials" | "/alerts";
+  to?: LinkProps["to"];
 }) {
   const hintClass = {
     zinc: "text-muted-foreground",
@@ -97,12 +91,13 @@ export function SummaryCard({
   const safeValue = hasChart ? Math.max(0, chartValue) : 0;
   const safeTotal = hasChart ? Math.max(safeValue, chartTotal) : 0;
   const percent = safeTotal > 0 ? Math.round((safeValue / safeTotal) * 100) : 0;
-  const chartData = safeTotal > 0
-    ? [
-        { name: label, value: safeValue },
-        { name: "Remainder", value: Math.max(0, safeTotal - safeValue) },
-      ]
-    : [{ name: "No data", value: 1 }];
+  const chartData =
+    safeTotal > 0
+      ? [
+          { name: label, value: safeValue },
+          { name: "Remainder", value: Math.max(0, safeTotal - safeValue) },
+        ]
+      : [{ name: "No data", value: 1 }];
   const chartColor = accent
     ? "var(--eci-copper)"
     : hintTone === "green"
@@ -119,10 +114,7 @@ export function SummaryCard({
           {label}
         </span>
         <span
-          className={cn(
-            "text-2xl font-semibold",
-            accent ? "text-eci-copper" : "text-foreground",
-          )}
+          className={cn("text-2xl font-semibold", accent ? "text-eci-copper" : "text-foreground")}
         >
           {value}
         </span>
@@ -190,9 +182,7 @@ export function SectionHeading({
     <div className="flex items-center justify-between gap-4">
       <div>
         <h2 className="eci-panel-title">{title}</h2>
-        {description ? (
-          <p className="mt-1 text-sm text-muted-foreground">{description}</p>
-        ) : null}
+        {description ? <p className="mt-1 text-sm text-muted-foreground">{description}</p> : null}
       </div>
 
       {action ? (

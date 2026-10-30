@@ -6,6 +6,7 @@ Task: Migrate the ECI Project Hub (in ../eci-project-hub) into this
 new serv1 repo, replacing Supabase entirely with AWS Amplify Gen 2.
 
 Rules:
+
 - Do NOT modify ../eci-project-hub. Copy only.
 - Explain each step in plain English. I have limited coding ability.
 - Ask before deleting anything or creating AWS resources.
@@ -13,6 +14,7 @@ Rules:
 - Use AWS profile serv1-builder only.
 
 Steps:
+
 1. Copy the Hub's app code here. List every file that uses Supabase.
 2. Set up Amplify Gen 2: Auth (Cognito with groups Admin, Office,
    Tech, Owner), Data (the pilot tables marked ★ in SPEC.md section 5),

@@ -12,24 +12,16 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AuthenticatedIndexRouteImport } from './routes/_authenticated/index'
-import { Route as AuthenticatedAlertsRouteImport } from './routes/_authenticated/alerts'
-import { Route as AuthenticatedCommunicationsRouteImport } from './routes/_authenticated/communications'
-import { Route as AuthenticatedDocumentsRouteImport } from './routes/_authenticated/documents'
-import { Route as AuthenticatedFieldRouteImport } from './routes/_authenticated/field'
-import { Route as AuthenticatedIntakeRouteImport } from './routes/_authenticated/intake'
-import { Route as AuthenticatedIntegrationsRouteImport } from './routes/_authenticated/integrations'
-import { Route as AuthenticatedInvoicesRouteImport } from './routes/_authenticated/invoices'
-import { Route as AuthenticatedMaterialsRouteImport } from './routes/_authenticated/materials'
-import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticated/settings'
-import { Route as AuthenticatedTeamRouteImport } from './routes/_authenticated/team'
-import { Route as AuthenticatedBidsIndexRouteImport } from './routes/_authenticated/bids.index'
-import { Route as AuthenticatedBidsIdRouteImport } from './routes/_authenticated/bids.$id'
-import { Route as AuthenticatedCrmIndexRouteImport } from './routes/_authenticated/crm.index'
-import { Route as AuthenticatedCrmIdRouteImport } from './routes/_authenticated/crm.$id'
-import { Route as AuthenticatedCrmNewRouteImport } from './routes/_authenticated/crm.new'
+import { Route as AuthenticatedDispatchRouteImport } from './routes/_authenticated/dispatch'
+import { Route as AuthenticatedCustomersIndexRouteImport } from './routes/_authenticated/customers.index'
+import { Route as AuthenticatedCustomersIdRouteImport } from './routes/_authenticated/customers.$id'
+import { Route as AuthenticatedInvoicesIndexRouteImport } from './routes/_authenticated/invoices.index'
+import { Route as AuthenticatedInvoicesIdRouteImport } from './routes/_authenticated/invoices.$id'
 import { Route as AuthenticatedJobsIndexRouteImport } from './routes/_authenticated/jobs.index'
 import { Route as AuthenticatedJobsIdRouteImport } from './routes/_authenticated/jobs.$id'
-import { Route as ApiPublicHooksScheduledRemindersRouteImport } from './routes/api/public/hooks/scheduled-reminders'
+import { Route as AuthenticatedJobsNewRouteImport } from './routes/_authenticated/jobs.new'
+import { Route as AuthenticatedTechIndexRouteImport } from './routes/_authenticated/tech.index'
+import { Route as AuthenticatedTechIdRouteImport } from './routes/_authenticated/tech.$id'
 
 const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
   id: '/_authenticated',
@@ -45,81 +37,32 @@ const AuthenticatedIndexRoute = AuthenticatedIndexRouteImport.update({
   path: '/',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
-const AuthenticatedAlertsRoute = AuthenticatedAlertsRouteImport.update({
-  id: '/alerts',
-  path: '/alerts',
+const AuthenticatedDispatchRoute = AuthenticatedDispatchRouteImport.update({
+  id: '/dispatch',
+  path: '/dispatch',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
-const AuthenticatedCommunicationsRoute =
-  AuthenticatedCommunicationsRouteImport.update({
-    id: '/communications',
-    path: '/communications',
+const AuthenticatedCustomersIndexRoute =
+  AuthenticatedCustomersIndexRouteImport.update({
+    id: '/customers/',
+    path: '/customers/',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
-const AuthenticatedDocumentsRoute = AuthenticatedDocumentsRouteImport.update({
-  id: '/documents',
-  path: '/documents',
-  getParentRoute: () => AuthenticatedRouteRoute,
-} as any)
-const AuthenticatedFieldRoute = AuthenticatedFieldRouteImport.update({
-  id: '/field',
-  path: '/field',
-  getParentRoute: () => AuthenticatedRouteRoute,
-} as any)
-const AuthenticatedIntakeRoute = AuthenticatedIntakeRouteImport.update({
-  id: '/intake',
-  path: '/intake',
-  getParentRoute: () => AuthenticatedRouteRoute,
-} as any)
-const AuthenticatedIntegrationsRoute =
-  AuthenticatedIntegrationsRouteImport.update({
-    id: '/integrations',
-    path: '/integrations',
+const AuthenticatedCustomersIdRoute =
+  AuthenticatedCustomersIdRouteImport.update({
+    id: '/customers/$id',
+    path: '/customers/$id',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
-const AuthenticatedInvoicesRoute = AuthenticatedInvoicesRouteImport.update({
-  id: '/invoices',
-  path: '/invoices',
-  getParentRoute: () => AuthenticatedRouteRoute,
-} as any)
-const AuthenticatedMaterialsRoute = AuthenticatedMaterialsRouteImport.update({
-  id: '/materials',
-  path: '/materials',
-  getParentRoute: () => AuthenticatedRouteRoute,
-} as any)
-const AuthenticatedSettingsRoute = AuthenticatedSettingsRouteImport.update({
-  id: '/settings',
-  path: '/settings',
-  getParentRoute: () => AuthenticatedRouteRoute,
-} as any)
-const AuthenticatedTeamRoute = AuthenticatedTeamRouteImport.update({
-  id: '/team',
-  path: '/team',
-  getParentRoute: () => AuthenticatedRouteRoute,
-} as any)
-const AuthenticatedBidsIndexRoute = AuthenticatedBidsIndexRouteImport.update({
-  id: '/bids/',
-  path: '/bids/',
-  getParentRoute: () => AuthenticatedRouteRoute,
-} as any)
-const AuthenticatedBidsIdRoute = AuthenticatedBidsIdRouteImport.update({
-  id: '/bids/$id',
-  path: '/bids/$id',
-  getParentRoute: () => AuthenticatedRouteRoute,
-} as any)
-const AuthenticatedCrmIndexRoute = AuthenticatedCrmIndexRouteImport.update({
-  id: '/crm/',
-  path: '/crm/',
-  getParentRoute: () => AuthenticatedRouteRoute,
-} as any)
-const AuthenticatedCrmIdRoute = AuthenticatedCrmIdRouteImport.update({
-  id: '/crm/$id',
-  path: '/crm/$id',
-  getParentRoute: () => AuthenticatedRouteRoute,
-} as any)
-const AuthenticatedCrmNewRoute = AuthenticatedCrmNewRouteImport.update({
-  id: '/crm/new',
-  path: '/crm/new',
+const AuthenticatedInvoicesIndexRoute =
+  AuthenticatedInvoicesIndexRouteImport.update({
+    id: '/invoices/',
+    path: '/invoices/',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedInvoicesIdRoute = AuthenticatedInvoicesIdRouteImport.update({
+  id: '/invoices/$id',
+  path: '/invoices/$id',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedJobsIndexRoute = AuthenticatedJobsIndexRouteImport.update({
@@ -132,155 +75,115 @@ const AuthenticatedJobsIdRoute = AuthenticatedJobsIdRouteImport.update({
   path: '/jobs/$id',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
-const ApiPublicHooksScheduledRemindersRoute =
-  ApiPublicHooksScheduledRemindersRouteImport.update({
-    id: '/api/public/hooks/scheduled-reminders',
-    path: '/api/public/hooks/scheduled-reminders',
-    getParentRoute: () => rootRouteImport,
-  } as any)
+const AuthenticatedJobsNewRoute = AuthenticatedJobsNewRouteImport.update({
+  id: '/jobs/new',
+  path: '/jobs/new',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedTechIndexRoute = AuthenticatedTechIndexRouteImport.update({
+  id: '/tech/',
+  path: '/tech/',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedTechIdRoute = AuthenticatedTechIdRouteImport.update({
+  id: '/tech/$id',
+  path: '/tech/$id',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof AuthenticatedIndexRoute
   '/auth': typeof AuthRoute
-  '/alerts': typeof AuthenticatedAlertsRoute
-  '/communications': typeof AuthenticatedCommunicationsRoute
-  '/documents': typeof AuthenticatedDocumentsRoute
-  '/field': typeof AuthenticatedFieldRoute
-  '/intake': typeof AuthenticatedIntakeRoute
-  '/integrations': typeof AuthenticatedIntegrationsRoute
-  '/invoices': typeof AuthenticatedInvoicesRoute
-  '/materials': typeof AuthenticatedMaterialsRoute
-  '/settings': typeof AuthenticatedSettingsRoute
-  '/team': typeof AuthenticatedTeamRoute
-  '/bids/$id': typeof AuthenticatedBidsIdRoute
-  '/crm/$id': typeof AuthenticatedCrmIdRoute
-  '/crm/new': typeof AuthenticatedCrmNewRoute
+  '/dispatch': typeof AuthenticatedDispatchRoute
+  '/customers/$id': typeof AuthenticatedCustomersIdRoute
+  '/invoices/$id': typeof AuthenticatedInvoicesIdRoute
   '/jobs/$id': typeof AuthenticatedJobsIdRoute
-  '/bids/': typeof AuthenticatedBidsIndexRoute
-  '/crm/': typeof AuthenticatedCrmIndexRoute
+  '/jobs/new': typeof AuthenticatedJobsNewRoute
+  '/tech/$id': typeof AuthenticatedTechIdRoute
+  '/customers/': typeof AuthenticatedCustomersIndexRoute
+  '/invoices/': typeof AuthenticatedInvoicesIndexRoute
   '/jobs/': typeof AuthenticatedJobsIndexRoute
-  '/api/public/hooks/scheduled-reminders': typeof ApiPublicHooksScheduledRemindersRoute
+  '/tech/': typeof AuthenticatedTechIndexRoute
 }
 export interface FileRoutesByTo {
   '/auth': typeof AuthRoute
-  '/alerts': typeof AuthenticatedAlertsRoute
-  '/communications': typeof AuthenticatedCommunicationsRoute
-  '/documents': typeof AuthenticatedDocumentsRoute
-  '/field': typeof AuthenticatedFieldRoute
-  '/intake': typeof AuthenticatedIntakeRoute
-  '/integrations': typeof AuthenticatedIntegrationsRoute
-  '/invoices': typeof AuthenticatedInvoicesRoute
-  '/materials': typeof AuthenticatedMaterialsRoute
-  '/settings': typeof AuthenticatedSettingsRoute
-  '/team': typeof AuthenticatedTeamRoute
+  '/dispatch': typeof AuthenticatedDispatchRoute
   '/': typeof AuthenticatedIndexRoute
-  '/bids/$id': typeof AuthenticatedBidsIdRoute
-  '/crm/$id': typeof AuthenticatedCrmIdRoute
-  '/crm/new': typeof AuthenticatedCrmNewRoute
+  '/customers/$id': typeof AuthenticatedCustomersIdRoute
+  '/invoices/$id': typeof AuthenticatedInvoicesIdRoute
   '/jobs/$id': typeof AuthenticatedJobsIdRoute
-  '/bids': typeof AuthenticatedBidsIndexRoute
-  '/crm': typeof AuthenticatedCrmIndexRoute
+  '/jobs/new': typeof AuthenticatedJobsNewRoute
+  '/tech/$id': typeof AuthenticatedTechIdRoute
+  '/customers': typeof AuthenticatedCustomersIndexRoute
+  '/invoices': typeof AuthenticatedInvoicesIndexRoute
   '/jobs': typeof AuthenticatedJobsIndexRoute
-  '/api/public/hooks/scheduled-reminders': typeof ApiPublicHooksScheduledRemindersRoute
+  '/tech': typeof AuthenticatedTechIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/auth': typeof AuthRoute
-  '/_authenticated/alerts': typeof AuthenticatedAlertsRoute
-  '/_authenticated/communications': typeof AuthenticatedCommunicationsRoute
-  '/_authenticated/documents': typeof AuthenticatedDocumentsRoute
-  '/_authenticated/field': typeof AuthenticatedFieldRoute
-  '/_authenticated/intake': typeof AuthenticatedIntakeRoute
-  '/_authenticated/integrations': typeof AuthenticatedIntegrationsRoute
-  '/_authenticated/invoices': typeof AuthenticatedInvoicesRoute
-  '/_authenticated/materials': typeof AuthenticatedMaterialsRoute
-  '/_authenticated/settings': typeof AuthenticatedSettingsRoute
-  '/_authenticated/team': typeof AuthenticatedTeamRoute
+  '/_authenticated/dispatch': typeof AuthenticatedDispatchRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
-  '/_authenticated/bids/$id': typeof AuthenticatedBidsIdRoute
-  '/_authenticated/crm/$id': typeof AuthenticatedCrmIdRoute
-  '/_authenticated/crm/new': typeof AuthenticatedCrmNewRoute
+  '/_authenticated/customers/$id': typeof AuthenticatedCustomersIdRoute
+  '/_authenticated/invoices/$id': typeof AuthenticatedInvoicesIdRoute
   '/_authenticated/jobs/$id': typeof AuthenticatedJobsIdRoute
-  '/_authenticated/bids/': typeof AuthenticatedBidsIndexRoute
-  '/_authenticated/crm/': typeof AuthenticatedCrmIndexRoute
+  '/_authenticated/jobs/new': typeof AuthenticatedJobsNewRoute
+  '/_authenticated/tech/$id': typeof AuthenticatedTechIdRoute
+  '/_authenticated/customers/': typeof AuthenticatedCustomersIndexRoute
+  '/_authenticated/invoices/': typeof AuthenticatedInvoicesIndexRoute
   '/_authenticated/jobs/': typeof AuthenticatedJobsIndexRoute
-  '/api/public/hooks/scheduled-reminders': typeof ApiPublicHooksScheduledRemindersRoute
+  '/_authenticated/tech/': typeof AuthenticatedTechIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
     | '/auth'
-    | '/alerts'
-    | '/communications'
-    | '/documents'
-    | '/field'
-    | '/intake'
-    | '/integrations'
-    | '/invoices'
-    | '/materials'
-    | '/settings'
-    | '/team'
-    | '/bids/$id'
-    | '/crm/$id'
-    | '/crm/new'
+    | '/dispatch'
+    | '/customers/$id'
+    | '/invoices/$id'
     | '/jobs/$id'
-    | '/bids/'
-    | '/crm/'
+    | '/jobs/new'
+    | '/tech/$id'
+    | '/customers/'
+    | '/invoices/'
     | '/jobs/'
-    | '/api/public/hooks/scheduled-reminders'
+    | '/tech/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/auth'
-    | '/alerts'
-    | '/communications'
-    | '/documents'
-    | '/field'
-    | '/intake'
-    | '/integrations'
-    | '/invoices'
-    | '/materials'
-    | '/settings'
-    | '/team'
+    | '/dispatch'
     | '/'
-    | '/bids/$id'
-    | '/crm/$id'
-    | '/crm/new'
+    | '/customers/$id'
+    | '/invoices/$id'
     | '/jobs/$id'
-    | '/bids'
-    | '/crm'
+    | '/jobs/new'
+    | '/tech/$id'
+    | '/customers'
+    | '/invoices'
     | '/jobs'
-    | '/api/public/hooks/scheduled-reminders'
+    | '/tech'
   id:
     | '__root__'
     | '/_authenticated'
     | '/auth'
-    | '/_authenticated/alerts'
-    | '/_authenticated/communications'
-    | '/_authenticated/documents'
-    | '/_authenticated/field'
-    | '/_authenticated/intake'
-    | '/_authenticated/integrations'
-    | '/_authenticated/invoices'
-    | '/_authenticated/materials'
-    | '/_authenticated/settings'
-    | '/_authenticated/team'
+    | '/_authenticated/dispatch'
     | '/_authenticated/'
-    | '/_authenticated/bids/$id'
-    | '/_authenticated/crm/$id'
-    | '/_authenticated/crm/new'
+    | '/_authenticated/customers/$id'
+    | '/_authenticated/invoices/$id'
     | '/_authenticated/jobs/$id'
-    | '/_authenticated/bids/'
-    | '/_authenticated/crm/'
+    | '/_authenticated/jobs/new'
+    | '/_authenticated/tech/$id'
+    | '/_authenticated/customers/'
+    | '/_authenticated/invoices/'
     | '/_authenticated/jobs/'
-    | '/api/public/hooks/scheduled-reminders'
+    | '/_authenticated/tech/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
   AuthRoute: typeof AuthRoute
-  ApiPublicHooksScheduledRemindersRoute: typeof ApiPublicHooksScheduledRemindersRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -306,109 +209,39 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/_authenticated/alerts': {
-      id: '/_authenticated/alerts'
-      path: '/alerts'
-      fullPath: '/alerts'
-      preLoaderRoute: typeof AuthenticatedAlertsRouteImport
+    '/_authenticated/dispatch': {
+      id: '/_authenticated/dispatch'
+      path: '/dispatch'
+      fullPath: '/dispatch'
+      preLoaderRoute: typeof AuthenticatedDispatchRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/_authenticated/communications': {
-      id: '/_authenticated/communications'
-      path: '/communications'
-      fullPath: '/communications'
-      preLoaderRoute: typeof AuthenticatedCommunicationsRouteImport
+    '/_authenticated/customers/': {
+      id: '/_authenticated/customers/'
+      path: '/customers'
+      fullPath: '/customers/'
+      preLoaderRoute: typeof AuthenticatedCustomersIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/_authenticated/documents': {
-      id: '/_authenticated/documents'
-      path: '/documents'
-      fullPath: '/documents'
-      preLoaderRoute: typeof AuthenticatedDocumentsRouteImport
+    '/_authenticated/customers/$id': {
+      id: '/_authenticated/customers/$id'
+      path: '/customers/$id'
+      fullPath: '/customers/$id'
+      preLoaderRoute: typeof AuthenticatedCustomersIdRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/_authenticated/field': {
-      id: '/_authenticated/field'
-      path: '/field'
-      fullPath: '/field'
-      preLoaderRoute: typeof AuthenticatedFieldRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/_authenticated/intake': {
-      id: '/_authenticated/intake'
-      path: '/intake'
-      fullPath: '/intake'
-      preLoaderRoute: typeof AuthenticatedIntakeRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/_authenticated/integrations': {
-      id: '/_authenticated/integrations'
-      path: '/integrations'
-      fullPath: '/integrations'
-      preLoaderRoute: typeof AuthenticatedIntegrationsRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/_authenticated/invoices': {
-      id: '/_authenticated/invoices'
+    '/_authenticated/invoices/': {
+      id: '/_authenticated/invoices/'
       path: '/invoices'
-      fullPath: '/invoices'
-      preLoaderRoute: typeof AuthenticatedInvoicesRouteImport
+      fullPath: '/invoices/'
+      preLoaderRoute: typeof AuthenticatedInvoicesIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/_authenticated/materials': {
-      id: '/_authenticated/materials'
-      path: '/materials'
-      fullPath: '/materials'
-      preLoaderRoute: typeof AuthenticatedMaterialsRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/_authenticated/settings': {
-      id: '/_authenticated/settings'
-      path: '/settings'
-      fullPath: '/settings'
-      preLoaderRoute: typeof AuthenticatedSettingsRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/_authenticated/team': {
-      id: '/_authenticated/team'
-      path: '/team'
-      fullPath: '/team'
-      preLoaderRoute: typeof AuthenticatedTeamRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/_authenticated/bids/': {
-      id: '/_authenticated/bids/'
-      path: '/bids'
-      fullPath: '/bids/'
-      preLoaderRoute: typeof AuthenticatedBidsIndexRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/_authenticated/bids/$id': {
-      id: '/_authenticated/bids/$id'
-      path: '/bids/$id'
-      fullPath: '/bids/$id'
-      preLoaderRoute: typeof AuthenticatedBidsIdRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/_authenticated/crm/': {
-      id: '/_authenticated/crm/'
-      path: '/crm'
-      fullPath: '/crm/'
-      preLoaderRoute: typeof AuthenticatedCrmIndexRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/_authenticated/crm/$id': {
-      id: '/_authenticated/crm/$id'
-      path: '/crm/$id'
-      fullPath: '/crm/$id'
-      preLoaderRoute: typeof AuthenticatedCrmIdRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/_authenticated/crm/new': {
-      id: '/_authenticated/crm/new'
-      path: '/crm/new'
-      fullPath: '/crm/new'
-      preLoaderRoute: typeof AuthenticatedCrmNewRouteImport
+    '/_authenticated/invoices/$id': {
+      id: '/_authenticated/invoices/$id'
+      path: '/invoices/$id'
+      fullPath: '/invoices/$id'
+      preLoaderRoute: typeof AuthenticatedInvoicesIdRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/jobs/': {
@@ -425,56 +258,56 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedJobsIdRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/api/public/hooks/scheduled-reminders': {
-      id: '/api/public/hooks/scheduled-reminders'
-      path: '/api/public/hooks/scheduled-reminders'
-      fullPath: '/api/public/hooks/scheduled-reminders'
-      preLoaderRoute: typeof ApiPublicHooksScheduledRemindersRouteImport
-      parentRoute: typeof rootRouteImport
+    '/_authenticated/jobs/new': {
+      id: '/_authenticated/jobs/new'
+      path: '/jobs/new'
+      fullPath: '/jobs/new'
+      preLoaderRoute: typeof AuthenticatedJobsNewRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/tech/': {
+      id: '/_authenticated/tech/'
+      path: '/tech'
+      fullPath: '/tech/'
+      preLoaderRoute: typeof AuthenticatedTechIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/tech/$id': {
+      id: '/_authenticated/tech/$id'
+      path: '/tech/$id'
+      fullPath: '/tech/$id'
+      preLoaderRoute: typeof AuthenticatedTechIdRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
     }
   }
 }
 
 interface AuthenticatedRouteRouteChildren {
-  AuthenticatedAlertsRoute: typeof AuthenticatedAlertsRoute
-  AuthenticatedCommunicationsRoute: typeof AuthenticatedCommunicationsRoute
-  AuthenticatedDocumentsRoute: typeof AuthenticatedDocumentsRoute
-  AuthenticatedFieldRoute: typeof AuthenticatedFieldRoute
-  AuthenticatedIntakeRoute: typeof AuthenticatedIntakeRoute
-  AuthenticatedIntegrationsRoute: typeof AuthenticatedIntegrationsRoute
-  AuthenticatedInvoicesRoute: typeof AuthenticatedInvoicesRoute
-  AuthenticatedMaterialsRoute: typeof AuthenticatedMaterialsRoute
-  AuthenticatedSettingsRoute: typeof AuthenticatedSettingsRoute
-  AuthenticatedTeamRoute: typeof AuthenticatedTeamRoute
+  AuthenticatedDispatchRoute: typeof AuthenticatedDispatchRoute
   AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
-  AuthenticatedBidsIdRoute: typeof AuthenticatedBidsIdRoute
-  AuthenticatedCrmIdRoute: typeof AuthenticatedCrmIdRoute
-  AuthenticatedCrmNewRoute: typeof AuthenticatedCrmNewRoute
+  AuthenticatedCustomersIdRoute: typeof AuthenticatedCustomersIdRoute
+  AuthenticatedInvoicesIdRoute: typeof AuthenticatedInvoicesIdRoute
   AuthenticatedJobsIdRoute: typeof AuthenticatedJobsIdRoute
-  AuthenticatedBidsIndexRoute: typeof AuthenticatedBidsIndexRoute
-  AuthenticatedCrmIndexRoute: typeof AuthenticatedCrmIndexRoute
+  AuthenticatedJobsNewRoute: typeof AuthenticatedJobsNewRoute
+  AuthenticatedTechIdRoute: typeof AuthenticatedTechIdRoute
+  AuthenticatedCustomersIndexRoute: typeof AuthenticatedCustomersIndexRoute
+  AuthenticatedInvoicesIndexRoute: typeof AuthenticatedInvoicesIndexRoute
   AuthenticatedJobsIndexRoute: typeof AuthenticatedJobsIndexRoute
+  AuthenticatedTechIndexRoute: typeof AuthenticatedTechIndexRoute
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
-  AuthenticatedAlertsRoute: AuthenticatedAlertsRoute,
-  AuthenticatedCommunicationsRoute: AuthenticatedCommunicationsRoute,
-  AuthenticatedDocumentsRoute: AuthenticatedDocumentsRoute,
-  AuthenticatedFieldRoute: AuthenticatedFieldRoute,
-  AuthenticatedIntakeRoute: AuthenticatedIntakeRoute,
-  AuthenticatedIntegrationsRoute: AuthenticatedIntegrationsRoute,
-  AuthenticatedInvoicesRoute: AuthenticatedInvoicesRoute,
-  AuthenticatedMaterialsRoute: AuthenticatedMaterialsRoute,
-  AuthenticatedSettingsRoute: AuthenticatedSettingsRoute,
-  AuthenticatedTeamRoute: AuthenticatedTeamRoute,
+  AuthenticatedDispatchRoute: AuthenticatedDispatchRoute,
   AuthenticatedIndexRoute: AuthenticatedIndexRoute,
-  AuthenticatedBidsIdRoute: AuthenticatedBidsIdRoute,
-  AuthenticatedCrmIdRoute: AuthenticatedCrmIdRoute,
-  AuthenticatedCrmNewRoute: AuthenticatedCrmNewRoute,
+  AuthenticatedCustomersIdRoute: AuthenticatedCustomersIdRoute,
+  AuthenticatedInvoicesIdRoute: AuthenticatedInvoicesIdRoute,
   AuthenticatedJobsIdRoute: AuthenticatedJobsIdRoute,
-  AuthenticatedBidsIndexRoute: AuthenticatedBidsIndexRoute,
-  AuthenticatedCrmIndexRoute: AuthenticatedCrmIndexRoute,
+  AuthenticatedJobsNewRoute: AuthenticatedJobsNewRoute,
+  AuthenticatedTechIdRoute: AuthenticatedTechIdRoute,
+  AuthenticatedCustomersIndexRoute: AuthenticatedCustomersIndexRoute,
+  AuthenticatedInvoicesIndexRoute: AuthenticatedInvoicesIndexRoute,
   AuthenticatedJobsIndexRoute: AuthenticatedJobsIndexRoute,
+  AuthenticatedTechIndexRoute: AuthenticatedTechIndexRoute,
 }
 
 const AuthenticatedRouteRouteWithChildren =
@@ -483,18 +316,7 @@ const AuthenticatedRouteRouteWithChildren =
 const rootRouteChildren: RootRouteChildren = {
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
   AuthRoute: AuthRoute,
-  ApiPublicHooksScheduledRemindersRoute: ApiPublicHooksScheduledRemindersRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}
