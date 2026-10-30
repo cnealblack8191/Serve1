@@ -35,29 +35,26 @@ export function buildLineItems(job: Job): InvoiceLineItem[] {
  * creates a second invoice.
  */
 export async function createInvoiceFromJob(job: Job): Promise<Invoice> {
-  const existing = await backend().invoices.list();
-  let invoice = existing.find((i) => i.jobId === job.id);
+  const existing = (await backend().invoices.list()).find((i) => i.jobId === job.id);
+  let invoice = existing;
   if (!invoice) {
     const lineItems = buildLineItems(job);
-    invoice = await backend().invoices.create({
-      invoiceNumber: newInvoiceNumber(),
-      jobId: job.id,
-      customerId: job.customerId,
-      lineItems,
-      total: lineItems.reduce((sum, l) => sum + l.total, 0),
-      status: "Draft",
-      pdfPath: null,
-    });
-    // Two office users clicking at the same moment can both pass the check above.
-    // Re-read and keep only the earliest invoice for this job; remove ours if it lost.
-    // A hard guarantee needs a unique index on jobId (data-model change, owner decision).
-    const forJob = (await backend().invoices.list())
-      .filter((i) => i.jobId === job.id)
-      .sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id));
-    const keeper = forJob[0];
-    if (keeper && keeper.id !== invoice.id) {
-      await backend().invoices.remove(invoice.id);
-      invoice = keeper;
+    try {
+      invoice = await backend().invoices.create({
+        invoiceNumber: newInvoiceNumber(),
+        jobId: job.id,
+        customerId: job.customerId,
+        lineItems,
+        total: lineItems.reduce((sum, l) => sum + l.total, 0),
+        status: "Draft",
+        pdfPath: null,
+      });
+    } catch (e) {
+      // The database keys invoices by job, so a same-moment second create fails
+      // here; the first one is the invoice. Anything else is a real error.
+      const again = (await backend().invoices.list()).find((i) => i.jobId === job.id);
+      if (!again) throw e;
+      invoice = again;
     }
   }
   const current = await backend().jobs.get(job.id);

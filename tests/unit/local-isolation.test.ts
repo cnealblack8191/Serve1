@@ -16,7 +16,8 @@ const mem = new Map<string, string>();
   length: 0,
 } as Storage;
 
-const { createLocalBackend, NotAllowedError } = await import("../../src/data/local/index.ts");
+const { createLocalBackend, DuplicateError, NotAllowedError } =
+  await import("../../src/data/local/index.ts");
 const { setBackend } = await import("../../src/data/backend.ts");
 
 const as = async (b: ReturnType<typeof createLocalBackend>, email: string) => {
@@ -256,6 +257,22 @@ describe("local backend: technician isolation", () => {
       ls.setItem = realSet;
     }
     assert.equal((await b.jobs.get("job-1"))?.notes, null);
+  });
+
+  it("a job can have only one invoice", async () => {
+    await as(b, "office@serv1.demo");
+    const inv = {
+      invoiceNumber: "INV-A",
+      jobId: "job-4",
+      customerId: "cust-2",
+      lineItems: [],
+      total: 275,
+      status: "Draft" as const,
+      pdfPath: null,
+    };
+    await b.invoices.create(inv);
+    await assert.rejects(b.invoices.create({ ...inv, invoiceNumber: "INV-B" }), DuplicateError);
+    assert.equal((await b.invoices.list()).filter((i) => i.jobId === "job-4").length, 1);
   });
 
   it("owners read everything but cannot change jobs; office can", async () => {

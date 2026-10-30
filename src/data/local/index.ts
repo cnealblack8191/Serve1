@@ -59,6 +59,13 @@ export function resetLocalData() {
   }
 }
 
+export class DuplicateError extends Error {
+  constructor(message = "Duplicate") {
+    super(message);
+    this.name = "DuplicateError";
+  }
+}
+
 export class NotAllowedError extends Error {
   constructor(message = "Not allowed") {
     super(message);
@@ -146,6 +153,8 @@ export function createLocalBackend(): Backend {
 
   /** Who may read a row, and who may write it. Writers must also be able to read it. */
   type Rules<T> = {
+    /** Optional uniqueness check run on create against the existing rows. */
+    unique?: (row: T, rows: T[]) => boolean;
     read: (row: T, me: AuthUser | null) => boolean;
     write: (
       row: T | null,
@@ -191,6 +200,9 @@ export function createLocalBackend(): Backend {
           updatedAt: nowIso(),
         } as T;
         mustWrite(row, me, "create");
+        if (rules.unique && !rules.unique(row, rows())) {
+          throw new DuplicateError(`${table}: a row with this key already exists`);
+        }
         tables = { ...tables, [table]: [...rows(), row] };
         persist(table);
         return row;
@@ -334,6 +346,9 @@ export function createLocalBackend(): Backend {
       fileRowRules<Signature>(),
     ),
     invoices: repo("invoices", {
+      // One invoice per job (mirrors the Amplify primary key on jobId).
+      unique: (row, rows) =>
+        !rows.some((r) => (r as { jobId: string }).jobId === (row as { jobId: string }).jobId),
       read: (_r, me) => isOffice(me) || me?.role === "Owner",
       // Owners may change only the status (approve, mark paid), mirroring the field-level rule in Amplify.
       write: (_r, me, op, patch) =>

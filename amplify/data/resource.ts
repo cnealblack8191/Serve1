@@ -152,6 +152,9 @@ const schema = a.schema({
       allow.ownerDefinedIn("assignedTechId").to(["create", "read"]),
     ]),
 
+  // One invoice per job, guaranteed by the database: jobId is the primary key
+  // (owner decision 2026-10-30, "add the unique index"). A second create for the
+  // same job fails at DynamoDB, so src/data falls back to reading the existing one.
   Invoice: a
     .model({
       invoiceNumber: a.string(),
@@ -174,6 +177,7 @@ const schema = a.schema({
         ]),
       pdfPath: a.string(),
     })
+    .identifier(["jobId"])
     .authorization((allow) => [
       allow.groups(office).to(["create", "read", "update", "delete"]),
       allow.groups(["Owner"]).to(["read"]),
