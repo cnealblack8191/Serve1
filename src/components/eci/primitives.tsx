@@ -1,15 +1,19 @@
-import { Link } from "@tanstack/react-router";
+import { Link, type LinkProps } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 import { Cell, Pie, PieChart } from "recharts";
 import { cn } from "@/lib/utils";
 
+// Light and dark variants (SPEC.md section 13). Job statuses use src/lib/status.ts instead.
 const TONES: Record<string, string> = {
-  green: "bg-emerald-50 text-emerald-700 ring-emerald-600/10",
-  amber: "bg-amber-50 text-amber-700 ring-amber-600/20",
-  copper: "bg-orange-50 text-eci-copper ring-orange-600/15",
-  red: "bg-red-50 text-red-700 ring-red-600/10",
-  navy: "bg-eci-navy/5 text-eci-navy ring-eci-navy/10",
-  zinc: "bg-muted text-zinc-700 ring-black/5",
+  green:
+    "bg-emerald-50 text-emerald-700 ring-emerald-600/10 dark:bg-emerald-950 dark:text-emerald-200 dark:ring-emerald-500/30",
+  amber:
+    "bg-amber-50 text-amber-700 ring-amber-600/20 dark:bg-amber-950 dark:text-amber-200 dark:ring-amber-500/30",
+  copper:
+    "bg-orange-50 text-eci-copper ring-orange-600/15 dark:bg-orange-950 dark:text-orange-200 dark:ring-orange-500/30",
+  red: "bg-red-50 text-red-700 ring-red-600/10 dark:bg-red-950 dark:text-red-200 dark:ring-red-500/30",
+  navy: "bg-eci-navy/5 text-eci-navy ring-eci-navy/10 dark:bg-sky-950 dark:text-sky-200 dark:ring-sky-500/30",
+  zinc: "bg-muted text-zinc-700 ring-black/5 dark:text-zinc-200 dark:ring-white/10",
 };
 
 const STATUS_TONE: Record<string, keyof typeof TONES> = {
@@ -45,13 +49,7 @@ const STATUS_TONE: Record<string, keyof typeof TONES> = {
   "Non-Contract": "copper",
 };
 
-export function StatusBadge({
-  status,
-  className,
-}: {
-  status: string;
-  className?: string;
-}) {
+export function StatusBadge({ status, className }: { status: string; className?: string }) {
   const tone = TONES[STATUS_TONE[status] ?? "zinc"];
   return (
     <span
@@ -85,7 +83,7 @@ export function SummaryCard({
   chartValue?: number;
   chartTotal?: number;
   chartLabel?: string;
-  to?: "/crm" | "/bids" | "/jobs" | "/invoices" | "/materials" | "/alerts";
+  to?: LinkProps["to"];
 }) {
   const hintClass = {
     zinc: "text-muted-foreground",
@@ -97,12 +95,13 @@ export function SummaryCard({
   const safeValue = hasChart ? Math.max(0, chartValue) : 0;
   const safeTotal = hasChart ? Math.max(safeValue, chartTotal) : 0;
   const percent = safeTotal > 0 ? Math.round((safeValue / safeTotal) * 100) : 0;
-  const chartData = safeTotal > 0
-    ? [
-        { name: label, value: safeValue },
-        { name: "Remainder", value: Math.max(0, safeTotal - safeValue) },
-      ]
-    : [{ name: "No data", value: 1 }];
+  const chartData =
+    safeTotal > 0
+      ? [
+          { name: label, value: safeValue },
+          { name: "Remainder", value: Math.max(0, safeTotal - safeValue) },
+        ]
+      : [{ name: "No data", value: 1 }];
   const chartColor = accent
     ? "var(--eci-copper)"
     : hintTone === "green"
@@ -119,10 +118,7 @@ export function SummaryCard({
           {label}
         </span>
         <span
-          className={cn(
-            "text-2xl font-semibold",
-            accent ? "text-eci-copper" : "text-foreground",
-          )}
+          className={cn("text-2xl font-semibold", accent ? "text-eci-copper" : "text-foreground")}
         >
           {value}
         </span>
@@ -190,9 +186,7 @@ export function SectionHeading({
     <div className="flex items-center justify-between gap-4">
       <div>
         <h2 className="eci-panel-title">{title}</h2>
-        {description ? (
-          <p className="mt-1 text-sm text-muted-foreground">{description}</p>
-        ) : null}
+        {description ? <p className="mt-1 text-sm text-muted-foreground">{description}</p> : null}
       </div>
 
       {action ? (

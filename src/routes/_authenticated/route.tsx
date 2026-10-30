@@ -1,12 +1,18 @@
 import { createFileRoute, Outlet, redirect } from "@tanstack/react-router";
-import { supabase } from "@/integrations/supabase/client";
 
+import { AppShell } from "@/components/eci/AppShell";
+import { getCurrentUser } from "@/data";
+
+/** Every screen under /_authenticated requires a signed-in user. */
 export const Route = createFileRoute("/_authenticated")({
-  ssr: false,
-  beforeLoad: async () => {
-    const { data, error } = await supabase.auth.getUser();
-    if (error || !data.user) throw redirect({ to: "/auth" });
-    return { user: data.user };
+  beforeLoad: async ({ location }) => {
+    const user = await getCurrentUser();
+    if (!user) throw redirect({ to: "/auth", search: { redirect: location.href } });
+    return { user };
   },
-  component: () => <Outlet />,
+  component: () => (
+    <AppShell>
+      <Outlet />
+    </AppShell>
+  ),
 });
