@@ -48,6 +48,17 @@ export async function createInvoiceFromJob(job: Job): Promise<Invoice> {
       status: "Draft",
       pdfPath: null,
     });
+    // Two office users clicking at the same moment can both pass the check above.
+    // Re-read and keep only the earliest invoice for this job; remove ours if it lost.
+    // A hard guarantee needs a unique index on jobId (data-model change, owner decision).
+    const forJob = (await backend().invoices.list())
+      .filter((i) => i.jobId === job.id)
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id));
+    const keeper = forJob[0];
+    if (keeper && keeper.id !== invoice.id) {
+      await backend().invoices.remove(invoice.id);
+      invoice = keeper;
+    }
   }
   const current = await backend().jobs.get(job.id);
   if (current && current.status === "Complete") {

@@ -123,7 +123,12 @@ export function createLocalBackend(): Backend {
   /** Who may read a row, and who may write it. Writers must also be able to read it. */
   type Rules<T> = {
     read: (row: T, me: AuthUser | null) => boolean;
-    write: (row: T | null, me: AuthUser | null, op: "create" | "update" | "remove") => boolean;
+    write: (
+      row: T | null,
+      me: AuthUser | null,
+      op: "create" | "update" | "remove",
+      patch?: object,
+    ) => boolean;
   };
 
   function repo<T extends BaseRecord, N>(table: TableName, rules: Rules<T>): Repo<T, N> {
@@ -131,8 +136,13 @@ export function createLocalBackend(): Backend {
     const mustRead = (row: T, me: AuthUser | null) => {
       if (!rules.read(row, me)) throw new NotAllowedError(`${table}: not visible to this account`);
     };
-    const mustWrite = (row: T | null, me: AuthUser | null, op: "create" | "update" | "remove") => {
-      if (!rules.write(row, me, op))
+    const mustWrite = (
+      row: T | null,
+      me: AuthUser | null,
+      op: "create" | "update" | "remove",
+      patch?: object,
+    ) => {
+      if (!rules.write(row, me, op, patch))
         throw new NotAllowedError(`${table}: ${op} not allowed for this account`);
     };
     return {
@@ -164,10 +174,10 @@ export function createLocalBackend(): Backend {
         const existing = rows()[idx];
         if (idx < 0 || !existing) throw new Error(`${table}: ${id} not found`);
         mustRead(existing, me);
-        mustWrite(existing, me, "update");
+        mustWrite(existing, me, "update", patch as object);
         const row = { ...existing, ...(patch as object), updatedAt: nowIso() } as T;
         // The changed row must still be one this account may write (a tech cannot hand a job to someone else).
-        mustWrite(row, me, "update");
+        mustWrite(row, me, "update", patch as object);
         const next = [...rows()];
         next[idx] = row;
         tables = { ...tables, [table]: next };
@@ -294,7 +304,13 @@ export function createLocalBackend(): Backend {
     ),
     invoices: repo("invoices", {
       read: (_r, me) => isOffice(me) || me?.role === "Owner",
-      write: (_r, me, op) => isOffice(me) || (op === "update" && me?.role === "Owner"),
+      // Owners may change only the status (approve, mark paid), mirroring the field-level rule in Amplify.
+      write: (_r, me, op, patch) =>
+        isOffice(me) ||
+        (op === "update" &&
+          me?.role === "Owner" &&
+          !!patch &&
+          Object.keys(patch).every((k) => k === "status")),
     }),
     files: filesApi,
     onChange(listener) {

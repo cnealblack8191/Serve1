@@ -154,12 +154,21 @@ const schema = a.schema({
       // Line items as JSON: [{ description, quantity, unitPrice, total }]
       lineItems: a.json().required(),
       total: a.float().required(),
-      status: a.ref("InvoiceStatus").required(),
+      // Field-level rule: owners may change the status (approve, mark paid) and
+      // nothing else; office keeps full access. Field rules replace the model
+      // rules for this one field, so office is repeated here.
+      status: a
+        .ref("InvoiceStatus")
+        .required()
+        .authorization((allow) => [
+          allow.groups(office).to(["create", "read", "update"]),
+          allow.groups(["Owner"]).to(["read", "update"]),
+        ]),
       pdfPath: a.string(),
     })
     .authorization((allow) => [
       allow.groups(office).to(["create", "read", "update", "delete"]),
-      allow.groups(["Owner"]).to(["read", "update"]),
+      allow.groups(["Owner"]).to(["read"]),
     ]),
 });
 

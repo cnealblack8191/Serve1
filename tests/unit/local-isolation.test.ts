@@ -165,6 +165,37 @@ describe("local backend: technician isolation", () => {
     assert.equal((await b.signatures.list()).length, 1);
   });
 
+  it("an owner may change an invoice's status but nothing else", async () => {
+    await as(b, "office@serv1.demo");
+    const inv = await b.invoices.create({
+      invoiceNumber: "INV-TEST",
+      jobId: "job-4",
+      customerId: "cust-2",
+      lineItems: [],
+      total: 275,
+      status: "Draft",
+      pdfPath: null,
+    });
+    await as(b, "owner@serv1.demo");
+    const paid = await b.invoices.update(inv.id, { status: "Paid" });
+    assert.equal(paid.status, "Paid");
+    await assert.rejects(b.invoices.update(inv.id, { total: 1 }), NotAllowedError);
+    await assert.rejects(b.invoices.update(inv.id, { status: "Sent", total: 1 }), NotAllowedError);
+    await assert.rejects(
+      b.invoices.create({
+        invoiceNumber: "INV-X",
+        jobId: "job-4",
+        customerId: "cust-2",
+        lineItems: [],
+        total: 1,
+        status: "Draft",
+        pdfPath: null,
+      }),
+      NotAllowedError,
+    );
+    await assert.rejects(b.invoices.remove(inv.id), NotAllowedError);
+  });
+
   it("owners read everything but cannot change jobs; office can", async () => {
     await as(b, "owner@serv1.demo");
     assert.ok((await b.jobs.list()).length >= 6);
