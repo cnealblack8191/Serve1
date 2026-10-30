@@ -253,7 +253,7 @@ const unassigned = {
   laborHours: null,
 };
 
-export const SEED_JOBS: Job[] = [
+const SEED_JOB_LIST: Job[] = [
   // ---- New: waiting in the dispatch queue (only these two; tests empty the queue) ----
   {
     id: "job-1",
@@ -596,6 +596,19 @@ export const SEED_JOBS: Job[] = [
     ...stamp,
   },
 ];
+
+/**
+ * Give each job a believable "created" time so the Jobs list (newest first) reads naturally:
+ * calls still waiting were taken this morning, everything else was booked a few days ahead.
+ */
+export const SEED_JOBS: Job[] = SEED_JOB_LIST.map((j, i) => {
+  const created = j.scheduledStart
+    ? new Date(new Date(j.scheduledStart).getTime() - 3 * 86_400_000)
+    : new Date(at(0, 7));
+  created.setMinutes(created.getMinutes() + i * 7);
+  const createdAt = created.toISOString();
+  return { ...j, createdAt, updatedAt: j.completedAt ?? j.startedAt ?? createdAt };
+});
 
 /** Same line items the one-click invoice builds (src/data/billing.ts): labor at $95/h plus an $85 service call. */
 function lineItems(laborHours: number): InvoiceLineItem[] {

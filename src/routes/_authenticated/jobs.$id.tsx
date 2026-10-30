@@ -19,7 +19,16 @@ export const Route = createFileRoute("/_authenticated/jobs/$id")({
   component: Page,
 });
 
-const fmt = (iso: string | null) => (iso ? new Date(iso).toLocaleString() : "—");
+const fmt = (iso: string | null) =>
+  iso
+    ? new Date(iso).toLocaleString([], {
+        weekday: "short",
+        month: "short",
+        day: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+      })
+    : "—";
 
 /** Shows a stored file through a short-lived link. */
 function StoredImage({ path, alt }: { path: string; alt: string }) {
@@ -92,7 +101,7 @@ function Page() {
           label="Site"
           value={site ? `${site.name ? `${site.name}, ` : ""}${site.address}` : "—"}
         />
-        <DataRow label="Access notes" value={site?.accessNotes ?? "—"} />
+        <DataRow label="Access notes" value={site?.accessNotes ?? "None"} />
         <DataRow label="Priority" value={PRIORITY_LABEL[j.priority]} />
         <DataRow label="Assigned tech" value={tech?.name ?? "Unassigned"} />
         <DataRow

@@ -80,7 +80,7 @@ function Page() {
                 </div>
                 {s.name ? <p className="text-sm">{s.address}</p> : null}
                 <p className="text-sm text-muted-foreground">
-                  Access: {s.accessNotes ?? "no notes"}
+                  Access: {s.accessNotes ?? "none"}
                 </p>
               </li>
             ))}
