@@ -14,6 +14,7 @@ import {
   DEMO_ACCOUNTS,
   LOCAL_PASSWORD,
   SEED_CUSTOMERS,
+  SEED_INVOICES,
   SEED_JOBS,
   SEED_SITES,
   SEED_USERS,
@@ -25,7 +26,7 @@ import {
  * access rules the Amplify backend enforces: a tech sees, changes and adds only
  * jobs, attachments and signatures carrying their own identity.
  */
-const STORAGE_KEY = "serv1.local.v1";
+const STORAGE_KEY = "serv1.local.v2";
 const SESSION_KEY = "serv1.local.session";
 
 type Tables = Record<TableName, BaseRecord[]>;
@@ -44,7 +45,7 @@ function load(): Tables {
     jobs: [...SEED_JOBS],
     attachments: [],
     signatures: [],
-    invoices: [],
+    invoices: [...SEED_INVOICES],
   };
 }
 
