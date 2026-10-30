@@ -1,20 +1,14 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 
-import { EmptyState, PageHeader } from "@/components/eci/primitives";
+import { DispatchBoard } from "@/components/serv1/dispatch/DispatchBoard";
 
-/** Lane "dispatch" builds this screen (docs/PLAN.md). Data comes only from "@/data". */
+/** Lane "dispatch" (docs/PLAN.md). Data comes only from "@/data". */
 export const Route = createFileRoute("/_authenticated/dispatch")({
-  component: Page,
+  // Only Admin and Office dispatch (AppShell nav). Techs go to Today, Owners to the Dashboard.
+  beforeLoad: ({ context }) => {
+    const role = context.user.role;
+    if (role === "Tech") throw redirect({ to: "/tech", replace: true });
+    if (role !== "Admin" && role !== "Office") throw redirect({ to: "/", replace: true });
+  },
+  component: DispatchBoard,
 });
-
-function Page() {
-  return (
-    <>
-      <PageHeader title="Dispatch Board" />
-      <EmptyState
-        title="Dispatch Board is not built yet"
-        hint="Unscheduled queue on the left, techs on a timeline; drag a job onto a tech and time."
-      />
-    </>
-  );
-}

@@ -223,6 +223,34 @@ export function createLocalBackend(): Backend {
     },
   });
 
+  /** When the office reassigns a job, its attachments and signatures follow it (Codex review of PR #1). */
+  const retagFileRows = (jobId: string, assignedTechId: string | null) => {
+    const retag = <T extends { jobId: string; assignedTechId: string | null }>(rows: T[]) =>
+      rows.map((r) =>
+        r.jobId === jobId && r.assignedTechId !== assignedTechId
+          ? { ...r, assignedTechId, updatedAt: nowIso() }
+          : r,
+      );
+    tables = {
+      ...tables,
+      attachments: retag(tables.attachments as Attachment[]),
+      signatures: retag(tables.signatures as Signature[]),
+    };
+    persist("attachments");
+    persist("signatures");
+  };
+  const jobsRepo = repo<Job, import("../types").NewJob>("jobs", jobRules);
+  const jobsWithRetag: Repo<Job, import("../types").NewJob> = {
+    ...jobsRepo,
+    async update(id, patch) {
+      const before = (tables.jobs as Job[]).find((j) => j.id === id);
+      const after = await jobsRepo.update(id, patch);
+      if (before && before.assignedTechId !== after.assignedTechId)
+        retagFileRows(id, after.assignedTechId);
+      return after;
+    },
+  };
+
   const filesApi: FilesApi = {
     async upload(path, file) {
       const me = session();
@@ -255,7 +283,7 @@ export function createLocalBackend(): Backend {
     users: repo<User, import("../types").NewUser>("users", userRules),
     customers: repo("customers", officeOwned()),
     sites: repo("sites", officeOwned()),
-    jobs: repo<Job, import("../types").NewJob>("jobs", jobRules),
+    jobs: jobsWithRetag,
     attachments: repo<Attachment, import("../types").NewAttachment>(
       "attachments",
       fileRowRules<Attachment>(),

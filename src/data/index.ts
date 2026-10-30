@@ -17,9 +17,10 @@ import type { AuthUser, SignInResult } from "./types";
 export * from "./types";
 export * from "./hooks";
 export * from "./files";
-export * from "./billing";
 export * from "./numbers";
 export * from "./tech";
+export * from "./dispatch";
+export * from "./billing";
 export { backendKind, onDataChange } from "./hooks";
 
 /**

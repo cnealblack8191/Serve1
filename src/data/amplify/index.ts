@@ -299,13 +299,47 @@ export function createAmplifyBackend(outputs: object): Backend {
     },
   };
 
+  /**
+   * When the office reassigns a job, its attachments and signatures follow it so
+   * the former tech loses access and the new tech gains it (Codex review of PR #1).
+   * Objects already stored under the former tech's S3 prefix stay readable to
+   * office and owner; the new tech sees the record but not the old file. Copying
+   * objects between tech prefixes needs the new tech's storage id, which is only
+   * known after their first sign-in: follow-up.
+   */
+  const retagFileRows = async (jobId: string, assignedTechId: string | null) => {
+    for (const name of ["Attachment", "Signature"] as const) {
+      const m = client.models[name] as unknown as LooseModel<{
+        id: string;
+        assignedTechId?: string | null;
+      }>;
+      const page = await m.list({ filter: { jobId: { eq: jobId } }, limit: 500 });
+      for (const row of page.data) {
+        if ((row.assignedTechId ?? null) !== assignedTechId)
+          await m.update({ id: row.id, assignedTechId });
+      }
+      notify(name === "Attachment" ? "attachments" : "signatures");
+    }
+  };
+  const jobsRepo = repo<"Job", Job, NewJob>("jobs", "Job", mapJob, plain);
+  const jobs: Repo<Job, NewJob> = {
+    ...jobsRepo,
+    async update(id, patch) {
+      const before = patch.assignedTechId !== undefined ? await jobsRepo.get(id) : null;
+      const after = await jobsRepo.update(id, patch);
+      if (before && before.assignedTechId !== after.assignedTechId)
+        await retagFileRows(id, after.assignedTechId);
+      return after;
+    },
+  };
+
   return {
     kind: "amplify",
     auth,
     users: repo<"User", User, NewUser>("users", "User", mapUser, plain),
     customers: repo<"Customer", Customer, NewCustomer>("customers", "Customer", mapCustomer, plain),
     sites: repo<"Site", Site, NewSite>("sites", "Site", mapSite, plain),
-    jobs: repo<"Job", Job, NewJob>("jobs", "Job", mapJob, plain),
+    jobs,
     attachments: repo<"Attachment", Attachment, NewAttachment>(
       "attachments",
       "Attachment",
