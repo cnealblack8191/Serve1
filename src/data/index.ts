@@ -17,6 +17,8 @@ import type { AuthUser, SignInResult } from "./types";
 export * from "./types";
 export * from "./hooks";
 export * from "./files";
+export * from "./numbers";
+export * from "./tech";
 export { backendKind, onDataChange } from "./hooks";
 
 /**
