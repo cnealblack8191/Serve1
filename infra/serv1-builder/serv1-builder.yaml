@@ -89,6 +89,56 @@ Resources:
                   - cognito-idp:DeleteUserPool
                 Resource: "*"
 
+  Serv1PermissionsBoundary:
+    Type: AWS::IAM::ManagedPolicy
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: >-
+          Owner-controlled ceiling for every role a Serv1 deployment creates. amplify/backend.ts
+          applies it to all Amplify-created roles, and the execution policy below refuses to create
+          or change a role without it, so no deployment can mint a role that reaches EC2, RDS, the
+          account, or IAM users, whatever its own policy says.
+        must:
+          - Same service allow-list as the execution policy; same explicit denies.
+          - Only the owner changes it (deployments are denied policy-version writes on serv1-* policies).
+    Properties:
+      ManagedPolicyName: serv1-permissions-boundary
+      Description: Permissions boundary for roles created by Serv1 deployments (us-east-1)
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: ServerlessServicesAmplifyUses
+            Effect: Allow
+            Action:
+              - cognito-idp:*
+              - cognito-identity:*
+              - appsync:*
+              - dynamodb:*
+              - s3:*
+              - lambda:*
+              - logs:*
+              - cloudwatch:*
+              - events:*
+              - ssm:*
+              - sqs:*
+              - sns:*
+              - kms:*
+              - secretsmanager:*
+              - scheduler:*
+              - xray:*
+              - sts:AssumeRole
+            Resource: "*"
+          - Sid: NeverServersDatabasesOrAccount
+            Effect: Deny
+            Action:
+              - ec2:*
+              - rds:*
+              - organizations:*
+              - account:*
+              - billing:*
+              - iam:*
+            Resource: "*"
+
   Serv1CdkExecutionPolicy:
     Type: AWS::IAM::ManagedPolicy
     Metadata:
@@ -101,7 +151,10 @@ Resources:
           denies on EC2, RDS, Organizations and account settings.
         must:
           - No EC2, RDS, Organizations or account actions, even if an Allow is widened later.
-          - IAM only on amplify-* and cdk-* names; PassRole only to amplify-* roles.
+          - IAM writes only on amplify-* names, and a role is created or widened only with the
+            serv1-permissions-boundary attached; PassRole only to amplify-* roles.
+          - Never any IAM action on cdk-* roles, serv1-builder, eci-ai-* roles or IAM users
+            (Codex on cb75481: writable bootstrap identities would have undone every deny).
     Properties:
       ManagedPolicyName: serv1-cdk-execution
       Description: CloudFormation execution policy for the Serv1 CDK bootstrap (us-east-1)
@@ -129,10 +182,20 @@ Resources:
               - secretsmanager:*
               - scheduler:*
             Resource: "*"
-          - Sid: IamOnlyForAmplifyAndCdkNames
+          - Sid: IamRolesOnlyAmplifyNamesWithBoundary
             Effect: Allow
             Action:
               - iam:CreateRole
+              - iam:PutRolePolicy
+              - iam:AttachRolePolicy
+              - iam:PutRolePermissionsBoundary
+            Resource: !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:role/amplify-*
+            Condition:
+              StringEquals:
+                iam:PermissionsBoundary: !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:policy/serv1-permissions-boundary
+          - Sid: IamRolesOnlyAmplifyNamesOtherWrites
+            Effect: Allow
+            Action:
               - iam:DeleteRole
               - iam:GetRole
               - iam:UpdateRole
@@ -140,13 +203,15 @@ Resources:
               - iam:UpdateAssumeRolePolicy
               - iam:TagRole
               - iam:UntagRole
-              - iam:AttachRolePolicy
               - iam:DetachRolePolicy
-              - iam:PutRolePolicy
               - iam:DeleteRolePolicy
               - iam:GetRolePolicy
               - iam:ListRolePolicies
               - iam:ListAttachedRolePolicies
+            Resource: !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:role/amplify-*
+          - Sid: IamPoliciesOnlyAmplifyNames
+            Effect: Allow
+            Action:
               - iam:CreatePolicy
               - iam:DeletePolicy
               - iam:GetPolicy
@@ -157,11 +222,26 @@ Resources:
               - iam:SetDefaultPolicyVersion
               - iam:TagPolicy
               - iam:UntagPolicy
+            Resource: !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:policy/amplify-*
+          - Sid: BoundaryStaysAndServ1PoliciesAreOwnerOnly
+            Effect: Deny
+            Action:
+              - iam:DeleteRolePermissionsBoundary
+              - iam:CreatePolicyVersion
+              - iam:DeletePolicy
+              - iam:DeletePolicyVersion
+              - iam:SetDefaultPolicyVersion
             Resource:
-              - !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:role/amplify-*
+              - !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:role/*
+              - !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:policy/serv1-*
+          - Sid: NeverTouchBootstrapOrBuilderIdentities
+            Effect: Deny
+            Action: iam:*
+            Resource:
               - !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:role/cdk-*
-              - !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:policy/amplify-*
-              - !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:policy/cdk-*
+              - !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:role/serv1-builder
+              - !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:role/eci-ai-*
+              - !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:user/*
           - Sid: PassOnlyAmplifyRoles
             Effect: Allow
             Action: iam:PassRole
@@ -210,6 +290,9 @@ Resources:
             Resource: !GetAtt Serv1BuilderRole.Arn
 
 Outputs:
+  PermissionsBoundaryArn:
+    Description: Applied by amplify/backend.ts to every role a deployment creates.
+    Value: !Ref Serv1PermissionsBoundary
   CdkExecutionPolicyArn:
     Description: Pass to the CDK bootstrap (RUNBOOK.md step 4) as --cloudformation-execution-policies.
     Value: !Ref Serv1CdkExecutionPolicy

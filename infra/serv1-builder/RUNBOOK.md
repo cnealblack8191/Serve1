@@ -15,6 +15,11 @@ the owner applies this stack as `charles-admin` with MFA in CloudShell (decision
   backend. Serverless services only (Cognito, AppSync, DynamoDB, S3, Lambda, logs and the like),
   IAM only on Amplify- and CDK-named roles, and explicit denies on EC2, RDS, Organizations and
   account settings. You pass it to the CDK bootstrap in step 4.
+- Managed policy `serv1-permissions-boundary`: a ceiling attached to every role a deployment creates
+  (`amplify/backend.ts` applies it; the execution policy refuses to create a role without it). Even a
+  deployment that tried to give one of its roles broad rights would be capped at the serverless services.
+  Deployments can never change `serv1-*` policies, `cdk-*` roles, `serv1-builder`, `eci-ai-*` roles or
+  any IAM user.
 - An extra inline policy on `eci-ai-session` allowing it to assume `serv1-builder`. Nothing else about
   the ai-access stack changes. Note: `infra/ai-access/test-ai-access.py` in ECI-ECOSYSTEM describes the
   user as able to assume exactly two roles; it now assumes three. Record that in the decision log.

@@ -1,5 +1,5 @@
 import { defineBackend } from "@aws-amplify/backend";
-import { PolicyStatement } from "aws-cdk-lib/aws-iam";
+import { ManagedPolicy, PermissionsBoundary, PolicyStatement } from "aws-cdk-lib/aws-iam";
 
 import { auth } from "./auth/resource";
 import { data } from "./data/resource";
@@ -12,6 +12,21 @@ const backend = defineBackend({
   data,
   storage,
 });
+
+/**
+ * Permissions boundary (infra/serv1-builder/serv1-builder.yaml, policy
+ * serv1-permissions-boundary). Every role this backend creates carries it, and
+ * the CloudFormation execution role refuses to create a role without it, so no
+ * deployment can mint a role that reaches EC2, RDS, the account or IAM users.
+ * The owner's stack must exist before the first deploy (RUNBOOK.md step 3).
+ */
+PermissionsBoundary.of(backend.stack).apply(
+  ManagedPolicy.fromManagedPolicyName(
+    backend.stack,
+    "Serv1PermissionsBoundary",
+    "serv1-permissions-boundary",
+  ),
+);
 
 /**
  * Techs' own files. A signed-in user who belongs to a Cognito group assumes
