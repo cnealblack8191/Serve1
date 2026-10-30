@@ -1,6 +1,15 @@
 import type { AuthApi, Backend, ChangeListener, FilesApi, Repo } from "../backend";
 import { newId, nowIso } from "../backend";
-import type { AuthUser, BaseRecord, Role, SignInResult, TableName } from "../types";
+import type {
+  Attachment,
+  AuthUser,
+  BaseRecord,
+  Job,
+  Signature,
+  SignInResult,
+  TableName,
+  User,
+} from "../types";
 import {
   DEMO_ACCOUNTS,
   LOCAL_PASSWORD,
@@ -12,8 +21,9 @@ import {
 
 /**
  * Local demo backend: runs entirely in the browser, persisted to localStorage,
- * so screens and Playwright tests work with no AWS account. Mirrors the access
- * rules the Amplify backend enforces (a tech sees only their own jobs).
+ * so screens and Playwright tests work with no AWS account. It mirrors the
+ * access rules the Amplify backend enforces: a tech sees, changes and adds only
+ * jobs, attachments and signatures carrying their own identity.
  */
 const STORAGE_KEY = "serv1.local.v1";
 const SESSION_KEY = "serv1.local.session";
@@ -41,8 +51,16 @@ function load(): Tables {
 export function resetLocalData() {
   try {
     localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem(SESSION_KEY);
   } catch {
     /* ignore */
+  }
+}
+
+export class NotAllowedError extends Error {
+  constructor(message = "Not allowed") {
+    super(message);
+    this.name = "NotAllowedError";
   }
 }
 
@@ -79,6 +97,7 @@ export function createLocalBackend(): Backend {
       }
       const user: AuthUser = {
         identityId: account.identityId,
+        storageId: account.identityId,
         email: account.email,
         name: account.name,
         roles: [account.role],
@@ -98,38 +117,57 @@ export function createLocalBackend(): Backend {
     },
   };
 
-  function repo<T extends BaseRecord, N>(
-    table: TableName,
-    visible?: (row: T, me: AuthUser | null) => boolean,
-  ): Repo<T, N> {
+  const isTech = (me: AuthUser | null) => me?.role === "Tech";
+  const isOffice = (me: AuthUser | null) => me?.role === "Admin" || me?.role === "Office";
+
+  /** Who may read a row, and who may write it. Writers must also be able to read it. */
+  type Rules<T> = {
+    read: (row: T, me: AuthUser | null) => boolean;
+    write: (row: T | null, me: AuthUser | null, op: "create" | "update" | "remove") => boolean;
+  };
+
+  function repo<T extends BaseRecord, N>(table: TableName, rules: Rules<T>): Repo<T, N> {
     const rows = () => tables[table] as T[];
+    const mustRead = (row: T, me: AuthUser | null) => {
+      if (!rules.read(row, me)) throw new NotAllowedError(`${table}: not visible to this account`);
+    };
+    const mustWrite = (row: T | null, me: AuthUser | null, op: "create" | "update" | "remove") => {
+      if (!rules.write(row, me, op))
+        throw new NotAllowedError(`${table}: ${op} not allowed for this account`);
+    };
     return {
       async list() {
         const me = session();
-        const all = rows();
-        return visible ? all.filter((r) => visible(r, me)) : [...all];
+        return rows().filter((r) => rules.read(r, me));
       },
       async get(id) {
         const me = session();
         const row = rows().find((r) => r.id === id) ?? null;
-        if (row && visible && !visible(row, me)) return null;
-        return row;
+        return row && rules.read(row, me) ? row : null;
       },
       async create(input) {
+        const me = session();
         const row = {
           ...(input as object),
           id: newId(),
           createdAt: nowIso(),
           updatedAt: nowIso(),
         } as T;
+        mustWrite(row, me, "create");
         tables = { ...tables, [table]: [...rows(), row] };
         persist(table);
         return row;
       },
       async update(id, patch) {
+        const me = session();
         const idx = rows().findIndex((r) => r.id === id);
-        if (idx < 0) throw new Error(`${table}: ${id} not found`);
-        const row = { ...rows()[idx]!, ...(patch as object), updatedAt: nowIso() } as T;
+        const existing = rows()[idx];
+        if (idx < 0 || !existing) throw new Error(`${table}: ${id} not found`);
+        mustRead(existing, me);
+        mustWrite(existing, me, "update");
+        const row = { ...existing, ...(patch as object), updatedAt: nowIso() } as T;
+        // The changed row must still be one this account may write (a tech cannot hand a job to someone else).
+        mustWrite(row, me, "update");
         const next = [...rows()];
         next[idx] = row;
         tables = { ...tables, [table]: next };
@@ -137,81 +175,103 @@ export function createLocalBackend(): Backend {
         return row;
       },
       async remove(id) {
+        const me = session();
+        const existing = rows().find((r) => r.id === id);
+        if (!existing) return;
+        mustRead(existing, me);
+        mustWrite(existing, me, "remove");
         tables = { ...tables, [table]: rows().filter((r) => r.id !== id) };
         persist(table);
       },
     };
   }
 
-  const isTech = (me: AuthUser | null) => me?.role === "Tech";
-  const techOnlyOwn = <T extends { assignedTechId: string | null }>(row: T, me: AuthUser | null) =>
-    !isTech(me) || row.assignedTechId === me?.identityId;
-
-  const jobs = repo<import("../types").Job, import("../types").NewJob>("jobs", techOnlyOwn);
-  const ownsJob = async (jobId: string, me: AuthUser | null) => {
-    if (!isTech(me)) return true;
-    const job = (tables.jobs as import("../types").Job[]).find((j) => j.id === jobId);
-    return !!job && job.assignedTechId === me?.identityId;
+  const signedIn = (me: AuthUser | null) => me !== null;
+  /** Office-managed tables: anyone signed in reads; Admin/Office write (SPEC.md section 2). */
+  const officeOwned = <T>(): Rules<T> => ({
+    read: (_r, me) => signedIn(me),
+    write: (_r, me) => isOffice(me),
+  });
+  /** Users: everyone reads the roster (names for dispatch and dashboards); only Admin writes. */
+  const userRules: Rules<User> = {
+    read: (_r, me) => signedIn(me),
+    write: (_r, me) => me?.role === "Admin",
   };
+
+  const jobOf = (id: string) => (tables.jobs as Job[]).find((j) => j.id === id) ?? null;
+  const techOwns = (me: AuthUser | null, techId: string | null) =>
+    isTech(me) && techId !== null && techId === me?.identityId;
+
+  const jobRules: Rules<Job> = {
+    read: (job, me) => isOffice(me) || me?.role === "Owner" || techOwns(me, job.assignedTechId),
+    // Office creates and edits everything; a tech may update (not create or delete) their own jobs.
+    write: (job, me, op) =>
+      isOffice(me) || (op === "update" && job !== null && techOwns(me, job.assignedTechId)),
+  };
+
+  /** Attachments and signatures: tagged with the job's tech; a tech reads and adds only their own. */
+  const fileRowRules = <
+    T extends { jobId: string; assignedTechId: string | null },
+  >(): Rules<T> => ({
+    read: (row, me) => isOffice(me) || me?.role === "Owner" || techOwns(me, row.assignedTechId),
+    write: (row, me, op) => {
+      if (isOffice(me)) return true;
+      if (op !== "create" || row === null || !isTech(me)) return false;
+      // A tech may add a row only for a job assigned to them, tagged with their own identity.
+      const job = jobOf(row.jobId);
+      return !!job && techOwns(me, job.assignedTechId) && row.assignedTechId === me?.identityId;
+    },
+  });
 
   const filesApi: FilesApi = {
     async upload(path, file) {
+      const me = session();
+      if (isTech(me) && !path.startsWith(`tech-files/${me?.storageId}/`)) {
+        throw new NotAllowedError("Techs may only write under their own tech-files prefix");
+      }
       const url = URL.createObjectURL(file);
       files.set(path, url);
       return path;
     },
     async getUrl(path) {
+      const me = session();
+      if (isTech(me) && !path.startsWith(`tech-files/${me?.storageId}/`)) {
+        throw new NotAllowedError("Techs may only read their own files");
+      }
       return files.get(path) ?? "";
     },
     async remove(path) {
+      const me = session();
+      if (!isOffice(me)) throw new NotAllowedError("Only office accounts delete files");
       const url = files.get(path);
       if (url) URL.revokeObjectURL(url);
       files.delete(path);
     },
   };
 
-  const b: Backend = {
+  return {
     kind: "local",
     auth,
-    users: repo("users"),
-    customers: repo("customers"),
-    sites: repo("sites"),
-    jobs,
-    attachments: repo("attachments"),
-    signatures: repo("signatures"),
-    invoices: repo("invoices"),
+    users: repo<User, import("../types").NewUser>("users", userRules),
+    customers: repo("customers", officeOwned()),
+    sites: repo("sites", officeOwned()),
+    jobs: repo<Job, import("../types").NewJob>("jobs", jobRules),
+    attachments: repo<Attachment, import("../types").NewAttachment>(
+      "attachments",
+      fileRowRules<Attachment>(),
+    ),
+    signatures: repo<Signature, import("../types").NewSignature>(
+      "signatures",
+      fileRowRules<Signature>(),
+    ),
+    invoices: repo("invoices", {
+      read: (_r, me) => isOffice(me) || me?.role === "Owner",
+      write: (_r, me, op) => isOffice(me) || (op === "update" && me?.role === "Owner"),
+    }),
     files: filesApi,
     onChange(listener) {
       listeners.add(listener);
       return () => listeners.delete(listener);
     },
   };
-
-  // Techs may only attach files to their own jobs (same rule as the S3 policy intent).
-  const guardJob = <T extends { jobId: string }, N extends { jobId: string }>(
-    r: Repo<T, N>,
-  ): Repo<T, N> => ({
-    ...r,
-    async list() {
-      const me = session();
-      const all = await r.list();
-      if (!isTech(me)) return all;
-      const own = new Set(
-        (tables.jobs as import("../types").Job[])
-          .filter((j) => j.assignedTechId === me?.identityId)
-          .map((j) => j.id),
-      );
-      return all.filter((a) => own.has(a.jobId));
-    },
-    async create(input) {
-      if (!(await ownsJob(input.jobId, session())))
-        throw new Error("Not allowed: job is not assigned to you");
-      return r.create(input);
-    },
-  });
-  b.attachments = guardJob(b.attachments);
-  b.signatures = guardJob(b.signatures);
-
-  void (null as Role | null);
-  return b;
 }

@@ -10,7 +10,14 @@ import { type ClientSchema, a, defineData } from "@aws-amplify/backend";
  *  - Office: customers, sites, jobs, attachments, signatures, invoices.
  *  - Owner: read everything; invoice approval is a later task.
  *  - Tech: only jobs assigned to them (ownerDefinedIn 'assignedTechId' holds the
- *    tech's Cognito identity), plus the attachments and signatures on those jobs.
+ *    tech's Cognito identity). Attachments and signatures carry the same field,
+ *    copied from the job when they are created, so a tech reads and creates only
+ *    rows tagged with their own identity (never group-wide access).
+ *
+ * Known limit (pilot): AppSync cannot check, inside the Attachment or Signature
+ * create rule, that the referenced job is really assigned to the caller; that
+ * cross-model check lives in src/data (addJobPhoto / addJobSignature). Moving it
+ * server-side needs a custom mutation with a function handler (follow-up).
  */
 const office = ["Admin", "Office"];
 const readers = ["Admin", "Office", "Owner"];
@@ -103,6 +110,8 @@ const schema = a.schema({
     .model({
       jobId: a.id().required(),
       job: a.belongsTo("Job", "jobId"),
+      // Identity of the job's assigned tech at creation time (owner-style rule below).
+      assignedTechId: a.string(),
       // S3 key under jobs/{jobId}/...; never a public URL.
       storagePath: a.string().required(),
       type: a.ref("AttachmentType").required(),
@@ -112,13 +121,15 @@ const schema = a.schema({
     .authorization((allow) => [
       allow.groups(office).to(["create", "read", "update", "delete"]),
       allow.groups(["Owner"]).to(["read"]),
-      allow.groups(["Tech"]).to(["create", "read"]),
+      // A tech sees and adds only rows carrying their own identity.
+      allow.ownerDefinedIn("assignedTechId").to(["create", "read"]),
     ]),
 
   Signature: a
     .model({
       jobId: a.id().required(),
       job: a.belongsTo("Job", "jobId"),
+      assignedTechId: a.string(),
       signerName: a.string().required(),
       storagePath: a.string().required(),
       signedAt: a.datetime().required(),
@@ -126,7 +137,8 @@ const schema = a.schema({
     .authorization((allow) => [
       allow.groups(office).to(["create", "read", "update", "delete"]),
       allow.groups(["Owner"]).to(["read"]),
-      allow.groups(["Tech"]).to(["create", "read"]),
+      // A tech sees and adds only rows carrying their own identity.
+      allow.ownerDefinedIn("assignedTechId").to(["create", "read"]),
     ]),
 
   Invoice: a
