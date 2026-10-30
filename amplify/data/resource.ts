@@ -14,6 +14,9 @@ import { type ClientSchema, a, defineData } from "@aws-amplify/backend";
  *    copied from the job when they are created, so a tech reads and creates only
  *    rows tagged with their own identity (never group-wide access).
  *
+ * Reassignment: when a job's assignedTechId changes, src/data updates the
+ * assignedTechId on its attachments and signatures so access follows the job.
+ *
  * Known limit (pilot): AppSync cannot check, inside the Attachment or Signature
  * create rule, that the referenced job is really assigned to the caller; that
  * cross-model check lives in src/data (addJobPhoto / addJobSignature). Moving it

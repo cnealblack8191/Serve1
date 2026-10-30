@@ -136,6 +136,35 @@ describe("local backend: technician isolation", () => {
     );
   });
 
+  it("attachments and signatures follow the job when the office reassigns it", async () => {
+    await as(b, "office@serv1.demo");
+    await b.attachments.create({
+      jobId: "job-2",
+      assignedTechId: "local-tech-1",
+      storagePath: "jobs/job-2/photos/p.jpg",
+      type: "Photo",
+      caption: "before",
+      uploadedBy: "office",
+    });
+    await b.signatures.create({
+      jobId: "job-2",
+      assignedTechId: "local-tech-1",
+      signerName: "Customer",
+      storagePath: "jobs/job-2/signatures/s.png",
+      signedAt: new Date().toISOString(),
+    });
+    await b.jobs.update("job-2", { assignedTechId: "local-tech-2" });
+    await as(b, "tech1@serv1.demo");
+    assert.equal((await b.attachments.list()).length, 0);
+    assert.equal((await b.signatures.list()).length, 0);
+    await as(b, "tech2@serv1.demo");
+    assert.deepEqual(
+      (await b.attachments.list()).map((a) => a.caption),
+      ["before"],
+    );
+    assert.equal((await b.signatures.list()).length, 1);
+  });
+
   it("owners read everything but cannot change jobs; office can", async () => {
     await as(b, "owner@serv1.demo");
     assert.ok((await b.jobs.list()).length >= 6);
