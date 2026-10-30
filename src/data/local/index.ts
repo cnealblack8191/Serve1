@@ -69,6 +69,25 @@ export class NotAllowedError extends Error {
 export function createLocalBackend(): Backend {
   let tables = load();
   const listeners = new Set<ChangeListener>();
+  /** Re-read the persisted store so a write never overwrites another tab's changes. */
+  const refresh = () => {
+    tables = load();
+  };
+  // Another tab wrote the store: pick it up and refresh open screens.
+  if (typeof window !== "undefined" && typeof window.addEventListener === "function") {
+    window.addEventListener("storage", (e) => {
+      if (e.key === STORAGE_KEY) {
+        refresh();
+        listeners.forEach((l) => l("jobs"));
+        listeners.forEach((l) => l("attachments"));
+        listeners.forEach((l) => l("signatures"));
+        listeners.forEach((l) => l("invoices"));
+        listeners.forEach((l) => l("customers"));
+        listeners.forEach((l) => l("sites"));
+        listeners.forEach((l) => l("users"));
+      }
+    });
+  }
   const files = new LocalFileStore(); // blobs persist in IndexedDB; see file-store.ts
 
   const persist = (table: TableName) => {
@@ -149,15 +168,18 @@ export function createLocalBackend(): Backend {
     };
     return {
       async list() {
+        refresh();
         const me = session();
         return rows().filter((r) => rules.read(r, me));
       },
       async get(id) {
+        refresh();
         const me = session();
         const row = rows().find((r) => r.id === id) ?? null;
         return row && rules.read(row, me) ? row : null;
       },
       async create(input) {
+        refresh();
         const me = session();
         const row = {
           ...(input as object),
@@ -171,6 +193,7 @@ export function createLocalBackend(): Backend {
         return row;
       },
       async update(id, patch) {
+        refresh();
         const me = session();
         const idx = rows().findIndex((r) => r.id === id);
         const existing = rows()[idx];
@@ -187,6 +210,7 @@ export function createLocalBackend(): Backend {
         return row;
       },
       async remove(id) {
+        refresh();
         const me = session();
         const existing = rows().find((r) => r.id === id);
         if (!existing) return;
@@ -237,6 +261,7 @@ export function createLocalBackend(): Backend {
 
   /** When the office reassigns a job, its attachments and signatures follow it (Codex review of PR #1). */
   const retagFileRows = (jobId: string, assignedTechId: string | null) => {
+    refresh();
     const retag = <T extends { jobId: string; assignedTechId: string | null }>(rows: T[]) =>
       rows.map((r) =>
         r.jobId === jobId && r.assignedTechId !== assignedTechId
@@ -266,15 +291,19 @@ export function createLocalBackend(): Backend {
   const filesApi: FilesApi = {
     async upload(path, file) {
       const me = session();
-      if (isTech(me) && !path.startsWith(`tech-files/${me?.storageId}/`)) {
+      if (!me) throw new NotAllowedError("Sign in to upload files");
+      if (isTech(me) && !path.startsWith(`tech-files/${me.storageId}/`)) {
         throw new NotAllowedError("Techs may only write under their own tech-files prefix");
       }
+      if (!isTech(me) && !isOffice(me))
+        throw new NotAllowedError("Owners can view files but not upload them");
       await files.put(path, file);
       return path;
     },
     async getUrl(path) {
       const me = session();
-      if (isTech(me) && !path.startsWith(`tech-files/${me?.storageId}/`)) {
+      if (!me) throw new NotAllowedError("Sign in to view files");
+      if (isTech(me) && !path.startsWith(`tech-files/${me.storageId}/`)) {
         throw new NotAllowedError("Techs may only read their own files");
       }
       return files.url(path);

@@ -196,6 +196,53 @@ describe("local backend: technician isolation", () => {
     await assert.rejects(b.invoices.remove(inv.id), NotAllowedError);
   });
 
+  it("only office accounts and techs (own prefix) may upload; owners and signed-out callers may not", async () => {
+    await assert.rejects(
+      b.files.upload("jobs/job-1/photos/x.jpg", new Blob(["x"]), "image/jpeg"),
+      NotAllowedError,
+    );
+    await as(b, "owner@serv1.demo");
+    await assert.rejects(
+      b.files.upload("jobs/job-1/photos/x.jpg", new Blob(["x"]), "image/jpeg"),
+      NotAllowedError,
+    );
+    await assert.rejects(
+      b.files.upload(
+        "tech-files/local-tech-1/job-2/signatures/s.png",
+        new Blob(["x"]),
+        "image/png",
+      ),
+      NotAllowedError,
+    );
+    await as(b, "office@serv1.demo");
+    assert.equal(
+      await b.files.upload("jobs/job-1/photos/x.jpg", new Blob(["x"]), "image/jpeg"),
+      "jobs/job-1/photos/x.jpg",
+    );
+    await as(b, "tech1@serv1.demo");
+    assert.equal(
+      await b.files.upload(
+        "tech-files/local-tech-1/job-2/photos/p.jpg",
+        new Blob(["x"]),
+        "image/jpeg",
+      ),
+      "tech-files/local-tech-1/job-2/photos/p.jpg",
+    );
+  });
+
+  it("two tabs never overwrite each other's changes", async () => {
+    // Two backends over the same storage stand in for two browser tabs.
+    const tabA = createLocalBackend();
+    const tabB = createLocalBackend();
+    await as(tabA, "office@serv1.demo"); // session is shared storage, like two tabs of one browser
+    await tabA.jobs.update("job-2", { notes: "from tab A" });
+    await tabB.jobs.update("job-3", { notes: "from tab B" });
+    const fresh = createLocalBackend();
+    assert.equal((await fresh.jobs.get("job-2"))?.notes, "from tab A");
+    assert.equal((await fresh.jobs.get("job-3"))?.notes, "from tab B");
+    assert.equal((await tabA.jobs.get("job-3"))?.notes, "from tab B");
+  });
+
   it("owners read everything but cannot change jobs; office can", async () => {
     await as(b, "owner@serv1.demo");
     assert.ok((await b.jobs.list()).length >= 6);
