@@ -32,6 +32,7 @@ export function CustomerDialog({
 
   async function submit(e: FormEvent) {
     e.preventDefault();
+    e.stopPropagation(); // dialogs render in a portal; keep the submit from reaching a surrounding form
     if (!name.trim()) return setError("Enter the customer's name.");
     try {
       const saved = await create.mutateAsync({

@@ -14,13 +14,14 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { useCustomers, useSites } from "@/data";
+import { useCustomers, useIsOffice, useSites } from "@/data";
 
 export const Route = createFileRoute("/_authenticated/customers/")({
   component: Page,
 });
 
 function Page() {
+  const isOffice = useIsOffice();
   const customers = useCustomers();
   const sites = useSites();
   const navigate = useNavigate();
@@ -40,7 +41,7 @@ function Page() {
   return (
     <div className="space-y-6">
       <PageHeader title="Customers" description="Everyone you do work for, with their sites.">
-        <Button onClick={() => setAdding(true)}>Add customer</Button>
+        {isOffice ? <Button onClick={() => setAdding(true)}>Add customer</Button> : null}
       </PageHeader>
       <SearchBox
         label="Search customers"
@@ -56,7 +57,9 @@ function Page() {
           hint={
             q
               ? "Try a different name or phone number."
-              : "Use Add customer to create the first one."
+              : isOffice
+                ? "Use Add customer to create the first one."
+                : "Office staff add customers here."
           }
         />
       ) : (

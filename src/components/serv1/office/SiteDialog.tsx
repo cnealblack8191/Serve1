@@ -44,6 +44,7 @@ export function SiteDialog({
 
   async function submit(e: FormEvent) {
     e.preventDefault();
+    e.stopPropagation(); // dialogs render in a portal; keep the submit from reaching a surrounding form
     if (!address.trim()) return setError("Enter the site address.");
     const values = {
       name: name.trim() || null,
