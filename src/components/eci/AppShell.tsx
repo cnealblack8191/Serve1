@@ -242,7 +242,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   return (
     <div className="flex min-h-screen bg-background text-foreground">
-      <aside className="sticky top-0 hidden h-screen w-64 shrink-0 lg:block">
+      <aside className="sticky top-0 hidden h-screen w-64 shrink-0 bg-eci-navy lg:block">
         <Sidebar role={role} name={me.name} />
       </aside>
       <div className="flex min-w-0 flex-1 flex-col">
