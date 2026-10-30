@@ -5,7 +5,7 @@ import { EmptyState, PageHeader, SectionHeading, StatusBadge } from "@/component
 import { money, shortDate } from "@/components/serv1/billing/format";
 import { ReadyToInvoice } from "@/components/serv1/billing/ReadyToInvoice";
 import { Input } from "@/components/ui/input";
-import { useCurrentUser, useCustomers, useInvoices, useJobs } from "@/data";
+import { useIsOffice, useCustomers, useInvoices, useJobs } from "@/data";
 
 export const Route = createFileRoute("/_authenticated/invoices/")({
   component: Page,
@@ -15,8 +15,7 @@ function Page() {
   const jobs = useJobs();
   const invoices = useInvoices();
   const customers = useCustomers();
-  const me = useCurrentUser();
-  const canCreate = !!me.data?.roles.some((r) => r === "Admin" || r === "Office");
+  const canCreate = useIsOffice();
   const [search, setSearch] = useState("");
 
   // A Complete job is still waiting even if an earlier click saved the invoice but not the
