@@ -6,14 +6,41 @@ The AI session cannot create IAM roles (tier 1 denies IAM writes; tier 2 is the 
 the owner applies this stack as `charles-admin` with MFA in CloudShell (decision 41). About five minutes.
 
 ## What it creates
+
 - Role `serv1-builder`: AWS's `AmplifyBackendDeployFullAccess` managed policy (what `npx ampx sandbox`
-  needs, scoped to amplify-* resources) plus a guard that pins work to us-east-1 and forbids stop,
-  terminate and data deletes. Trusts only the IAM user `eci-ai-session`.
+  needs, scoped to amplify-* resources) plus a guard that pins the role's own calls to us-east-1,
+  lets it assume only this account's us-east-1 CDK roles, and forbids stop, terminate and data
+  deletes made by the role itself. Trusts only the IAM user `eci-ai-session`.
+
+## What the guard does not cover (read before step 0)
+
+Amplify deploys through CDK and CloudFormation. CloudFormation does the actual creating and deleting
+with the _CDK execution role_, created once per account and region by the CDK bootstrap, and IAM
+checks that role's policy, not `serv1-builder`'s. By default the bootstrap gives that role
+AdministratorAccess. Two choices:
+
+- **Default (simplest):** let the first `ampx sandbox` run bootstrap CDK with the default execution
+  policy. The region pin still holds (the role can only reach us-east-1 CDK roles), and everything
+  stays inside this one account, but the execution role is broad. Acceptable if this account is a
+  dev/staging account as SPEC.md section 7.1 recommends.
+- **Tighter (step 0 below):** bootstrap CDK yourself first with a narrower execution policy, so even
+  CloudFormation cannot touch EC2 or RDS. Use this if the account also holds production.
 - An extra inline policy on `eci-ai-session` allowing it to assume `serv1-builder`. Nothing else about
   the ai-access stack changes. Note: `infra/ai-access/test-ai-access.py` in ECI-ECOSYSTEM describes the
   user as able to assume exactly two roles; it now assumes three. Record that in the decision log.
 
 ## Steps (CloudShell, region us-east-1)
+
+0. Optional, tighter execution role. Before the first sandbox ever runs in this account and region,
+   bootstrap CDK with an execution policy that excludes EC2 and RDS. `PowerUserAccess` plus `IAMFullAccess`
+   is the common narrowing (no account or billing changes; Amplify still needs to create its own IAM roles):
+   ```bash
+   export AWS_DEFAULT_REGION=us-east-1
+   ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
+   npx --yes aws-cdk@2 bootstrap aws://$ACCOUNT/us-east-1 \
+     --cloudformation-execution-policies arn:aws:iam::aws:policy/PowerUserAccess,arn:aws:iam::aws:policy/IAMFullAccess
+   ```
+   If CDK is already bootstrapped here with the default policy, the same command updates it.
 1. Get the template into CloudShell. Either clone the repo:
    ```bash
    git clone https://github.com/cnealblack8191/Serve1.git && cd Serve1/infra/serv1-builder
@@ -44,9 +71,11 @@ the owner applies this stack as `charles-admin` with MFA in CloudShell (decision
    us-east-1, and tests login.
 
 ## Undo
+
 `aws cloudformation delete-stack --stack-name serv1-builder` removes the role and the extra user policy.
 Resources the sandbox created later are removed with `npx ampx sandbox delete --identifier serv1`.
 
 ## Cost
+
 The role itself is free. The sandbox backend at pilot scale sits mostly within the free tier; the
 SPEC.md section 7.5 budget alert covers the rest.

@@ -21,11 +21,16 @@ Resources:
           backend defines (Cognito, AppSync, DynamoDB, S3, the IAM roles those services use).
           AmplifyBackendDeployFullAccess is AWS's purpose-built policy for exactly that, scoped
           to amplify-* resources. The inline guard pins the region and forbids stop, terminate
-          and database deletes (decision 80 spirit).
+          and database deletes made directly by this role (decision 80 spirit).
+          What the guard does not cover: CDK deployments hand the work to the CloudFormation
+          execution role created by the one-time CDK bootstrap, and IAM evaluates that role's
+          policy, not this one. The guard therefore also restricts which CDK roles this role may
+          assume (this account, us-east-1 only), so no deployment can run elsewhere; the
+          execution role's own breadth is set at bootstrap time (RUNBOOK.md step 0).
         must:
           - Trust only the AI session user.
-          - us-east-1 only, apart from global services.
-          - No stop, reboot, terminate; no RDS or EC2 deletes.
+          - us-east-1 only, apart from global services; CDK roles assumable only in this account and region.
+          - No stop, reboot, terminate; no RDS or EC2 deletes by this role itself.
     Properties:
       RoleName: serv1-builder
       Description: Serv1 Amplify Gen 2 build role; assumed by eci-ai-session; us-east-1 only
@@ -41,7 +46,7 @@ Resources:
               AWS: !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:user/${SessionUserName}
             Action: sts:AssumeRole
       ManagedPolicyArns:
-        - !Sub arn:${AWS::Partition}:iam::aws:policy/AmplifyBackendDeployFullAccess
+        - !Sub arn:${AWS::Partition}:iam::aws:policy/service-role/AmplifyBackendDeployFullAccess
       Policies:
         - PolicyName: Serv1BuilderGuard
           PolicyDocument:
@@ -60,6 +65,11 @@ Resources:
                 Condition:
                   StringNotEquals:
                     aws:RequestedRegion: us-east-1
+              - Sid: AssumeOnlyThisAccountsUsEast1CdkRoles
+                Effect: Deny
+                Action: sts:AssumeRole
+                NotResource:
+                  - !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:role/cdk-*-${AWS::AccountId}-us-east-1
               - Sid: NoStopTerminateOrDataDeletes
                 Effect: Deny
                 Action:
