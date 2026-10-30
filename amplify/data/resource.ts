@@ -89,8 +89,16 @@ const schema = a.schema({
       jobType: a.string(),
       priority: a.ref("JobPriority").required(),
       status: a.ref("JobStatus").required(),
-      // Cognito identity of the assigned tech (owner-style rule below).
-      assignedTechId: a.string(),
+      // Cognito identity of the assigned tech (owner-style rule below). Field-level
+      // rule: only office roles may set or change it; the tech reads it. Without this,
+      // the owner-style update rule would let a tech hand the job to someone else.
+      assignedTechId: a
+        .string()
+        .authorization((allow) => [
+          allow.groups(office).to(["create", "read", "update"]),
+          allow.groups(["Owner"]).to(["read"]),
+          allow.ownerDefinedIn("assignedTechId").to(["read"]),
+        ]),
       assignedTech: a.belongsTo("User", "assignedTechId"),
       scheduledStart: a.datetime(),
       scheduledEnd: a.datetime(),
