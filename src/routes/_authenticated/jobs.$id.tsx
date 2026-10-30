@@ -12,6 +12,7 @@ import {
   useSignatures,
   useSites,
   useTechNames,
+  useIsOffice,
 } from "@/data";
 import { PRIORITY_LABEL } from "@/lib/status";
 
@@ -41,6 +42,7 @@ function StoredImage({ path, alt }: { path: string; alt: string }) {
 function Page() {
   const { id } = Route.useParams();
   const job = useJob(id);
+  const isOffice = useIsOffice();
   const customer = useCustomer(job.data?.customerId);
   const sites = useSites();
   const techs = useTechNames();
@@ -66,9 +68,11 @@ function Page() {
     <div className="space-y-8">
       <PageHeader title={`${j.jobNumber ?? "Job"} · ${j.jobType ?? "Job"}`}>
         <JobStatusBadge status={j.status} />
-        <Button asChild>
-          <Link to="/invoices">Create invoice</Link>
-        </Button>
+        {isOffice ? (
+          <Button asChild>
+            <Link to="/invoices">Create invoice</Link>
+          </Button>
+        ) : null}
       </PageHeader>
 
       <section className="eci-card grid gap-x-8 px-5 py-2 md:grid-cols-2">

@@ -18,6 +18,7 @@ import {
   SEED_SITES,
   SEED_USERS,
 } from "./seed";
+import { LocalFileStore } from "./file-store";
 
 /**
  * Local demo backend: runs entirely in the browser, persisted to localStorage,
@@ -67,7 +68,7 @@ export class NotAllowedError extends Error {
 export function createLocalBackend(): Backend {
   let tables = load();
   const listeners = new Set<ChangeListener>();
-  const files = new Map<string, string>(); // path -> object URL (session only)
+  const files = new LocalFileStore(); // blobs persist in IndexedDB; see file-store.ts
 
   const persist = (table: TableName) => {
     try {
@@ -267,8 +268,7 @@ export function createLocalBackend(): Backend {
       if (isTech(me) && !path.startsWith(`tech-files/${me?.storageId}/`)) {
         throw new NotAllowedError("Techs may only write under their own tech-files prefix");
       }
-      const url = URL.createObjectURL(file);
-      files.set(path, url);
+      await files.put(path, file);
       return path;
     },
     async getUrl(path) {
@@ -276,14 +276,12 @@ export function createLocalBackend(): Backend {
       if (isTech(me) && !path.startsWith(`tech-files/${me?.storageId}/`)) {
         throw new NotAllowedError("Techs may only read their own files");
       }
-      return files.get(path) ?? "";
+      return files.url(path);
     },
     async remove(path) {
       const me = session();
       if (!isOffice(me)) throw new NotAllowedError("Only office accounts delete files");
-      const url = files.get(path);
-      if (url) URL.revokeObjectURL(url);
-      files.delete(path);
+      await files.remove(path);
     },
   };
 
