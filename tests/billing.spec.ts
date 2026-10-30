@@ -21,10 +21,10 @@ test("office turns the completed job into an invoice with one click", async ({ p
   const row = page.getByTestId("invoice-list").getByRole("row").filter({ hasText: number });
   await expect(row).toContainText("$275.00");
   await expect(row).toContainText("Draft");
-  await expect(page.getByRole("button", { name: "Create invoice" })).toHaveCount(0);
 
-  // The job is now Invoiced, so nothing is left waiting (the Jobs screen belongs to the office lane).
-  await expect(page.getByText("Nothing to invoice")).toBeVisible();
+  // The job is now Invoiced, so it is no longer waiting (other seeded Complete jobs still are).
+  await expect(page.getByRole("listitem").filter({ hasText: "J-1004" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Create invoice" }).first()).toBeVisible();
 });
 
 test("owner dashboard shows the summary cards", async ({ page }) => {
