@@ -1,0 +1,300 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >-
+  Serv1 build role (SPEC.md section 7.3). Role serv1-builder deploys the Amplify Gen 2
+  backend (sandbox and, later, hosting) in us-east-1 only, and may be assumed only by the
+  existing AI session user eci-ai-session (decision 78 pattern). Applied by the owner in
+  CloudShell; see RUNBOOK.md next to this file.
+
+Parameters:
+  SessionUserName:
+    Type: String
+    Default: eci-ai-session
+    Description: The IAM user that may assume the role (the one standing AI session credential).
+
+Resources:
+  Serv1BuilderRole:
+    Type: AWS::IAM::Role
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: >-
+          Amplify Gen 2 deploys through CloudFormation and needs to create the resources the
+          backend defines (Cognito, AppSync, DynamoDB, S3, the IAM roles those services use).
+          AmplifyBackendDeployFullAccess is AWS's purpose-built policy for exactly that, scoped
+          to amplify-* resources. The inline guard pins the region and forbids stop, terminate
+          and database deletes made directly by this role (decision 80 spirit).
+          What the guard does not cover: CDK deployments hand the work to the CloudFormation
+          execution role created by the one-time CDK bootstrap, and IAM evaluates that role's
+          policy, not this one. The guard therefore also restricts which CDK roles this role may
+          assume (this account, us-east-1 only), so no deployment can run elsewhere; the
+          execution role's permissions come from Serv1CdkExecutionPolicy below, which the owner
+          passes to the one-time CDK bootstrap (RUNBOOK.md step 4). This role cannot bootstrap CDK
+          itself; the owner does.
+        must:
+          - Trust only the AI session user.
+          - us-east-1 only, apart from global services; CDK roles assumable only in this account and region.
+          - No stop, reboot, terminate; no RDS or EC2 deletes by this role itself.
+    Properties:
+      RoleName: serv1-builder
+      Description: Serv1 Amplify Gen 2 build role; assumed by eci-ai-session; us-east-1 only
+      MaxSessionDuration: 3600
+      Tags:
+        - Key: Project
+          Value: serv1
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:user/${SessionUserName}
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - !Sub arn:${AWS::Partition}:iam::aws:policy/service-role/AmplifyBackendDeployFullAccess
+      Policies:
+        - PolicyName: Serv1BuilderGuard
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: UsEast1Only
+                Effect: Deny
+                NotAction:
+                  - iam:*
+                  - sts:*
+                  - cloudfront:*
+                  - route53:*
+                  - support:*
+                  - budgets:*
+                Resource: "*"
+                Condition:
+                  StringNotEquals:
+                    aws:RequestedRegion: us-east-1
+              - Sid: AssumeOnlyThisAccountsUsEast1CdkRoles
+                Effect: Deny
+                Action: sts:AssumeRole
+                NotResource:
+                  - !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:role/cdk-*-${AWS::AccountId}-us-east-1
+              - Sid: NoStopTerminateOrDataDeletes
+                Effect: Deny
+                Action:
+                  - ec2:StopInstances
+                  - ec2:RebootInstances
+                  - ec2:TerminateInstances
+                  - ec2:DeleteVolume
+                  - ec2:DeleteSnapshot
+                  - rds:Delete*
+                  - rds:Stop*
+                  - rds:Reboot*
+                  - dynamodb:DeleteBackup
+                  - backup:Delete*
+                  - s3:DeleteBucket
+                  - cognito-idp:DeleteUserPool
+                Resource: "*"
+
+  Serv1PermissionsBoundary:
+    Type: AWS::IAM::ManagedPolicy
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: >-
+          Owner-controlled ceiling for every role a Serv1 deployment creates. amplify/backend.ts
+          applies it to all Amplify-created roles, and the execution policy below refuses to create
+          or change a role without it, so no deployment can mint a role that reaches EC2, RDS, the
+          account, or IAM users, whatever its own policy says.
+        must:
+          - Same service allow-list as the execution policy; same explicit denies.
+          - Only the owner changes it (deployments are denied policy-version writes on serv1-* policies).
+    Properties:
+      ManagedPolicyName: serv1-permissions-boundary
+      Description: Permissions boundary for roles created by Serv1 deployments (us-east-1)
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: ServerlessServicesAmplifyUses
+            Effect: Allow
+            Action:
+              - cognito-idp:*
+              - cognito-identity:*
+              - appsync:*
+              - dynamodb:*
+              - s3:*
+              - lambda:*
+              - logs:*
+              - cloudwatch:*
+              - events:*
+              - ssm:*
+              - sqs:*
+              - sns:*
+              - kms:*
+              - secretsmanager:*
+              - scheduler:*
+              - xray:*
+              - sts:AssumeRole
+            Resource: "*"
+          - Sid: NeverServersDatabasesOrAccount
+            Effect: Deny
+            Action:
+              - ec2:*
+              - rds:*
+              - organizations:*
+              - account:*
+              - billing:*
+              - iam:*
+            Resource: "*"
+
+  Serv1CdkExecutionPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: >-
+          CloudFormation deploys the Amplify backend with the CDK execution role, whose policy is
+          fixed at CDK bootstrap time. This policy is what the owner passes to the bootstrap
+          (RUNBOOK.md step 4) in place of the default AdministratorAccess: the serverless services
+          Amplify Gen 2 uses, IAM limited to Amplify- and CDK-named roles and policies, and explicit
+          denies on EC2, RDS, Organizations and account settings.
+        must:
+          - No EC2, RDS, Organizations or account actions, even if an Allow is widened later.
+          - IAM writes only on amplify-* names, and a role is created or widened only with the
+            serv1-permissions-boundary attached; PassRole only to amplify-* roles.
+          - "Never any IAM action on cdk-* roles, serv1-builder, eci-ai-* roles or IAM users (Codex on cb75481 showed writable bootstrap identities would have undone every deny)."
+    Properties:
+      ManagedPolicyName: serv1-cdk-execution
+      Description: CloudFormation execution policy for the Serv1 CDK bootstrap (us-east-1)
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: ServerlessServicesAmplifyUses
+            Effect: Allow
+            Action:
+              - cloudformation:*
+              - cognito-idp:*
+              - cognito-identity:*
+              - appsync:*
+              - dynamodb:*
+              - s3:*
+              - lambda:*
+              - logs:*
+              - cloudwatch:*
+              - events:*
+              - ssm:*
+              - sqs:*
+              - sns:*
+              - kms:*
+              - amplify:*
+              - secretsmanager:*
+              - scheduler:*
+            Resource: "*"
+          - Sid: IamRolesOnlyAmplifyNamesWithBoundary
+            Effect: Allow
+            Action:
+              - iam:CreateRole
+              - iam:PutRolePolicy
+              - iam:AttachRolePolicy
+              - iam:PutRolePermissionsBoundary
+            Resource: !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:role/amplify-*
+            Condition:
+              StringEquals:
+                iam:PermissionsBoundary: !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:policy/serv1-permissions-boundary
+          - Sid: IamRolesOnlyAmplifyNamesOtherWrites
+            Effect: Allow
+            Action:
+              - iam:DeleteRole
+              - iam:GetRole
+              - iam:UpdateRole
+              - iam:UpdateRoleDescription
+              - iam:UpdateAssumeRolePolicy
+              - iam:TagRole
+              - iam:UntagRole
+              - iam:DetachRolePolicy
+              - iam:DeleteRolePolicy
+              - iam:GetRolePolicy
+              - iam:ListRolePolicies
+              - iam:ListAttachedRolePolicies
+            Resource: !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:role/amplify-*
+          - Sid: IamPoliciesOnlyAmplifyNames
+            Effect: Allow
+            Action:
+              - iam:CreatePolicy
+              - iam:DeletePolicy
+              - iam:GetPolicy
+              - iam:CreatePolicyVersion
+              - iam:DeletePolicyVersion
+              - iam:GetPolicyVersion
+              - iam:ListPolicyVersions
+              - iam:SetDefaultPolicyVersion
+              - iam:TagPolicy
+              - iam:UntagPolicy
+            Resource: !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:policy/amplify-*
+          - Sid: BoundaryStaysAndServ1PoliciesAreOwnerOnly
+            Effect: Deny
+            Action:
+              - iam:DeleteRolePermissionsBoundary
+              - iam:CreatePolicyVersion
+              - iam:DeletePolicy
+              - iam:DeletePolicyVersion
+              - iam:SetDefaultPolicyVersion
+            Resource:
+              - !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:role/*
+              - !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:policy/serv1-*
+          - Sid: NeverTouchBootstrapOrBuilderIdentities
+            Effect: Deny
+            Action: iam:*
+            Resource:
+              - !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:role/cdk-*
+              - !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:role/serv1-builder
+              - !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:role/eci-ai-*
+              - !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:user/*
+          - Sid: PassOnlyAmplifyRoles
+            Effect: Allow
+            Action: iam:PassRole
+            Resource: !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:role/amplify-*
+          - Sid: ReadOnlyIamLookups
+            Effect: Allow
+            Action:
+              - iam:ListRoles
+              - iam:ListPolicies
+              - iam:GetUser
+            Resource: "*"
+          - Sid: NeverServersDatabasesOrAccount
+            Effect: Deny
+            Action:
+              - ec2:*
+              - rds:*
+              - organizations:*
+              - account:*
+              - billing:*
+              - iam:CreateUser
+              - iam:DeleteUser
+              - iam:CreateAccessKey
+              - iam:CreateLoginProfile
+              - iam:AttachUserPolicy
+              - iam:PutUserPolicy
+            Resource: "*"
+
+  SessionUserMayAssumeServ1Builder:
+    Type: AWS::IAM::Policy
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: >-
+          The ai-access stack's user policy allows sts:AssumeRole on the two tier roles and denies
+          everything that is not sts:AssumeRole. This extra inline policy adds one more assumable
+          role without editing that stack.
+    Properties:
+      PolicyName: AssumeServ1Builder
+      Users:
+        - !Ref SessionUserName
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: AssumeServ1Builder
+            Effect: Allow
+            Action: sts:AssumeRole
+            Resource: !GetAtt Serv1BuilderRole.Arn
+
+Outputs:
+  PermissionsBoundaryArn:
+    Description: Applied by amplify/backend.ts to every role a deployment creates.
+    Value: !Ref Serv1PermissionsBoundary
+  CdkExecutionPolicyArn:
+    Description: Pass to the CDK bootstrap (RUNBOOK.md step 4) as --cloudformation-execution-policies.
+    Value: !Ref Serv1CdkExecutionPolicy
+  RoleArn:
+    Description: Give this ARN to the Serv1 session as SERV1_BUILDER_ROLE_ARN.
+    Value: !GetAtt Serv1BuilderRole.Arn
