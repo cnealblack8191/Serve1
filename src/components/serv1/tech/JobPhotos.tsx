@@ -1,9 +1,7 @@
 import { Camera, Loader2 } from "lucide-react";
 import { useRef, useState } from "react";
 
-import { useQueryClient } from "@tanstack/react-query";
-
-import { type Attachment, type Job, addJobPhoto, keys, useFileUrl, useJobPhotos } from "@/data";
+import { type Attachment, type Job, useAddJobPhoto, useFileUrl, useJobPhotos } from "@/data";
 import { cn } from "@/lib/utils";
 
 function Thumb({ photo }: { photo: Attachment }) {
@@ -29,9 +27,8 @@ function Thumb({ photo }: { photo: Attachment }) {
 
 /** Photo list plus a camera button. `canAdd` is false once the job is finished. */
 export function JobPhotos({ job, canAdd }: { job: Job; canAdd: boolean }) {
-  const jobId = job.id;
-  const photos = useJobPhotos(jobId);
-  const qc = useQueryClient();
+  const photos = useJobPhotos(job.id);
+  const addPhoto = useAddJobPhoto();
   const input = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -42,9 +39,7 @@ export function JobPhotos({ job, canAdd }: { job: Job; canAdd: boolean }) {
     setError(null);
     try {
       for (const file of Array.from(files)) {
-        // addJobPhoto uploads the file and records it, tagged with the job's tech.
-        await addJobPhoto(job, file);
-        await qc.invalidateQueries({ queryKey: keys.table("attachments") });
+        await addPhoto.mutateAsync({ job, file });
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Photo upload failed. Try again.");
