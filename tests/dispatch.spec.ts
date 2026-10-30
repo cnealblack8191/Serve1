@@ -16,13 +16,20 @@ const queue = (page: Page) => page.getByRole("region", { name: "Unscheduled jobs
 const techColumn = (page: Page, name: string) =>
   page.getByRole("region", { name: `${name} schedule` });
 
-async function assignWithDialog(page: Page, job: string, tech: string, time: string) {
+async function assignWithDialog(
+  page: Page,
+  job: string,
+  tech: string,
+  time: string,
+  length?: string,
+) {
   await queue(page)
     .getByRole("button", { name: `Assign ${job}` })
     .click();
   const dialog = page.getByRole("dialog");
   await dialog.getByLabel("Tech").selectOption({ label: tech });
   await dialog.getByLabel("Start time").selectOption({ label: time });
+  if (length) await dialog.getByLabel("Length").selectOption({ label: length });
   await dialog.getByRole("button", { name: "Schedule" }).click();
   await expect(dialog).toBeHidden();
 }
@@ -80,4 +87,28 @@ test("dragging a scheduled job to another tech reassigns it (confirm turned off)
   await expect(techColumn(page, "Tara Tech").getByRole("article", { name: /J-1002/ })).toHaveCount(
     0,
   );
+});
+
+test("a 30-minute job can still reopen its Assign dialog from the timeline", async ({ page }) => {
+  await openBoard(page);
+  await assignWithDialog(page, "J-1001", "Tom Tech", "1:00 PM", "0.5 hours");
+
+  const card = techColumn(page, "Tom Tech").getByRole("article", { name: /J-1001/ });
+  await expect(card).toHaveAttribute("title", "1:00 PM – 1:30 PM");
+  await card.getByRole("button", { name: "Assign J-1001" }).click();
+  await expect(page.getByRole("dialog")).toContainText("Assign J-1001");
+});
+
+test("a tech who opens /dispatch directly is sent to Today", async ({ page }) => {
+  await signIn(page, "tech1");
+  await page.goto("/dispatch");
+  await expect(page).toHaveURL(/\/tech$/);
+  await expect(page.getByRole("heading", { name: "Dispatch Board" })).toHaveCount(0);
+});
+
+test("the owner who opens /dispatch directly is sent to the Dashboard", async ({ page }) => {
+  await signIn(page, "owner");
+  await page.goto("/dispatch");
+  await expect(page).toHaveURL(/\/$/);
+  await expect(page.getByRole("heading", { name: "Dispatch Board" })).toHaveCount(0);
 });
