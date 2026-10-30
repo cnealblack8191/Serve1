@@ -1,6 +1,8 @@
 import { useRef, useState } from "react";
 
-import { type Job, uploadSignature, useJobMutations, useSignatureMutations } from "@/data";
+import { useQueryClient } from "@tanstack/react-query";
+
+import { type Job, addJobSignature, keys, useJobMutations } from "@/data";
 import { Field } from "@/components/eci/primitives";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -29,7 +31,7 @@ export function SignatureStep({
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const signatures = useSignatureMutations();
+  const qc = useQueryClient();
   const jobs = useJobMutations();
 
   const canSave = hasInk && name.trim().length > 0 && !busy;
@@ -40,14 +42,10 @@ export function SignatureStep({
     try {
       const png = await pad.current?.toBlob();
       if (!png) throw new Error("Could not read the signature. Try again.");
-      const storagePath = await uploadSignature(job.id, png);
-      const signedAt = new Date().toISOString();
-      await signatures.create.mutateAsync({
-        jobId: job.id,
-        signerName: name.trim(),
-        storagePath,
-        signedAt,
-      });
+      // addJobSignature uploads the PNG and records it, tagged with the job's tech.
+      const signature = await addJobSignature(job, png, name.trim());
+      const signedAt = signature.signedAt;
+      await qc.invalidateQueries({ queryKey: keys.table("signatures") });
       await jobs.update.mutateAsync({
         id: job.id,
         patch: { status: "Complete", completedAt: signedAt },

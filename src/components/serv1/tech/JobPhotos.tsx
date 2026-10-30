@@ -1,14 +1,9 @@
 import { Camera, Loader2 } from "lucide-react";
 import { useRef, useState } from "react";
 
-import {
-  type Attachment,
-  uploadJobPhoto,
-  useAttachmentMutations,
-  useCurrentUser,
-  useFileUrl,
-  useJobPhotos,
-} from "@/data";
+import { useQueryClient } from "@tanstack/react-query";
+
+import { type Attachment, type Job, addJobPhoto, keys, useFileUrl, useJobPhotos } from "@/data";
 import { cn } from "@/lib/utils";
 
 function Thumb({ photo }: { photo: Attachment }) {
@@ -33,10 +28,10 @@ function Thumb({ photo }: { photo: Attachment }) {
 }
 
 /** Photo list plus a camera button. `canAdd` is false once the job is finished. */
-export function JobPhotos({ jobId, canAdd }: { jobId: string; canAdd: boolean }) {
+export function JobPhotos({ job, canAdd }: { job: Job; canAdd: boolean }) {
+  const jobId = job.id;
   const photos = useJobPhotos(jobId);
-  const { create } = useAttachmentMutations();
-  const { data: me } = useCurrentUser();
+  const qc = useQueryClient();
   const input = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -47,14 +42,9 @@ export function JobPhotos({ jobId, canAdd }: { jobId: string; canAdd: boolean })
     setError(null);
     try {
       for (const file of Array.from(files)) {
-        const storagePath = await uploadJobPhoto(jobId, file);
-        await create.mutateAsync({
-          jobId,
-          storagePath,
-          type: "Photo",
-          caption: null,
-          uploadedBy: me?.identityId ?? null,
-        });
+        // addJobPhoto uploads the file and records it, tagged with the job's tech.
+        await addJobPhoto(job, file);
+        await qc.invalidateQueries({ queryKey: keys.table("attachments") });
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Photo upload failed. Try again.");
