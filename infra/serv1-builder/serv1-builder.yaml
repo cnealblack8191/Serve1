@@ -153,8 +153,7 @@ Resources:
           - No EC2, RDS, Organizations or account actions, even if an Allow is widened later.
           - IAM writes only on amplify-* names, and a role is created or widened only with the
             serv1-permissions-boundary attached; PassRole only to amplify-* roles.
-          - Never any IAM action on cdk-* roles, serv1-builder, eci-ai-* roles or IAM users
-            (Codex on cb75481: writable bootstrap identities would have undone every deny).
+          - "Never any IAM action on cdk-* roles, serv1-builder, eci-ai-* roles or IAM users (Codex on cb75481 showed writable bootstrap identities would have undone every deny)."
     Properties:
       ManagedPolicyName: serv1-cdk-execution
       Description: CloudFormation execution policy for the Serv1 CDK bootstrap (us-east-1)
