@@ -10,8 +10,9 @@
     "lint": "eslint .",
     "format": "prettier --write .",
     "guard": "bash scripts/guard.sh",
-    "test": "playwright test",
-    "sandbox": "ampx sandbox --profile serv1-builder"
+    "test": "npm run test:unit && playwright test",
+    "sandbox": "ampx sandbox --profile serv1-builder",
+    "test:unit": "node --import tsx --test tests/unit/*.test.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
