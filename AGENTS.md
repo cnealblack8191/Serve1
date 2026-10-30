@@ -36,6 +36,10 @@ You are building Serv1, an internal field service app. Read SPEC.md first.
   in one line. Do not edit `src/data/backend.ts`, `types.ts`, `local/index.ts` or `amplify/index.ts`
   without the foundation session; changes to the data model go to the owner first (SPEC.md section 5).
 - Status labels and colors come from `src/lib/status.ts`. Never hard-code them.
+- Office-only controls (add, edit, create invoice, dispatch) render only when `useIsOffice()` from `@/data`
+  is true; Owner accounts read everything and change nothing except invoice status. Routes that only
+  office roles may use check `context.user.role` in `beforeLoad` and redirect others.
+- Job and invoice numbers come from `newJobNumber()` / `newInvoiceNumber()` in `@/data`, never from a row count.
 - Check before pushing: `npm run guard && npm run lint && npm run typecheck && npx vite build`, then
   `npx playwright test` (set `PW_CHROMIUM` to an installed Chromium if downloads are blocked).
 - Never commit `amplify_outputs.json`, `.env` or any credential. The guard script fails the build on

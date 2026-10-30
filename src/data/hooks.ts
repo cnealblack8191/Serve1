@@ -15,6 +15,7 @@ import type {
   NewSignature,
   NewSite,
   NewUser,
+  Role,
   Signature,
   Site,
   TableName,
@@ -38,6 +39,16 @@ export function useDataChangeRefresh() {
     () => onDataChange((table) => void qc.invalidateQueries({ queryKey: keys.table(table) })),
     [qc],
   );
+}
+
+/** Admin and Office may create and edit customers, sites, jobs and invoices (SPEC.md section 2). */
+export const isOfficeRole = (role: Role | undefined | null) =>
+  role === "Admin" || role === "Office";
+
+/** True when the signed-in person may use office editing controls. Screens hide or disable them otherwise. */
+export function useIsOffice(): boolean {
+  const me = useCurrentUser();
+  return isOfficeRole(me.data?.role);
 }
 
 export function useCurrentUser() {
