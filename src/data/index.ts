@@ -19,6 +19,7 @@ export * from "./hooks";
 export * from "./files";
 export * from "./numbers";
 export * from "./tech";
+export * from "./dispatch";
 export { backendKind, onDataChange } from "./hooks";
 
 /**
