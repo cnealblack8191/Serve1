@@ -18,6 +18,8 @@ export * from "./types";
 export * from "./hooks";
 export * from "./files";
 export * from "./billing";
+export * from "./numbers";
+export * from "./tech";
 export { backendKind, onDataChange } from "./hooks";
 
 /**

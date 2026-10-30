@@ -5,8 +5,10 @@ import {
   LayoutDashboard,
   LogOut,
   Menu,
+  Moon,
   Receipt,
   Smartphone,
+  Sun,
   Users,
 } from "lucide-react";
 import { useState, type ReactNode } from "react";
@@ -23,6 +25,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { signOut, useCurrentUser, useDataChangeRefresh, type Role } from "@/data";
+import { applyTheme, readTheme, resolveTheme } from "@/lib/theme";
 import { cn } from "@/lib/utils";
 
 /**
@@ -138,6 +141,25 @@ function Sidebar({
   );
 }
 
+function ThemeToggle() {
+  const [theme, setTheme] = useState(() => resolveTheme(readTheme()));
+  const toggle = () => {
+    const next = theme === "dark" ? "light" : "dark";
+    applyTheme(next);
+    setTheme(next);
+  };
+  return (
+    <Button
+      variant="ghost"
+      size="icon"
+      onClick={toggle}
+      aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+    >
+      {theme === "dark" ? <Sun className="size-5" /> : <Moon className="size-5" />}
+    </Button>
+  );
+}
+
 export function AppShell({ children }: { children: ReactNode }) {
   useDataChangeRefresh();
   const { data: me } = useCurrentUser();
@@ -207,7 +229,10 @@ export function AppShell({ children }: { children: ReactNode }) {
             />
             <span className="font-semibold tracking-tight">Serv1</span>
           </div>
-          {userMenu}
+          <div className="flex items-center gap-1">
+            <ThemeToggle />
+            {userMenu}
+          </div>
         </header>
         <main className="flex-1 space-y-4 p-4 pb-20">{children}</main>
         <NavList role={role} variant="tabs" />
@@ -246,6 +271,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                 <Link to="/jobs/new">New Job</Link>
               </Button>
             ) : null}
+            <ThemeToggle />
             {userMenu}
           </div>
         </header>

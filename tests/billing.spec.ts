@@ -11,7 +11,7 @@ test("office turns the completed job into an invoice with one click", async ({ p
   await ready.getByRole("button", { name: "Create invoice" }).click();
 
   // Lands on the new invoice with a total (2h x $95 + $85 service call = $275).
-  await expect(page.getByRole("heading", { name: /^INV-\d{4}-\d{4}$/ })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /^INV-\d{6}-[A-Z0-9]{4}$/ })).toBeVisible();
   const number = (await page.getByRole("heading", { name: /^INV-/ }).textContent()) ?? "";
   await expect(page.getByText("$275.00").first()).toBeVisible();
   await expect(page.getByRole("button", { name: "Download PDF" })).toBeVisible();

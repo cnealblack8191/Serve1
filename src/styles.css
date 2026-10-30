@@ -109,6 +109,47 @@
   --sidebar-ring: #f59e0b;
 }
 
+/* Dark mode (SPEC.md section 13). Toggled by the .dark class on <html>; see src/lib/theme.ts. */
+.dark {
+  --surface: #0f172a;
+  --surface-sunken: #0b1220;
+
+  --background: #0b1220;
+  --foreground: #e4e4e7;
+  --card: #111a2e;
+  --card-foreground: #e4e4e7;
+  --popover: #111a2e;
+  --popover-foreground: #e4e4e7;
+  --primary: #f59e0b;
+  --primary-foreground: #0c1e33;
+  --secondary: #1e293b;
+  --secondary-foreground: #e4e4e7;
+  --muted: #1e293b;
+  --muted-foreground: #a1a1aa;
+  --accent: #1e293b;
+  --accent-foreground: #f4f4f5;
+  --destructive: #ef4444;
+  --destructive-foreground: #fafafa;
+  --border: #27354d;
+  --input: #27354d;
+  --ring: #f59e0b;
+
+  --chart-1: #93c5fd;
+  --chart-2: #f59e0b;
+  --chart-3: #fb923c;
+  --chart-4: #2dd4bf;
+  --chart-5: #94a3b8;
+
+  --sidebar: #0c1e33;
+  --sidebar-foreground: #f4f4f5;
+  --sidebar-primary: #f59e0b;
+  --sidebar-primary-foreground: #0c1e33;
+  --sidebar-accent: #16304d;
+  --sidebar-accent-foreground: #f4f4f5;
+  --sidebar-border: rgba(255, 255, 255, 0.08);
+  --sidebar-ring: #f59e0b;
+}
+
 @layer base {
   * {
     border-color: var(--color-border);

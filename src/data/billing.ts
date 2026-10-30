@@ -2,6 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 import { backend } from "./backend";
 import { keys } from "./hooks";
+import { newInvoiceNumber } from "./numbers";
 import type { Invoice, InvoiceLineItem, Job } from "./types";
 
 /** Flat demo rates for the pilot (not part of the data model). */
@@ -28,20 +29,6 @@ export function buildLineItems(job: Job): InvoiceLineItem[] {
 }
 
 /**
- * Invoice numbers are INV-YYMM-NNNN with a random 4-digit suffix, so deleting an
- * invoice can never cause a number to be reused (a row count would). Pilot-level:
- * we also re-draw if the number happens to exist already.
- */
-function newInvoiceNumber(taken: Set<string | null>): string {
-  const now = new Date();
-  const yymm = `${String(now.getFullYear()).slice(2)}${String(now.getMonth() + 1).padStart(2, "0")}`;
-  for (;;) {
-    const n = `INV-${yymm}-${1000 + Math.floor(Math.random() * 9000)}`;
-    if (!taken.has(n)) return n;
-  }
-}
-
-/**
  * SPEC W4: one click makes a Draft invoice from a Complete job and marks the job Invoiced.
  * Safe to call again: if the job already has an invoice it is returned (and the job status
  * is finished if an earlier attempt failed halfway), so a double click or retry never
@@ -53,7 +40,7 @@ export async function createInvoiceFromJob(job: Job): Promise<Invoice> {
   if (!invoice) {
     const lineItems = buildLineItems(job);
     invoice = await backend().invoices.create({
-      invoiceNumber: newInvoiceNumber(new Set(existing.map((i) => i.invoiceNumber))),
+      invoiceNumber: newInvoiceNumber(),
       jobId: job.id,
       customerId: job.customerId,
       lineItems,
