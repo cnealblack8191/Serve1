@@ -94,6 +94,7 @@ export function createAmplifyBackend(outputs: object): Backend {
         const email = attrs.email ?? u.signInDetails?.loginId ?? "";
         return {
           identityId: `${u.userId}::${u.username}`,
+          storageId: session.identityId ?? "",
           email,
           name: attrs.preferred_username ?? attrs.name ?? email,
           roles,
@@ -165,6 +166,7 @@ export function createAmplifyBackend(outputs: object): Backend {
     createdAt: r.createdAt,
     updatedAt: r.updatedAt,
     jobId: r.jobId,
+    assignedTechId: text(r.assignedTechId),
     storagePath: r.storagePath,
     type: (r.type ?? "Document") as Attachment["type"],
     caption: text(r.caption),
@@ -175,6 +177,7 @@ export function createAmplifyBackend(outputs: object): Backend {
     createdAt: r.createdAt,
     updatedAt: r.updatedAt,
     jobId: r.jobId,
+    assignedTechId: text(r.assignedTechId),
     signerName: r.signerName,
     storagePath: r.storagePath,
     signedAt: r.signedAt,
