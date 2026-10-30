@@ -66,6 +66,9 @@ export interface Job extends BaseRecord {
 
 export interface Attachment extends BaseRecord {
   jobId: string;
+  /** Identity of the tech assigned to the job when the file was added; null for office uploads
+   *  on unassigned jobs. The backend lets a tech read only rows carrying their own identity. */
+  assignedTechId: string | null;
   storagePath: string;
   type: AttachmentType;
   caption: string | null;
@@ -74,6 +77,8 @@ export interface Attachment extends BaseRecord {
 
 export interface Signature extends BaseRecord {
   jobId: string;
+  /** Same rule as Attachment.assignedTechId. */
+  assignedTechId: string | null;
   signerName: string;
   storagePath: string;
   signedAt: string;
@@ -123,6 +128,8 @@ export const TABLES: TableName[] = [
 export interface AuthUser {
   /** Cognito identity (sub::username) or the local demo id. Matches Job.assignedTechId for techs. */
   identityId: string;
+  /** Per-user storage prefix id (Cognito identity-pool id on Amplify). Tech files live under tech-files/{storageId}/. */
+  storageId: string;
   email: string;
   name: string;
   /** All groups the account belongs to. */
