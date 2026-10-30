@@ -1,12 +1,15 @@
 import type { InvoiceStatus } from "@/data";
+import { JOB_STATUS_CLASS } from "@/lib/status";
 import { cn } from "@/lib/utils";
 
-/** Invoice status badge that stays readable in light and dark mode. */
+/**
+ * Invoice status badge, readable in light and dark mode. Colors come from the shared
+ * palette in src/lib/status.ts (AGENTS.md): Draft gray, Sent blue, Paid green.
+ */
 const TONE: Record<InvoiceStatus, string> = {
-  Draft:
-    "bg-gray-100 text-gray-800 ring-gray-300 dark:bg-gray-800 dark:text-gray-100 dark:ring-gray-600",
-  Sent: "bg-blue-100 text-blue-800 ring-blue-300 dark:bg-blue-900 dark:text-blue-100 dark:ring-blue-700",
-  Paid: "bg-green-100 text-green-800 ring-green-300 dark:bg-green-900 dark:text-green-100 dark:ring-green-700",
+  Draft: JOB_STATUS_CLASS.New,
+  Sent: JOB_STATUS_CLASS.Scheduled,
+  Paid: JOB_STATUS_CLASS.Complete,
 };
 
 export function InvoiceStatusBadge({ status }: { status: InvoiceStatus }) {
