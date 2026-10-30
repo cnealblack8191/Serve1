@@ -1,7 +1,8 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { fileUrl } from "./files";
-import { useAttachments, useSignatures } from "./hooks";
+import { addJobPhoto, addJobSignature, fileUrl } from "./files";
+import { keys, useAttachments, useSignatures } from "./hooks";
+import type { Job } from "./types";
 
 /** Tech lane helpers (docs/PLAN.md). Built only on the shared hooks and file helpers. */
 
@@ -30,5 +31,24 @@ export function useFileUrl(path: string | undefined) {
     queryFn: () => fileUrl(path!),
     enabled: !!path,
     staleTime: 10 * 60_000,
+  });
+}
+
+/** Upload a photo and record it on the job (addJobPhoto), then refresh the photo list. */
+export function useAddJobPhoto() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (v: { job: Job; file: Blob }) => addJobPhoto(v.job, v.file),
+    onSuccess: () => qc.invalidateQueries({ queryKey: keys.table("attachments") }),
+  });
+}
+
+/** Save the customer's signature (addJobSignature), then refresh signatures. */
+export function useAddJobSignature() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (v: { job: Job; png: Blob; signerName: string }) =>
+      addJobSignature(v.job, v.png, v.signerName),
+    onSuccess: () => qc.invalidateQueries({ queryKey: keys.table("signatures") }),
   });
 }

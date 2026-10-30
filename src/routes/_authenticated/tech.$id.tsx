@@ -136,7 +136,7 @@ function Page() {
       ) : null}
 
       {working || j.status === "Complete" || j.status === "Invoiced" ? (
-        <JobPhotos jobId={j.id} canAdd={working} />
+        <JobPhotos job={j} canAdd={working} />
       ) : null}
 
       {working ? <JobNotes job={j} /> : null}
