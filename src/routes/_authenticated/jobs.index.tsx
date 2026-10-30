@@ -21,7 +21,14 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { JOB_STATUSES, useCustomers, useJobs, useTechNames, type JobStatus } from "@/data";
+import {
+  JOB_STATUSES,
+  useCustomers,
+  useIsOffice,
+  useJobs,
+  useTechNames,
+  type JobStatus,
+} from "@/data";
 import { JOB_STATUS_LABEL } from "@/lib/status";
 
 export const Route = createFileRoute("/_authenticated/jobs/")({
@@ -29,6 +36,7 @@ export const Route = createFileRoute("/_authenticated/jobs/")({
 });
 
 function Page() {
+  const isOffice = useIsOffice();
   const jobs = useJobs();
   const customers = useCustomers();
   const techs = useTechNames();
@@ -48,9 +56,11 @@ function Page() {
   return (
     <div className="space-y-6">
       <PageHeader title="Jobs" description="Every job, newest first.">
-        <Button asChild>
-          <Link to="/jobs/new">New job</Link>
-        </Button>
+        {isOffice ? (
+          <Button asChild>
+            <Link to="/jobs/new">New job</Link>
+          </Button>
+        ) : null}
       </PageHeader>
       <div className="flex flex-wrap items-center gap-3">
         <SearchBox
@@ -81,7 +91,9 @@ function Page() {
           hint={
             q || status !== "all"
               ? "Clear the search or pick All statuses."
-              : "Use New job when a customer calls."
+              : isOffice
+                ? "Use New job when a customer calls."
+                : "Jobs appear here once the office creates them."
           }
         />
       ) : (

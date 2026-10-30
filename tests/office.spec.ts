@@ -48,3 +48,35 @@ test("office creates a job that shows in the jobs list as New", async ({ page })
   await expect(row).toBeVisible();
   await expect(row.getByText("New", { exact: true })).toBeVisible();
 });
+
+test("adding a site from the New job screen does not save the job", async ({ page }) => {
+  await page.goto("/jobs/new");
+  await page.getByLabel("Find customer").fill("peachtree");
+  await page.getByRole("button", { name: /Peachtree Logistics/ }).click();
+  await page.getByLabel("Description").fill("Dock heater will not start");
+  await page.getByRole("button", { name: "Add new site" }).click();
+  await page.getByLabel("Site name").fill("Cold storage");
+  await page.getByLabel("Address").fill("11 Depot Rd, Social Circle, GA 30025");
+  await page.getByRole("button", { name: "Save site" }).click();
+
+  // Still on the form, with the new site selected, and no job saved yet.
+  await expect(page).toHaveURL(/\/jobs\/new/);
+  await expect(page.getByRole("combobox", { name: "Site" })).toContainText("Cold storage");
+  await page.goto("/jobs");
+  await page.getByLabel("Search jobs").fill("dock heater");
+  await expect(page.getByText("No jobs match your filters")).toBeVisible();
+});
+
+test("an owner can read customers and jobs but not create them", async ({ browser }) => {
+  const context = await browser.newContext();
+  const page = await context.newPage();
+  await signIn(page, "owner");
+  await page.goto("/customers");
+  await expect(page.getByRole("heading", { name: "Customers" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Add customer" })).toHaveCount(0);
+  await page.goto("/jobs");
+  await expect(page.getByRole("link", { name: "New job" })).toHaveCount(0);
+  await page.goto("/jobs/new");
+  await expect(page).toHaveURL(/\/jobs$/);
+  await context.close();
+});

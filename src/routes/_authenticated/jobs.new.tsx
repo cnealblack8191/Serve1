@@ -1,4 +1,4 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
 import { useState, type FormEvent } from "react";
 
 import { Field, PageHeader } from "@/components/eci/primitives";
@@ -16,10 +16,11 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import {
+  isOfficeRole,
   JOB_PRIORITIES,
+  newJobNumber,
   useCustomers,
   useJobMutations,
-  useJobs,
   useSites,
   type JobPriority,
 } from "@/data";
@@ -29,6 +30,9 @@ import { cn } from "@/lib/utils";
 const JOB_TYPES = ["Service call", "Repair", "Install", "Inspection", "Emergency"];
 
 export const Route = createFileRoute("/_authenticated/jobs/new")({
+  beforeLoad: ({ context }) => {
+    if (!isOfficeRole(context.user.role)) throw redirect({ to: "/jobs" });
+  },
   validateSearch: (s: Record<string, unknown>): { customerId?: string } =>
     typeof s["customerId"] === "string" ? { customerId: s["customerId"] } : {},
   component: Page,
@@ -39,7 +43,6 @@ function Page() {
   const navigate = useNavigate();
   const customers = useCustomers();
   const sites = useSites();
-  const jobs = useJobs();
   const { create } = useJobMutations();
 
   const [q, setQ] = useState("");
@@ -61,14 +64,6 @@ function Page() {
     .sort((a, b) => a.name.localeCompare(b.name))
     .slice(0, 6);
 
-  function nextJobNumber() {
-    const highest = (jobs.data ?? []).reduce((max, j) => {
-      const n = Number(j.jobNumber?.replace(/\D/g, ""));
-      return Number.isFinite(n) && n > max ? n : max;
-    }, 1000);
-    return `J-${highest + 1}`;
-  }
-
   async function submit(e: FormEvent) {
     e.preventDefault();
     if (!customerId) return setError("Choose a customer first.");
@@ -76,7 +71,7 @@ function Page() {
     if (!description.trim()) return setError("Describe the work to be done.");
     try {
       const job = await create.mutateAsync({
-        jobNumber: nextJobNumber(),
+        jobNumber: newJobNumber(),
         customerId,
         siteId: effectiveSiteId,
         description: description.trim(),

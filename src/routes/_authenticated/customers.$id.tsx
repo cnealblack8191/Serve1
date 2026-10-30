@@ -5,7 +5,7 @@ import { DataRow, EmptyState, PageHeader, SectionHeading } from "@/components/ec
 import { JobStatusBadge } from "@/components/serv1/office/JobStatusBadge";
 import { SiteDialog } from "@/components/serv1/office/SiteDialog";
 import { Button } from "@/components/ui/button";
-import { useCustomer, useJobs, useSites, type Site } from "@/data";
+import { useCustomer, useIsOffice, useJobs, useSites, type Site } from "@/data";
 
 export const Route = createFileRoute("/_authenticated/customers/$id")({
   component: Page,
@@ -13,6 +13,7 @@ export const Route = createFileRoute("/_authenticated/customers/$id")({
 
 function Page() {
   const { id } = Route.useParams();
+  const isOffice = useIsOffice();
   const customer = useCustomer(id);
   const sites = useSites();
   const jobs = useJobs();
@@ -40,11 +41,13 @@ function Page() {
   return (
     <div className="space-y-8">
       <PageHeader title={c.name}>
-        <Button asChild>
-          <Link to="/jobs/new" search={{ customerId: id }}>
-            New job
-          </Link>
-        </Button>
+        {isOffice ? (
+          <Button asChild>
+            <Link to="/jobs/new" search={{ customerId: id }}>
+              New job
+            </Link>
+          </Button>
+        ) : null}
       </PageHeader>
 
       <section className="eci-card px-5 py-2">
@@ -57,9 +60,11 @@ function Page() {
       <section className="space-y-3">
         <div className="flex items-center justify-between gap-4">
           <SectionHeading title="Sites" />
-          <Button variant="outline" onClick={() => setAdding(true)}>
-            Add site
-          </Button>
+          {isOffice ? (
+            <Button variant="outline" onClick={() => setAdding(true)}>
+              Add site
+            </Button>
+          ) : null}
         </div>
         {mySites.length === 0 ? (
           <EmptyState title="No sites yet" hint="Add the address where work is done." />
@@ -69,14 +74,16 @@ function Page() {
               <li key={s.id} className="eci-card space-y-1 p-4">
                 <div className="flex items-start justify-between gap-2">
                   <p className="font-medium">{s.name ?? s.address}</p>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    aria-label={`Edit site ${s.name ?? s.address}`}
-                    onClick={() => setEditing(s)}
-                  >
-                    Edit
-                  </Button>
+                  {isOffice ? (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      aria-label={`Edit site ${s.name ?? s.address}`}
+                      onClick={() => setEditing(s)}
+                    >
+                      Edit
+                    </Button>
+                  ) : null}
                 </div>
                 {s.name ? <p className="text-sm">{s.address}</p> : null}
                 <p className="text-sm text-muted-foreground">
@@ -91,7 +98,10 @@ function Page() {
       <section className="space-y-3">
         <SectionHeading title="Jobs" />
         {myJobs.length === 0 ? (
-          <EmptyState title="No jobs for this customer" hint="Use New job to create one." />
+          <EmptyState
+            title="No jobs for this customer"
+            hint={isOffice ? "Use New job to create one." : undefined}
+          />
         ) : (
           <ul className="eci-card divide-y divide-border/70">
             {myJobs.map((j) => (
