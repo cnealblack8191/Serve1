@@ -7,8 +7,10 @@ import { money, shortDate } from "@/components/serv1/billing/format";
 import { ReadyToInvoice } from "@/components/serv1/billing/ReadyToInvoice";
 import { Input } from "@/components/ui/input";
 import { useIsOffice, useCustomers, useInvoices, useJobs } from "@/data";
+import { requireRole, OFFICE_VIEW } from "@/lib/access";
 
 export const Route = createFileRoute("/_authenticated/invoices/")({
+  beforeLoad: ({ context }) => requireRole(context.user.role, OFFICE_VIEW),
   component: Page,
 });
 

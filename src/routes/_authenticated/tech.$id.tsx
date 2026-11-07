@@ -19,16 +19,23 @@ import {
   useJobSignature,
   useSites,
 } from "@/data";
+import { requireRole, TECH_ONLY } from "@/lib/access";
 
 /** Tech job screen (SPEC.md W3): details, Start Job, photos and notes, Complete, signature. */
 export const Route = createFileRoute("/_authenticated/tech/$id")({
+  beforeLoad: ({ context }) => requireRole(context.user.role, TECH_ONLY),
   component: Page,
 });
 
-type Step = "detail" | "sign" | "done";
-
+/** Keyed by job id, so moving to another job always starts again at its details (never at "sign"). */
 function Page() {
   const { id } = Route.useParams();
+  return <JobScreen key={id} id={id} />;
+}
+
+type Step = "detail" | "sign" | "done";
+
+function JobScreen({ id }: { id: string }) {
   const job = useJob(id);
   const customers = useCustomers();
   const sites = useSites();
@@ -52,7 +59,8 @@ function Page() {
   const site = j.siteId ? sites.data?.find((s) => s.id === j.siteId) : undefined;
 
   if (step === "done") return <DoneScreen customerName={customer?.name} />;
-  if (step === "sign") {
+  // Signing completes the job, so it is offered only while the job is In Progress.
+  if (step === "sign" && j.status === "InProgress") {
     return (
       <SignatureStep
         job={j}

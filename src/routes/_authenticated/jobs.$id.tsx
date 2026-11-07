@@ -12,11 +12,14 @@ import {
   useSignatures,
   useSites,
   useTechNames,
+  useInvoices,
   useIsOffice,
 } from "@/data";
 import { PRIORITY_LABEL } from "@/lib/status";
+import { requireRole, OFFICE_VIEW } from "@/lib/access";
 
 export const Route = createFileRoute("/_authenticated/jobs/$id")({
+  beforeLoad: ({ context }) => requireRole(context.user.role, OFFICE_VIEW),
   component: Page,
 });
 
@@ -57,6 +60,7 @@ function Page() {
   const techs = useTechNames();
   const attachments = useAttachments();
   const signatures = useSignatures();
+  const invoices = useInvoices();
 
   if (job.isLoading) return <p className="text-sm text-muted-foreground">Loading…</p>;
   if (!job.data) {
@@ -72,12 +76,19 @@ function Page() {
   const tech = (techs.data ?? []).find((t) => t.identityId === j.assignedTechId);
   const photos = (attachments.data ?? []).filter((a) => a.jobId === id);
   const sigs = (signatures.data ?? []).filter((s) => s.jobId === id);
+  const invoice = (invoices.data ?? []).find((i) => i.jobId === id);
 
   return (
     <div className="space-y-8">
       <PageHeader title={`${j.jobNumber ?? "Job"} · ${j.jobType ?? "Job"}`}>
         <JobStatusBadge status={j.status} />
-        {isOffice ? (
+        {invoice ? (
+          <Button asChild variant="outline">
+            <Link to="/invoices/$id" params={{ id: invoice.id }}>
+              View invoice
+            </Link>
+          </Button>
+        ) : isOffice && j.status === "Complete" ? (
           <Button asChild>
             <Link to="/invoices">Create invoice</Link>
           </Button>

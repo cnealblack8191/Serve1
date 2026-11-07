@@ -22,3 +22,17 @@ function datePart(d = new Date()): string {
 
 export const newJobNumber = (): string => `J-${datePart()}-${tail()}`;
 export const newInvoiceNumber = (): string => `INV-${datePart()}-${tail()}`;
+
+/**
+ * Same format with a fixed tail, for demo seed data, so seeded and new records look alike.
+ * `n` picks a repeatable 4-character tail.
+ */
+export function fixedNumber(prefix: "J" | "INV", date: Date, n: number): string {
+  let x = (n * 7919 + 104729) % ALPHABET.length ** 4;
+  let t = "";
+  for (let i = 0; i < 4; i++) {
+    t = ALPHABET[x % ALPHABET.length] + t;
+    x = Math.floor(x / ALPHABET.length);
+  }
+  return `${prefix}-${datePart(date)}-${t}`;
+}

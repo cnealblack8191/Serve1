@@ -49,7 +49,8 @@ async function dashboardNumbers(page: Page) {
   await expect(tara.first()).toBeVisible();
   return {
     completedToday: number(await value("Completed today")),
-    invoicedTotal: number(await value("Invoiced total")),
+    // A new one-click invoice is a Draft until the office sends it.
+    draftTotal: number(await value("Draft (not yet sent)")),
     taraCompleted: number(await tara.nth(2).textContent()),
   };
 }
@@ -88,7 +89,7 @@ test("demo story: call in, dispatch, tech completes on a phone, invoice, dashboa
   await page.getByRole("button", { name: "Save job" }).click();
   const heading = page.getByRole("heading", { name: /^J-\d+/ });
   await expect(heading).toBeVisible();
-  const jobNumber = /J-\d+/.exec((await heading.textContent()) ?? "")![0];
+  const jobNumber = /J-\d{6}-[A-Z0-9]{4}/.exec((await heading.textContent()) ?? "")![0];
   await expect(page.getByText(DESCRIPTION)).toBeVisible();
 
   // 2. The office puts it on Tara's schedule from the dispatch board.
@@ -157,7 +158,7 @@ test("demo story: call in, dispatch, tech completes on a phone, invoice, dashboa
     .poll(() => dashboardNumbers(page))
     .toEqual({
       completedToday: before.completedToday + 1,
-      invoicedTotal: before.invoicedTotal + INVOICE_TOTAL,
+      draftTotal: before.draftTotal + INVOICE_TOTAL,
       taraCompleted: before.taraCompleted + 1,
     });
   await ctx.close();

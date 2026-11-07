@@ -1,5 +1,7 @@
 import { expect, type Page } from "@playwright/test";
 
+import { seedJobNumber } from "../src/data/local/seed";
+
 /** Demo accounts of the local backend (src/data/local/seed.ts). */
 export const DEMO = {
   admin: { email: "admin@serv1.demo", password: "serv1demo" },
@@ -16,3 +18,8 @@ export async function signIn(page: Page, who: keyof typeof DEMO) {
   await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page).not.toHaveURL(/\/auth/);
 }
+
+/** Seeded job number of job-<n> (numbers carry the date, so tests never hard-code them). */
+export const jobNo = (n: number) => seedJobNumber(`job-${n}`);
+/** Same, as a pattern for accessible names that contain the number. */
+export const jobRe = (n: number) => new RegExp(jobNo(n));

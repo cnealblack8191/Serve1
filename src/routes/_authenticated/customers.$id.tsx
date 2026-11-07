@@ -6,8 +6,10 @@ import { JobStatusBadge } from "@/components/serv1/office/JobStatusBadge";
 import { SiteDialog } from "@/components/serv1/office/SiteDialog";
 import { Button } from "@/components/ui/button";
 import { useCustomer, useIsOffice, useJobs, useSites, type Site } from "@/data";
+import { requireRole, OFFICE_VIEW } from "@/lib/access";
 
 export const Route = createFileRoute("/_authenticated/customers/$id")({
+  beforeLoad: ({ context }) => requireRole(context.user.role, OFFICE_VIEW),
   component: Page,
 });
 
@@ -103,14 +105,22 @@ function Page() {
         ) : (
           <ul className="eci-card divide-y divide-border/70">
             {myJobs.map((j) => (
-              <li key={j.id} className="flex items-center justify-between gap-3 px-4 py-3">
-                <Link to="/jobs/$id" params={{ id: j.id }} className="min-w-0 hover:underline">
-                  <span className="font-medium">{j.jobNumber ?? "Job"}</span>
-                  <span className="ml-2 truncate text-sm text-muted-foreground">
-                    {j.description}
+              <li key={j.id}>
+                <Link
+                  to="/jobs/$id"
+                  params={{ id: j.id }}
+                  className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-muted/50"
+                >
+                  <span className="min-w-0 flex-1">
+                    <span className="block font-medium">{j.jobNumber ?? "Job"}</span>
+                    <span className="block truncate text-sm text-muted-foreground">
+                      {j.description}
+                    </span>
+                  </span>
+                  <span className="shrink-0">
+                    <JobStatusBadge status={j.status} />
                   </span>
                 </Link>
-                <JobStatusBadge status={j.status} />
               </li>
             ))}
           </ul>

@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 
 import { EmptyState, PageHeader } from "@/components/eci/primitives";
@@ -30,13 +30,16 @@ import {
   type JobStatus,
 } from "@/data";
 import { JOB_STATUS_LABEL } from "@/lib/status";
+import { requireRole, OFFICE_VIEW } from "@/lib/access";
 
 export const Route = createFileRoute("/_authenticated/jobs/")({
+  beforeLoad: ({ context }) => requireRole(context.user.role, OFFICE_VIEW),
   component: Page,
 });
 
 function Page() {
   const isOffice = useIsOffice();
+  const navigate = useNavigate();
   const jobs = useJobs();
   const customers = useCustomers();
   const techs = useTechNames();
@@ -97,38 +100,78 @@ function Page() {
           }
         />
       ) : (
-        <div className="eci-card overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Job</TableHead>
-                <TableHead>Customer</TableHead>
-                <TableHead>Description</TableHead>
-                <TableHead>Tech</TableHead>
-                <TableHead>Status</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {rows.map((j) => (
-                <TableRow key={j.id}>
-                  <TableCell className="font-medium">
-                    <Link to="/jobs/$id" params={{ id: j.id }} className="hover:underline">
-                      {j.jobNumber ?? "Job"}
-                    </Link>
-                  </TableCell>
-                  <TableCell>{customerName.get(j.customerId) ?? "—"}</TableCell>
-                  <TableCell className="max-w-xs truncate">{j.description}</TableCell>
-                  <TableCell>
-                    {(j.assignedTechId && techName.get(j.assignedTechId)) || "Unassigned"}
-                  </TableCell>
-                  <TableCell>
+        <>
+          {/* Phones: one card per job; the whole card opens the job. */}
+          <ul className="space-y-3 md:hidden" aria-label="Jobs">
+            {rows.map((j) => (
+              <li key={j.id}>
+                <Link
+                  to="/jobs/$id"
+                  params={{ id: j.id }}
+                  className="eci-card block space-y-1 p-4 hover:bg-muted/50"
+                >
+                  <span className="flex items-start justify-between gap-3">
+                    <span className="min-w-0">
+                      <span className="block font-medium">{j.jobNumber ?? "Job"}</span>
+                      <span className="block truncate text-sm">
+                        {customerName.get(j.customerId) ?? "—"}
+                      </span>
+                    </span>
                     <JobStatusBadge status={j.status} />
-                  </TableCell>
+                  </span>
+                  <span className="line-clamp-2 block text-sm text-muted-foreground">
+                    {j.description}
+                  </span>
+                  <span className="block text-sm">
+                    Tech: {(j.assignedTechId && techName.get(j.assignedTechId)) || "Unassigned"}
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+          {/* Wider screens: a table; clicking anywhere on a row opens the job. */}
+          <div className="eci-card hidden overflow-x-auto md:block">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Job</TableHead>
+                  <TableHead>Customer</TableHead>
+                  <TableHead>Description</TableHead>
+                  <TableHead>Tech</TableHead>
+                  <TableHead>Status</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
+              </TableHeader>
+              <TableBody>
+                {rows.map((j) => (
+                  <TableRow
+                    key={j.id}
+                    className="cursor-pointer"
+                    onClick={() => void navigate({ to: "/jobs/$id", params: { id: j.id } })}
+                  >
+                    <TableCell className="font-medium">
+                      <Link
+                        to="/jobs/$id"
+                        params={{ id: j.id }}
+                        className="hover:underline"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        {j.jobNumber ?? "Job"}
+                      </Link>
+                    </TableCell>
+                    <TableCell>{customerName.get(j.customerId) ?? "—"}</TableCell>
+                    <TableCell className="max-w-xs truncate">{j.description}</TableCell>
+                    <TableCell>
+                      {(j.assignedTechId && techName.get(j.assignedTechId)) || "Unassigned"}
+                    </TableCell>
+                    <TableCell>
+                      <JobStatusBadge status={j.status} />
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        </>
       )}
     </div>
   );

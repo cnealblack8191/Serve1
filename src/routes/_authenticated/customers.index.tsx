@@ -15,8 +15,10 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useCustomers, useIsOffice, useSites } from "@/data";
+import { requireRole, OFFICE_VIEW } from "@/lib/access";
 
 export const Route = createFileRoute("/_authenticated/customers/")({
+  beforeLoad: ({ context }) => requireRole(context.user.role, OFFICE_VIEW),
   component: Page,
 });
 

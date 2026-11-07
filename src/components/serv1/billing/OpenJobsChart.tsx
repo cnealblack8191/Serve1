@@ -11,7 +11,18 @@ export function OpenJobsChart({ counts }: { counts: { status: JobStatus; count: 
         <BarChart data={data} margin={{ top: 8, right: 8, bottom: 0, left: -16 }}>
           <XAxis dataKey="name" tick={{ fill: "currentColor", fontSize: 12 }} />
           <YAxis allowDecimals={false} tick={{ fill: "currentColor", fontSize: 12 }} />
-          <Tooltip cursor={{ fill: "transparent" }} />
+          {/* Theme colors so the tooltip is readable in light and dark mode. */}
+          <Tooltip
+            cursor={{ fill: "transparent" }}
+            contentStyle={{
+              background: "var(--popover)",
+              color: "var(--popover-foreground)",
+              border: "1px solid var(--border)",
+              borderRadius: 6,
+            }}
+            labelStyle={{ color: "var(--popover-foreground)", fontWeight: 600 }}
+            itemStyle={{ color: "var(--popover-foreground)" }}
+          />
           <Bar dataKey="count" name="Jobs" radius={[4, 4, 0, 0]} isAnimationActive={false}>
             {data.map((d) => (
               <Cell key={d.status} fill={JOB_STATUS_HEX[d.status]} />

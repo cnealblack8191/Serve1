@@ -35,6 +35,11 @@ export function SignatureStep({
   const canSave = hasInk && name.trim().length > 0 && !busy;
 
   const save = async () => {
+    // Only a started job can be signed off; this stops a stale screen completing a job never begun.
+    if (job.status !== "InProgress") {
+      setError("Start the job before the customer signs.");
+      return;
+    }
     setBusy(true);
     setError(null);
     try {

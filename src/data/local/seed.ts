@@ -1,14 +1,16 @@
+import { fixedNumber } from "../numbers";
 import type { Customer, Invoice, InvoiceLineItem, Job, Role, Site, User } from "../types";
 
 /**
  * Demo data for the local (no-AWS) mode. Fake names only (SPEC.md section 4).
- * HVAC and electrical service customers around Covington, GA; every name, address,
+ * Electrical service customers around Covington, GA (ECI is an electrical contractor); every name, address,
  * phone number and email is made up. Dates are relative to "now" so the demo always
  * has work today, upcoming jobs this week and recently finished jobs.
  *
  * Tests depend on: the DEMO_ACCOUNTS emails, job-1 to job-6 (see tests/), Riverside
  * Dental having exactly one site, tech1 and tech2 having exactly one job today, and
- * J-1001 / J-1006 being the only unassigned New jobs.
+ * job-1 / job-6 being the only unassigned New jobs. Job and invoice numbers use the same format
+ * as new records (J-YYMMDD-XXXX, INV-YYMMDD-XXXX); tests read them with seedJobNumber().
  */
 export const LOCAL_PASSWORD = "serv1demo";
 
@@ -257,11 +259,11 @@ const SEED_JOB_LIST: Job[] = [
   // ---- New: waiting in the dispatch queue (only these two; tests empty the queue) ----
   {
     id: "job-1",
-    jobNumber: "J-1001",
+    jobNumber: null, // set below from the created date
     customerId: "cust-1",
     siteId: "site-1",
-    description: "Replace failed exam-room lighting ballast",
-    jobType: "Service call",
+    description: "Replace failed exam-room lighting ballasts (3 fixtures)",
+    jobType: "Lighting",
     priority: "Normal",
     status: "New",
     ...unassigned,
@@ -269,11 +271,11 @@ const SEED_JOB_LIST: Job[] = [
   },
   {
     id: "job-6",
-    jobNumber: "J-1006",
+    jobNumber: null, // set below from the created date
     customerId: "cust-3",
     siteId: "site-4",
-    description: "Add circuit for new compressor",
-    jobType: "Install",
+    description: "Add 30A circuit for new air compressor",
+    jobType: "Install/new circuit",
     priority: "Normal",
     status: "New",
     ...unassigned,
@@ -283,11 +285,11 @@ const SEED_JOB_LIST: Job[] = [
   // ---- Today ----
   {
     id: "job-2",
-    jobNumber: "J-1002",
+    jobNumber: null, // set below from the created date
     customerId: "cust-2",
     siteId: "site-2",
     description: "Panel inspection and breaker replacement, unit 204",
-    jobType: "Repair",
+    jobType: "Panel/breaker",
     priority: "High",
     status: "Scheduled",
     assignedTechId: "local-tech-1",
@@ -301,11 +303,11 @@ const SEED_JOB_LIST: Job[] = [
   },
   {
     id: "job-3",
-    jobNumber: "J-1003",
+    jobNumber: null, // set below from the created date
     customerId: "cust-3",
     siteId: "site-4",
     description: "Install dock door receptacles (4)",
-    jobType: "Install",
+    jobType: "Install/new circuit",
     priority: "Normal",
     status: "InProgress",
     assignedTechId: "local-tech-2",
@@ -319,11 +321,11 @@ const SEED_JOB_LIST: Job[] = [
   },
   {
     id: "job-7",
-    jobNumber: "J-1007",
+    jobNumber: null, // set below from the created date
     customerId: "cust-7",
     siteId: "site-11",
-    description: "Walk-in cooler warm (41°F): condenser fan motor seized",
-    jobType: "Repair",
+    description: "Walk-in cooler lost power: tripped 40A breaker, burned lug",
+    jobType: "Emergency",
     priority: "Emergency",
     status: "Complete",
     assignedTechId: "local-tech-3",
@@ -331,17 +333,18 @@ const SEED_JOB_LIST: Job[] = [
     scheduledEnd: at(0, 9),
     startedAt: at(0, 7),
     completedAt: at(0, 9),
-    notes: "Replaced condenser fan motor and capacitor. Box back to 36°F before opening.",
+    notes:
+      "Replaced the breaker and the burned lug, torqued all connections. Cooler running before opening.",
     laborHours: 2,
     ...stamp,
   },
   {
     id: "job-8",
-    jobNumber: "J-1008",
+    jobNumber: null, // set below from the created date
     customerId: "cust-4",
     siteId: "site-6",
-    description: "Rooftop heat pump short-cycling; store too cold in the mornings",
-    jobType: "Service call",
+    description: "Breakers trip on the pharmacy floor every morning",
+    jobType: "Troubleshoot",
     priority: "High",
     status: "Scheduled",
     assignedTechId: "local-tech-3",
@@ -357,11 +360,11 @@ const SEED_JOB_LIST: Job[] = [
   // ---- Still in progress from an earlier day ----
   {
     id: "job-9",
-    jobNumber: "J-1009",
+    jobNumber: null, // set below from the created date
     customerId: "cust-6",
     siteId: "site-9",
     description: "Replace 12 corridor wall packs with LED, add photocell",
-    jobType: "Install",
+    jobType: "Lighting",
     priority: "Normal",
     status: "InProgress",
     assignedTechId: "local-tech-1",
@@ -375,11 +378,11 @@ const SEED_JOB_LIST: Job[] = [
   },
   {
     id: "job-10",
-    jobNumber: "J-1010",
+    jobNumber: null, // set below from the created date
     customerId: "cust-3",
     siteId: "site-4",
-    description: "Warehouse gas unit heater #3 not firing; replace ignition control",
-    jobType: "Repair",
+    description: "Warehouse dock lights flicker: find the loose neutral",
+    jobType: "Troubleshoot",
     priority: "High",
     status: "InProgress",
     assignedTechId: "local-tech-3",
@@ -387,7 +390,8 @@ const SEED_JOB_LIST: Job[] = [
     scheduledEnd: at(workday(-1), 12),
     startedAt: at(workday(-1), 9),
     completedAt: null,
-    notes: "Ignition module failed. Part ordered from supply house, arrives tomorrow.",
+    notes:
+      "Loose neutral in the junction box at column 14. Damaged conduit section to replace; part arrives tomorrow.",
     laborHours: null,
     ...stamp,
   },
@@ -395,11 +399,11 @@ const SEED_JOB_LIST: Job[] = [
   // ---- Upcoming ----
   {
     id: "job-11",
-    jobNumber: "J-1011",
+    jobNumber: null, // set below from the created date
     customerId: "cust-5",
     siteId: "site-7",
-    description: "Fall furnace tune-up, 3 gas furnaces in the sanctuary basement",
-    jobType: "Maintenance",
+    description: "Annual infrared scan of main switchgear and panels",
+    jobType: "Inspection",
     priority: "Normal",
     status: "Scheduled",
     assignedTechId: "local-tech-1",
@@ -413,11 +417,11 @@ const SEED_JOB_LIST: Job[] = [
   },
   {
     id: "job-12",
-    jobNumber: "J-1012",
+    jobNumber: null, // set below from the created date
     customerId: "cust-7",
     siteId: "site-11",
-    description: "Kitchen exhaust fan squealing: replace belt and bearings",
-    jobType: "Repair",
+    description: "Replace kitchen hood light fixtures, add GFCI receptacles at the prep line",
+    jobType: "Lighting",
     priority: "Normal",
     status: "Scheduled",
     assignedTechId: "local-tech-2",
@@ -431,10 +435,10 @@ const SEED_JOB_LIST: Job[] = [
   },
   {
     id: "job-13",
-    jobNumber: "J-1013",
+    jobNumber: null, // set below from the created date
     customerId: "cust-8",
     siteId: "site-12",
-    description: "Replace thermostat in classroom 4 and calibrate",
+    description: "Classroom 4 receptacles dead: trace and repair the circuit",
     jobType: "Service call",
     priority: "Low",
     status: "Scheduled",
@@ -449,11 +453,11 @@ const SEED_JOB_LIST: Job[] = [
   },
   {
     id: "job-14",
-    jobNumber: "J-1014",
+    jobNumber: null, // set below from the created date
     customerId: "cust-2",
     siteId: "site-5",
     description: "Install GFCI protection on pool equipment room circuits",
-    jobType: "Install",
+    jobType: "Install/new circuit",
     priority: "High",
     status: "Scheduled",
     assignedTechId: "local-tech-1",
@@ -467,11 +471,11 @@ const SEED_JOB_LIST: Job[] = [
   },
   {
     id: "job-15",
-    jobNumber: "J-1015",
+    jobNumber: null, // set below from the created date
     customerId: "cust-6",
     siteId: "site-10",
-    description: "Office mini-split not heating; check refrigerant and defrost board",
-    jobType: "Service call",
+    description: "Install transfer switch and inlet for a portable generator at the office",
+    jobType: "Generator",
     priority: "Normal",
     status: "Scheduled",
     assignedTechId: "local-tech-2",
@@ -485,11 +489,11 @@ const SEED_JOB_LIST: Job[] = [
   },
   {
     id: "job-16",
-    jobNumber: "J-1016",
+    jobNumber: null, // set below from the created date
     customerId: "cust-8",
     siteId: "site-13",
-    description: "Quarterly maintenance: change filters on 6 rooftop units",
-    jobType: "Maintenance",
+    description: "Quarterly load test, 2 standby generators",
+    jobType: "Generator",
     priority: "Low",
     status: "Scheduled",
     assignedTechId: "local-tech-3",
@@ -503,11 +507,11 @@ const SEED_JOB_LIST: Job[] = [
   },
   {
     id: "job-17",
-    jobNumber: "J-1017",
+    jobNumber: null, // set below from the created date
     customerId: "cust-1",
     siteId: "site-1",
     description: "Run dedicated 20A circuit for new panoramic X-ray unit",
-    jobType: "Install",
+    jobType: "Install/new circuit",
     priority: "Normal",
     status: "Scheduled",
     assignedTechId: "local-tech-2",
@@ -523,7 +527,7 @@ const SEED_JOB_LIST: Job[] = [
   // ---- Finished, waiting to be invoiced ----
   {
     id: "job-4",
-    jobNumber: "J-1004",
+    jobNumber: null, // set below from the created date
     customerId: "cust-2",
     siteId: "site-3",
     description: "Emergency: hallway lights out, 3rd floor",
@@ -541,10 +545,10 @@ const SEED_JOB_LIST: Job[] = [
   },
   {
     id: "job-18",
-    jobNumber: "J-1018",
+    jobNumber: null, // set below from the created date
     customerId: "cust-5",
     siteId: "site-8",
-    description: "No heat in fellowship hall",
+    description: "No power to fellowship hall kitchen outlets",
     jobType: "Service call",
     priority: "High",
     status: "Complete",
@@ -553,7 +557,8 @@ const SEED_JOB_LIST: Job[] = [
     scheduledEnd: at(workday(-2), 10),
     startedAt: at(workday(-2), 8),
     completedAt: at(workday(-2), 9.5),
-    notes: "Dirty flame sensor. Cleaned it, replaced filter, furnace runs a full cycle.",
+    notes:
+      "Failed receptacle had tripped the GFCI upstream. Replaced it and tested every kitchen circuit.",
     laborHours: 1.5,
     ...stamp,
   },
@@ -561,10 +566,10 @@ const SEED_JOB_LIST: Job[] = [
   // ---- Invoiced ----
   {
     id: "job-5",
-    jobNumber: "J-1005",
+    jobNumber: null, // set below from the created date
     customerId: "cust-1",
     siteId: "site-1",
-    description: "Annual safety inspection",
+    description: "Annual electrical safety inspection",
     jobType: "Inspection",
     priority: "Low",
     status: "Invoiced",
@@ -579,11 +584,11 @@ const SEED_JOB_LIST: Job[] = [
   },
   {
     id: "job-19",
-    jobNumber: "J-1019",
+    jobNumber: null, // set below from the created date
     customerId: "cust-4",
     siteId: "site-6",
     description: "Exterior sign dark at night: replace timer and photocell",
-    jobType: "Repair",
+    jobType: "Lighting",
     priority: "Normal",
     status: "Invoiced",
     assignedTechId: "local-tech-2",
@@ -607,7 +612,13 @@ export const SEED_JOBS: Job[] = SEED_JOB_LIST.map((j, i) => {
     : new Date(at(0, 7));
   created.setMinutes(created.getMinutes() + i * 7);
   const createdAt = created.toISOString();
-  return { ...j, createdAt, updatedAt: j.completedAt ?? j.startedAt ?? createdAt };
+  const n = Number(j.id.replace("job-", ""));
+  return {
+    ...j,
+    jobNumber: fixedNumber("J", created, n),
+    createdAt,
+    updatedAt: j.completedAt ?? j.startedAt ?? createdAt,
+  };
 });
 
 /** Same line items the one-click invoice builds (src/data/billing.ts): labor at $95/h plus an $85 service call. */
@@ -618,18 +629,12 @@ function lineItems(laborHours: number): InvoiceLineItem[] {
   ];
 }
 
-/** INV-YYMM-NNNN, the format the one-click invoice uses. */
-const invoiceNumber = (iso: string, n: number) => {
-  const d = new Date(iso);
-  return `INV-${String(d.getFullYear()).slice(2)}${String(d.getMonth() + 1).padStart(2, "0")}-${n}`;
-};
-
 function seedInvoice(id: string, job: Job, n: number, status: Invoice["status"]): Invoice {
   const items = lineItems(job.laborHours ?? 2);
   const created = job.completedAt ?? stamp.createdAt;
   return {
     id,
-    invoiceNumber: invoiceNumber(created, n),
+    invoiceNumber: fixedNumber("INV", new Date(created), n),
     jobId: job.id,
     customerId: job.customerId,
     lineItems: items,
@@ -647,3 +652,6 @@ export const SEED_INVOICES: Invoice[] = [
   seedInvoice("inv-1", jobById("job-5"), 4127, "Paid"),
   seedInvoice("inv-2", jobById("job-19"), 4583, "Sent"),
 ];
+
+/** The seeded job number for `job-<n>` (tests use this instead of hard-coding numbers). */
+export const seedJobNumber = (id: string): string => SEED_JOBS.find((j) => j.id === id)!.jobNumber!;

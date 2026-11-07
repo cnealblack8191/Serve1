@@ -27,7 +27,7 @@ import {
 import { jobLabel } from "./board";
 
 const SELECT_CLASS =
-  "h-9 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring";
+  "h-9 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-ring";
 const LENGTHS = [0.5, 1, 1.5, 2, 2.5, 3, 4, 5, 6, 8];
 const DEFAULT_SLOT = 8 * 60;
 
