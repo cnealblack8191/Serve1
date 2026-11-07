@@ -243,6 +243,39 @@ describe("import plan", () => {
     assert.equal(by["Light swap"]!.status, "Complete");
   });
 
+  it("a heading row with tasks under it is not imported as a job", () => {
+    const tasks = {
+      name: "Tasks",
+      rows: [
+        { r: 1, level: 0, cells: ["Task", "Status", "Health"] },
+        { r: 2, level: 0, cells: ["Campus projects", null, null] },
+        { r: 3, level: 1, cells: ["Panel upgrade", "Not Started", "Green"] },
+      ],
+    };
+    const plan = sm.buildImportPlan([{ file: "t.xlsx", sheets: [tasks] }]);
+    assert.deepEqual(
+      plan.jobs.map((j) => j.description),
+      ["Panel upgrade"],
+    );
+  });
+
+  it("close dates come from the sheet or stay unknown, never a made-up year", () => {
+    const sales = readCsv(
+      "Opportunity,Sales Stage\nPanel upgrade,1 Prospect\nOld loss,Closed Lost\n",
+    );
+    const tasks = readCsv(
+      "Task,Status,Health,End Date\nPanel upgrade,Complete,Green,11/6/26\n",
+      "Tasks",
+    );
+    const plan = sm.buildImportPlan([
+      { file: "s.csv", sheets: [sales] },
+      { file: "t.csv", sheets: [tasks] },
+    ]);
+    const by = Object.fromEntries(plan.opportunities.map((o) => [o.data.name, o.data]));
+    assert.equal(by["Panel upgrade"]!.closedAt, "2026-11-06T12:00:00.000Z");
+    assert.equal(by["Old loss"]!.closedAt, null);
+  });
+
   it("a retry after a partial run re-links the job instead of making another", async () => {
     mem.clear();
     const b = createLocalBackend();
