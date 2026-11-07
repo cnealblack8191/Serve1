@@ -347,6 +347,26 @@ export function buildImportPlan(files: { file: string; sheets: Sheet[] }[]): Imp
     }
   }
 
+  /**
+   * Choose the sales row a service or task row belongs to. Same-name rows of different
+   * contracts are told apart by contract; when that still leaves several, the first is used
+   * and the row is listed under "Check these" so nobody's numbers move silently.
+   */
+  const pickMatch = (
+    candidates: PlannedOpportunity[],
+    contract: CustomerContract | null,
+    where: string,
+  ): PlannedOpportunity | undefined => {
+    if (candidates.length <= 1) return candidates[0];
+    const same = contract ? candidates.filter((o) => o.data.customerContract === contract) : [];
+    if (same.length === 1) return same[0];
+    if (contract && same.length === 0) return undefined; // a different contract's work
+    plan.warnings.push(
+      `${where}: "${candidates[0]!.data.name}" matches ${candidates.length} sales rows; linked to the first (${candidates[0]!.sources[0]}). Check it.`,
+    );
+    return (same[0] ?? candidates[0])!;
+  };
+
   // 1. Sales Pipeline
   const byName = new Map<string, PlannedOpportunity[]>();
   const index = (o: PlannedOpportunity) => {
@@ -412,8 +432,12 @@ export function buildImportPlan(files: { file: string; sheets: Sheet[] }[]): Imp
     for (const { row, parents } of sheet.rows) {
       const name = text(row.get("Service Opportunity"));
       if (!name) continue;
-      const match = (byName.get(matchName(name)) ?? []).find((o) => !taken.has(o));
       const contract = contractFrom([...parents, text(row.get("Opportunity Type")), name]);
+      const match = pickMatch(
+        (byName.get(matchName(name)) ?? []).filter((o) => !taken.has(o)),
+        contract,
+        `${sheet.label} row ${row.r}`,
+      );
       const jobStageText = text(row.get("Job Stage"));
       const completedOn = date(row.get("Date Completed"));
       const jobStatus = cleanJobStatus(jobStageText) ?? (completedOn ? "Complete" : null);
@@ -520,7 +544,11 @@ export function buildImportPlan(files: { file: string; sheets: Sheet[] }[]): Imp
         text(row.get("Description")),
         assigned ? `Assigned to: ${assigned}` : null,
       );
-      const match = (byName.get(matchName(name)) ?? [])[0];
+      const match = pickMatch(
+        byName.get(matchName(name)) ?? [],
+        contract === "NonContract" ? null : contract,
+        `${sheet.label} row ${row.r}`,
+      );
       if (match) {
         const base: PlannedJob = match.job ?? {
           key: `job:${match.key}`,
