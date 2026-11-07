@@ -243,7 +243,9 @@ function rowsOf(sheet: Sheet, h: { index: number; headers: string[] }): Row[] {
  */
 function withParents(rows: Row[], primary: string) {
   const out: { row: Row; parents: string[] }[] = [];
-  const stack: { level: number; text: string }[] = [];
+  // `section`: a flat heading (no indented rows, e.g. in a CSV) that applies to the rows below
+  // it until the next heading, rather than only to indented children.
+  const stack: { level: number; text: string; section: boolean }[] = [];
   rows.forEach((row, i) => {
     const filled = row.raw.cells.filter((c) => c !== null && c !== "").length;
     const name = text(row.get(primary));
@@ -253,9 +255,15 @@ function withParents(rows: Row[], primary: string) {
     // A name-only row is a heading when it names a contract or work type; otherwise it is an
     // incomplete record and is kept (never dropped silently).
     const headingOnly = !!name && filled === 1 && (!!cleanContract(name) || !!cleanType(name));
-    while (stack.length && stack[stack.length - 1]!.level >= row.level) stack.pop();
+    const top = () => stack[stack.length - 1];
+    while (
+      stack.length &&
+      (top()!.level > row.level ||
+        (top()!.level === row.level && (!top()!.section || hasChildren || headingOnly)))
+    )
+      stack.pop();
     if (hasChildren || headingOnly) {
-      if (name) stack.push({ level: row.level, text: name });
+      if (name) stack.push({ level: row.level, text: name, section: !hasChildren });
       // A name-only row with rows under it is a heading too, never a record of its own.
       if (headingOnly || filled === 1) return;
     }
