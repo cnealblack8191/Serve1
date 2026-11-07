@@ -195,6 +195,36 @@ describe("import plan", () => {
     assert.equal(new Set(plan.opportunities.map((o) => o.key)).size, 2);
   });
 
+  it("same-name rows of different contracts go to the right sales row", () => {
+    const sales = readCsv(
+      "Opportunity,Opportunity Type,Sales Stage\nPanel upgrade,DeKalb Service,1 Prospect\nPanel upgrade,Gwinnett,1 Prospect\n",
+    );
+    const service = readCsv(
+      "Service Opportunity,Opportunity Type,Quoted Amount $\nPanel upgrade,Gwinnett,50000\n",
+    );
+    const plan = sm.buildImportPlan([
+      { file: "s.csv", sheets: [sales] },
+      { file: "v.csv", sheets: [service] },
+    ]);
+    const byContract = Object.fromEntries(
+      plan.opportunities.map((o) => [o.data.customerContract, o]),
+    );
+    assert.equal(byContract["GwinnettSchools"]!.data.quotedAmount, 50000);
+    assert.equal(byContract["DeKalbGov"]!.data.quotedAmount, null);
+  });
+
+  it("an ambiguous same-name match is listed under Check these", () => {
+    const sales = readCsv(
+      "Opportunity,Sales Stage\nPanel upgrade,1 Prospect\nPanel upgrade,2 Assessment\n",
+    );
+    const tasks = readCsv("Task,Status,Health\nPanel upgrade,Not Started,Green\n", "Tasks");
+    const plan = sm.buildImportPlan([
+      { file: "s.csv", sheets: [sales] },
+      { file: "t.csv", sheets: [tasks] },
+    ]);
+    assert.ok(plan.warnings.some((w) => w.includes("matches 2 sales rows")));
+  });
+
   it("a retry after a partial run re-links the job instead of making another", async () => {
     mem.clear();
     const b = createLocalBackend();
