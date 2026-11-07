@@ -112,3 +112,31 @@ test("the owner who opens /dispatch directly is sent to the Dashboard", async ({
   await expect(page).toHaveURL(/\/$/);
   await expect(page.getByRole("heading", { name: "Dispatch Board" })).toHaveCount(0);
 });
+
+test("assigning over an existing job warns about double booking", async ({ page }) => {
+  await openBoard(page);
+  await queue(page)
+    .getByRole("button", { name: `Assign ${jobNo(1)}` })
+    .click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByLabel("Tech").selectOption({ label: "Tara Tech" });
+  await dialog.getByLabel("Start time").selectOption({ label: "9:00 AM" }); // Tara has job-2 9-11
+  await expect(dialog.getByRole("alert")).toContainText("Double booking");
+  await expect(dialog.getByRole("alert")).toContainText(jobNo(2));
+  await dialog.getByLabel("Start time").selectOption({ label: "2:00 PM" });
+  await expect(dialog.getByRole("alert")).toHaveCount(0);
+  await dialog.getByLabel("Start time").selectOption({ label: "10:00 AM" });
+  await dialog.getByRole("button", { name: "Schedule anyway" }).click();
+  await expect(dialog).toBeHidden();
+  await expect(
+    techColumn(page, "Tara Tech").getByRole("article", { name: jobRe(1) }),
+  ).toBeVisible();
+});
+
+test("the needs-attention queue lists stuck work and links to the job", async ({ page }) => {
+  await openBoard(page);
+  const attention = page.getByRole("region", { name: "Needs attention" });
+  await expect(attention).toContainText("Complete, waiting for review");
+  await attention.getByRole("link", { name: new RegExp(jobNo(4)) }).click();
+  await expect(page).toHaveURL(/\/jobs\/job-4$/);
+});

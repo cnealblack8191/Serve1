@@ -22,6 +22,7 @@ import {
   useCurrentUser,
   useJobMove,
   useJobMutations,
+  useJobs,
   useSites,
   useTechNames,
   type Job,
@@ -57,6 +58,7 @@ export function JobActions({ job }: { job: Job }) {
   const move = useJobMove();
   const { update } = useJobMutations();
   const techs = useTechNames();
+  const allJobs = useJobs();
   const [reason, setReason] = useState<ReasonAction | null>(null);
   const [assigning, setAssigning] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -119,6 +121,7 @@ export function JobActions({ job }: { job: Job }) {
         onSave={(r) => reason && go(reason, r)}
       />
       <AssignDialog
+        jobs={allJobs.data ?? []}
         job={assigning ? job : null}
         techs={techs.data ?? []}
         day={job.scheduledStart ? new Date(job.scheduledStart) : new Date()}

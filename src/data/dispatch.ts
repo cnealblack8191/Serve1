@@ -119,3 +119,69 @@ export function fromDateInput(s: string): Date | null {
   if (!m) return null;
   return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
 }
+
+/**
+ * Other jobs the tech already has that overlap [start, end): a double booking. Cancelled jobs
+ * free their time; the job being moved is ignored. Used to warn, never to block.
+ */
+export function findOverlaps(
+  jobs: Job[],
+  jobId: string,
+  techIdentityId: string,
+  start: Date,
+  end: Date,
+): Job[] {
+  return jobs.filter((j) => {
+    if (j.id === jobId || j.assignedTechId !== techIdentityId || j.status === "Cancelled")
+      return false;
+    if (!j.scheduledStart) return false;
+    const s = new Date(j.scheduledStart).getTime();
+    const e = j.scheduledEnd
+      ? new Date(j.scheduledEnd).getTime()
+      : s + DISPATCH_DEFAULT_HOURS * 3_600_000;
+    return s < end.getTime() && e > start.getTime();
+  });
+}
+
+export type AttentionReason = "late" | "onHold" | "sentBack" | "urgentUnassigned" | "toReview";
+
+export const ATTENTION_REASON_LABEL: Record<AttentionReason, string> = {
+  late: "Late: should have started",
+  onHold: "On hold",
+  sentBack: "Sent back by the office",
+  urgentUnassigned: "Urgent, not scheduled",
+  toReview: "Complete, waiting for review",
+};
+
+/**
+ * The dispatcher's "needs attention" queue: work that is stuck or at risk. A job appears once,
+ * under its most pressing reason. `now` is passed in for tests.
+ */
+export function dispatchAttention(
+  jobs: Job[],
+  now = new Date(),
+): { job: Job; reason: AttentionReason }[] {
+  const graceMs = 30 * 60_000;
+  const out: { job: Job; reason: AttentionReason }[] = [];
+  for (const j of jobs) {
+    let reason: AttentionReason | null = null;
+    if (
+      (j.status === "Scheduled" || j.status === "EnRoute") &&
+      j.scheduledStart &&
+      new Date(j.scheduledStart).getTime() + graceMs < now.getTime()
+    )
+      reason = "late";
+    else if (j.status === "OnHold") reason = "onHold";
+    else if (j.status === "InProgress" && j.reviewNote) reason = "sentBack";
+    else if (
+      j.status === "New" &&
+      !j.assignedTechId &&
+      (j.priority === "Emergency" || j.priority === "High")
+    )
+      reason = "urgentUnassigned";
+    else if (j.status === "Complete") reason = "toReview";
+    if (reason) out.push({ job: j, reason });
+  }
+  const order: AttentionReason[] = ["late", "urgentUnassigned", "onHold", "sentBack", "toReview"];
+  return out.sort((a, b) => order.indexOf(a.reason) - order.indexOf(b.reason));
+}
