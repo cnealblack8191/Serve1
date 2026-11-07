@@ -11,12 +11,21 @@ import type {
 export const JOB_STATUS_LABEL: Record<JobStatus, string> = {
   New: "New",
   Scheduled: "Scheduled",
+  EnRoute: "En route",
   InProgress: "In Progress",
+  OnHold: "On hold",
   Complete: "Complete",
+  Reviewed: "Reviewed",
   Invoiced: "Invoiced",
+  Paid: "Paid",
+  Cancelled: "Cancelled",
 };
 
-/** Tailwind classes for badges and board cards. Gray, blue, orange, green, purple. */
+/**
+ * Tailwind classes for badges and board cards. SPEC section 12 colors (gray, blue, orange,
+ * green, purple) keep their meaning; Phase 3 adds cyan (en route), yellow (on hold),
+ * teal (reviewed), fuchsia (paid) and red (cancelled). Every badge also shows its label.
+ */
 export const JOB_STATUS_CLASS: Record<JobStatus, string> = {
   New: "bg-gray-100 text-gray-800 ring-gray-300 dark:bg-gray-800 dark:text-gray-100 dark:ring-gray-600",
   Scheduled:
@@ -27,6 +36,15 @@ export const JOB_STATUS_CLASS: Record<JobStatus, string> = {
     "bg-green-100 text-green-800 ring-green-300 dark:bg-green-900 dark:text-green-100 dark:ring-green-700",
   Invoiced:
     "bg-purple-100 text-purple-800 ring-purple-300 dark:bg-purple-900 dark:text-purple-100 dark:ring-purple-700",
+  EnRoute:
+    "bg-cyan-100 text-cyan-900 ring-cyan-300 dark:bg-cyan-900 dark:text-cyan-100 dark:ring-cyan-700",
+  OnHold:
+    "bg-yellow-100 text-yellow-900 ring-yellow-400 dark:bg-yellow-900 dark:text-yellow-100 dark:ring-yellow-700",
+  Reviewed:
+    "bg-teal-100 text-teal-900 ring-teal-300 dark:bg-teal-900 dark:text-teal-100 dark:ring-teal-700",
+  Paid: "bg-fuchsia-100 text-fuchsia-900 ring-fuchsia-300 dark:bg-fuchsia-900 dark:text-fuchsia-100 dark:ring-fuchsia-700",
+  Cancelled:
+    "bg-red-50 text-red-800 ring-red-300 line-through dark:bg-red-950 dark:text-red-200 dark:ring-red-800",
 };
 
 /** Solid color for board cards and chart segments. */
@@ -36,6 +54,11 @@ export const JOB_STATUS_HEX: Record<JobStatus, string> = {
   InProgress: "#ea580c",
   Complete: "#16a34a",
   Invoiced: "#7c3aed",
+  EnRoute: "#0891b2",
+  OnHold: "#ca8a04",
+  Reviewed: "#0d9488",
+  Paid: "#c026d3",
+  Cancelled: "#dc2626",
 };
 
 export const PRIORITY_LABEL: Record<JobPriority, string> = {

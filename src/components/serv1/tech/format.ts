@@ -1,8 +1,8 @@
-import type { Job } from "@/data";
+import { ACTIVE_STATUSES, type Job } from "@/data";
 
 /** Small helpers shared by the tech screens. */
 
-export const OPEN_STATUSES: Job["status"][] = ["New", "Scheduled", "InProgress"];
+export const OPEN_STATUSES: Job["status"][] = ACTIVE_STATUSES;
 
 export function isToday(iso: string | null, now = new Date()): boolean {
   if (!iso) return false;

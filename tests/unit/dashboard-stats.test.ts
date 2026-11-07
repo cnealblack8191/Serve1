@@ -53,11 +53,11 @@ describe("dashboardStats", () => {
   const invoices = [inv("e", "Draft", 100), inv("f", "Sent", 250), inv("g", "Paid", 400)];
   const s = dashboardStats(jobs, invoices, now);
 
-  it("counts only New, Scheduled and In Progress as open", () => {
+  it("counts only unfinished work as open", () => {
     assert.equal(s.open, 3);
     assert.deepEqual(
       s.byStatus.map((b) => b.status),
-      ["New", "Scheduled", "InProgress"],
+      ["New", "Scheduled", "EnRoute", "InProgress", "OnHold"],
     );
   });
   it("counts Complete jobs with no invoice as waiting to invoice", () => {

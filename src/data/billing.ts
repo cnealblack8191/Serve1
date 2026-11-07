@@ -58,7 +58,7 @@ export async function createInvoiceFromJob(job: Job): Promise<Invoice> {
     }
   }
   const current = await backend().jobs.get(job.id);
-  if (current && current.status === "Complete") {
+  if (current && (current.status === "Complete" || current.status === "Reviewed")) {
     await backend().jobs.update(job.id, { status: "Invoiced" });
   }
   return invoice;
@@ -68,6 +68,39 @@ export function useCreateInvoiceFromJob() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: createInvoiceFromJob,
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: keys.table("invoices") });
+      void qc.invalidateQueries({ queryKey: keys.table("jobs") });
+    },
+  });
+}
+
+/**
+ * Sets an invoice's status. When it is paid, its job moves to Paid too. Owners may change only
+ * the invoice (not jobs), so for them the job update is skipped and stays Invoiced until the
+ * office next touches it.
+ */
+export async function setInvoiceStatus(
+  invoice: Invoice,
+  status: Invoice["status"],
+): Promise<Invoice> {
+  const updated = await backend().invoices.update(invoice.id, { status });
+  if (status === "Paid") {
+    const job = await backend().jobs.get(invoice.jobId);
+    if (job && job.status === "Invoiced") {
+      await backend()
+        .jobs.update(job.id, { status: "Paid" })
+        .catch(() => undefined);
+    }
+  }
+  return updated;
+}
+
+export function useSetInvoiceStatus() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (v: { invoice: Invoice; status: Invoice["status"] }) =>
+      setInvoiceStatus(v.invoice, v.status),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: keys.table("invoices") });
       void qc.invalidateQueries({ queryKey: keys.table("jobs") });

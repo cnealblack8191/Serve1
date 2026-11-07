@@ -23,7 +23,8 @@ function Page() {
 
   // A Complete job is still waiting even if an earlier click saved the invoice but not the
   // job status; clicking again finishes the job (createInvoiceFromJob is safe to repeat).
-  const ready = (jobs.data ?? []).filter((j) => j.status === "Complete");
+  // Billing screens are unchanged for now (owner decision pending); reviewed jobs are ready too.
+  const ready = (jobs.data ?? []).filter((j) => j.status === "Complete" || j.status === "Reviewed");
 
   const rows = useMemo(() => {
     const q = search.trim().toLowerCase();

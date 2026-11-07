@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 
 import { DataRow, EmptyState, PageHeader, SectionHeading } from "@/components/eci/primitives";
 import { JobStatusBadge } from "@/components/serv1/office/JobStatusBadge";
+import { JobActions } from "@/components/serv1/office/JobActions";
 import { JobTracking } from "@/components/serv1/office/JobTracking";
 import { Button } from "@/components/ui/button";
 import {
@@ -89,12 +90,29 @@ function Page() {
               View invoice
             </Link>
           </Button>
-        ) : isOffice && j.status === "Complete" ? (
+        ) : isOffice && (j.status === "Complete" || j.status === "Reviewed") ? (
           <Button asChild>
             <Link to="/invoices">Create invoice</Link>
           </Button>
         ) : null}
       </PageHeader>
+
+      <JobActions job={j} />
+
+      {j.status === "OnHold" || j.status === "Cancelled" ? (
+        <p className="eci-card p-4 text-sm" role="status">
+          <span className="font-semibold">{j.status === "OnHold" ? "On hold" : "Cancelled"}:</span>{" "}
+          {j.holdReason ?? "no reason given"}
+        </p>
+      ) : null}
+      {j.reviewNote ? (
+        <p className="eci-card p-4 text-sm" role="status">
+          <span className="font-semibold">Sent back:</span> {j.reviewNote}
+        </p>
+      ) : null}
+      {j.reviewedAt ? (
+        <p className="text-sm text-muted-foreground">Reviewed {fmt(j.reviewedAt)}</p>
+      ) : null}
 
       <section className="eci-card grid gap-x-8 px-5 py-2 md:grid-cols-2">
         <DataRow

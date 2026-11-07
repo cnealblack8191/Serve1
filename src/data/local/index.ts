@@ -21,6 +21,7 @@ import {
   SEED_USERS,
 } from "./seed";
 import { LocalFileStore } from "./file-store";
+import { TECH_SETTABLE } from "../jobflow";
 
 /**
  * Local demo backend: runs entirely in the browser, persisted to localStorage,
@@ -257,11 +258,27 @@ export function createLocalBackend(): Backend {
   const techOwns = (me: AuthUser | null, techId: string | null) =>
     isTech(me) && techId !== null && techId === me?.identityId;
 
+  /** Fields a tech may change on their own job: the work itself, never the schedule or billing. */
+  const TECH_FIELDS = new Set([
+    "status",
+    "startedAt",
+    "completedAt",
+    "notes",
+    "laborHours",
+    "holdReason",
+  ]);
   const jobRules: Rules<Job> = {
     read: (job, me) => isOffice(me) || me?.role === "Owner" || techOwns(me, job.assignedTechId),
-    // Office creates and edits everything; a tech may update (not create or delete) their own jobs.
-    write: (job, me, op) =>
-      isOffice(me) || (op === "update" && job !== null && techOwns(me, job.assignedTechId)),
+    // Office creates and edits everything; a tech may update (not create or delete) their own
+    // jobs, only the work fields, and only to a status a tech may set (src/data/jobflow.ts).
+    write: (job, me, op, patch) => {
+      if (isOffice(me)) return true;
+      if (op !== "update" || job === null || !techOwns(me, job.assignedTechId)) return false;
+      const p = (patch ?? {}) as Partial<Job>;
+      if (!Object.keys(p).every((k) => TECH_FIELDS.has(k) || k === "assignedTechId")) return false;
+      if ("assignedTechId" in p && p.assignedTechId !== job.assignedTechId) return false;
+      return p.status === undefined || p.status === job.status || TECH_SETTABLE.includes(p.status);
+    },
   };
 
   /** Attachments and signatures: tagged with the job's tech; a tech reads and adds only their own. */

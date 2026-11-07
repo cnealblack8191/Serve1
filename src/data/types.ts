@@ -6,8 +6,39 @@
 export type Role = "Admin" | "Office" | "Tech" | "Owner";
 export const ROLES: Role[] = ["Admin", "Office", "Tech", "Owner"];
 
-export type JobStatus = "New" | "Scheduled" | "InProgress" | "Complete" | "Invoiced";
-export const JOB_STATUSES: JobStatus[] = ["New", "Scheduled", "InProgress", "Complete", "Invoiced"];
+/**
+ * Job life cycle (Phase 3): New -> Scheduled -> En route -> In progress (-> On hold, with a
+ * reason, and back) -> Complete -> Reviewed (office approves, or sends back to In progress)
+ * -> Invoiced -> Paid. Cancelled can happen any time before Invoiced.
+ */
+export type JobStatus =
+  | "New"
+  | "Scheduled"
+  | "EnRoute"
+  | "InProgress"
+  | "OnHold"
+  | "Complete"
+  | "Reviewed"
+  | "Invoiced"
+  | "Paid"
+  | "Cancelled";
+export const JOB_STATUSES: JobStatus[] = [
+  "New",
+  "Scheduled",
+  "EnRoute",
+  "InProgress",
+  "OnHold",
+  "Complete",
+  "Reviewed",
+  "Invoiced",
+  "Paid",
+  "Cancelled",
+];
+/** Work not finished yet. */
+export const ACTIVE_STATUSES: JobStatus[] = ["New", "Scheduled", "EnRoute", "InProgress", "OnHold"];
+/** Work done on site (whatever the billing step). */
+export const FINISHED_STATUSES: JobStatus[] = ["Complete", "Reviewed", "Invoiced", "Paid"];
+export const isFinished = (s: JobStatus) => FINISHED_STATUSES.includes(s);
 
 export type JobPriority = "Low" | "Normal" | "High" | "Emergency";
 export const JOB_PRIORITIES: JobPriority[] = ["Low", "Normal", "High", "Emergency"];
@@ -113,6 +144,11 @@ export interface Job extends BaseRecord {
   completedAt: string | null;
   notes: string | null;
   laborHours: number | null;
+  /** Why the job is on hold (required for On hold) or was cancelled. */
+  holdReason: string | null;
+  /** Office review: the note when a job is sent back, and when it was approved. */
+  reviewNote: string | null;
+  reviewedAt: string | null;
   // ---- Business Services tracking (Phase 2). Never money: techs can read jobs. ----
   /** The opportunity this job was won from (its quote, PO and work order numbers live there). */
   opportunityId: string | null;
@@ -132,6 +168,9 @@ export interface Job extends BaseRecord {
 
 /** Tracking defaults for a new job. */
 export const JOB_TRACKING_DEFAULTS = {
+  holdReason: null,
+  reviewNote: null,
+  reviewedAt: null,
   opportunityId: null,
   workType: null,
   health: null,

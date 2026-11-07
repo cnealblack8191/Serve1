@@ -1,4 +1,4 @@
-import { OPEN_STAGES, type Job, type Opportunity } from "@/data";
+import { OPEN_STAGES, isFinished, type Job, type Opportunity } from "@/data";
 
 import { todayIso } from "./format";
 
@@ -36,7 +36,7 @@ export function oppNeedsAttention(o: Opportunity, kind: OppAttention, today = to
   }
 }
 
-const finished = (j: Job) => j.status === "Complete" || j.status === "Invoiced";
+const finished = (j: Job) => isFinished(j.status);
 
 /** `photoJobIds`: jobs that have at least one photo in the app. */
 export function jobNeedsAttention(
@@ -47,7 +47,7 @@ export function jobNeedsAttention(
 ) {
   switch (kind) {
     case "pastEndDate":
-      return !finished(j) && !!j.endDate && j.endDate < today;
+      return !finished(j) && j.status !== "Cancelled" && !!j.endDate && j.endDate < today;
     case "noPhotos":
       return finished(j) && !j.completionPhotosOnFile && !photoJobIds.has(j.id);
   }

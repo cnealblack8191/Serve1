@@ -6,6 +6,7 @@ import { money } from "@/components/serv1/billing/format";
 import { OpenJobsChart } from "@/components/serv1/billing/OpenJobsChart";
 import { dashboardStats } from "@/components/serv1/billing/dashboardStats";
 import { BusinessDashboard } from "@/components/serv1/sales/BusinessDashboard";
+import { KeyNumber } from "@/components/serv1/sales/DashboardParts";
 import { useCurrentUser, useInvoices, useJobs, useUsers } from "@/data";
 import { canSeeMoney, OFFICE_VIEW, requireRole } from "@/lib/access";
 
@@ -48,13 +49,19 @@ function Page() {
 
       <SectionHeading title="Field work" />
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
         <SummaryCard label="Completed today" value={String(stats.completedToday)} />
         <SummaryCard label="Completed this week" value={String(stats.completedThisWeek)} />
         <SummaryCard
           label="Open jobs"
           value={String(stats.open)}
           hint="New, scheduled or in progress"
+        />
+        <KeyNumber
+          label="To review"
+          value={String((jobs.data ?? []).filter((j) => j.status === "Complete").length)}
+          hint="Complete, office to approve or send back"
+          to={{ to: "/jobs", search: { status: "Complete" } }}
         />
         <SummaryCard
           label="Waiting to invoice"

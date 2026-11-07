@@ -55,6 +55,7 @@ export function jobsForTechOnDay(jobs: Job[], techIdentityId: string, day: Date)
     .filter(
       (j) =>
         j.assignedTechId === techIdentityId &&
+        j.status !== "Cancelled" &&
         !!j.scheduledStart &&
         sameLocalDay(new Date(j.scheduledStart), day),
     )

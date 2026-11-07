@@ -9,12 +9,15 @@ import { directionsUrl, telUrl, timeRange, dayLabel } from "@/components/serv1/t
 import { JobNotes } from "@/components/serv1/tech/JobNotes";
 import { JobPhotos } from "@/components/serv1/tech/JobPhotos";
 import { JobStatusBadge, PriorityTag } from "@/components/serv1/tech/JobStatusBadge";
+import { HoldDialog } from "@/components/serv1/tech/HoldDialog";
 import { SignatureStep } from "@/components/serv1/tech/SignatureStep";
 import { Button } from "@/components/ui/button";
 import {
+  isFinished,
   useCustomers,
   useFileUrl,
   useJob,
+  useJobMove,
   useJobMutations,
   useJobSignature,
   useSites,
@@ -40,6 +43,8 @@ function JobScreen({ id }: { id: string }) {
   const customers = useCustomers();
   const sites = useSites();
   const { update } = useJobMutations();
+  const move = useJobMove();
+  const [holding, setHolding] = useState(false);
   const signature = useJobSignature(id);
   const signatureUrl = useFileUrl(signature.data?.storagePath);
   const [step, setStep] = useState<Step>("detail");
@@ -71,14 +76,11 @@ function JobScreen({ id }: { id: string }) {
     );
   }
 
-  const notStarted = j.status === "New" || j.status === "Scheduled";
+  const notStarted = j.status === "New" || j.status === "Scheduled" || j.status === "EnRoute";
   const working = j.status === "InProgress";
-
-  const start = () =>
-    update.mutate({
-      id: j.id,
-      patch: { status: "InProgress", startedAt: new Date().toISOString() },
-    });
+  const onHold = j.status === "OnHold";
+  const doMove = (action: "enRoute" | "start" | "resume") => move.mutate({ job: j, action });
+  const start = () => doMove("start");
 
   return (
     <>
@@ -143,9 +145,23 @@ function JobScreen({ id }: { id: string }) {
         <p className="-mt-2 text-sm text-muted-foreground">Customer phone: {customer.phone}</p>
       ) : null}
 
-      {working || j.status === "Complete" || j.status === "Invoiced" ? (
-        <JobPhotos job={j} canAdd={working} />
+      {onHold ? (
+        <section
+          className="rounded-md border border-yellow-500 bg-yellow-50 p-4 text-base text-yellow-950 dark:bg-yellow-950 dark:text-yellow-50"
+          role="status"
+        >
+          <p className="font-semibold">On hold</p>
+          {j.holdReason ? <p>{j.holdReason}</p> : null}
+        </section>
       ) : null}
+      {j.reviewNote && working ? (
+        <section className="rounded-md border border-border bg-muted p-4 text-base" role="status">
+          <p className="font-semibold">Sent back by the office</p>
+          <p>{j.reviewNote}</p>
+        </section>
+      ) : null}
+
+      {working || onHold || isFinished(j.status) ? <JobPhotos job={j} canAdd={working} /> : null}
 
       {working ? <JobNotes job={j} /> : null}
       {!working && j.notes ? (
@@ -172,16 +188,55 @@ function JobScreen({ id }: { id: string }) {
         </section>
       ) : null}
 
-      {update.isError ? (
+      {update.isError || move.isError ? (
         <p className="text-sm text-red-700 dark:text-red-400" role="alert">
           Could not update the job. Try again.
         </p>
       ) : null}
 
+      {j.status === "Scheduled" ? (
+        <Button
+          variant="outline"
+          className="h-12 w-full text-base"
+          onClick={() => doMove("enRoute")}
+          disabled={move.isPending}
+        >
+          On my way
+        </Button>
+      ) : null}
+      {working ? (
+        <Button
+          variant="outline"
+          className="h-12 w-full text-base"
+          onClick={() => setHolding(true)}
+          disabled={move.isPending}
+        >
+          Put on hold
+        </Button>
+      ) : null}
+      <HoldDialog
+        open={holding}
+        onOpenChange={setHolding}
+        busy={move.isPending}
+        onSave={(reason) =>
+          move.mutate({ job: j, action: "hold", reason }, { onSuccess: () => setHolding(false) })
+        }
+      />
+
       {notStarted ? (
         <BottomAction>
-          <Button className={PRIMARY_BUTTON} onClick={start} disabled={update.isPending}>
-            {update.isPending ? "Starting…" : "Start Job"}
+          <Button className={PRIMARY_BUTTON} onClick={start} disabled={move.isPending}>
+            {move.isPending ? "Saving…" : "Start Job"}
+          </Button>
+        </BottomAction>
+      ) : onHold ? (
+        <BottomAction>
+          <Button
+            className={PRIMARY_BUTTON}
+            onClick={() => doMove("resume")}
+            disabled={move.isPending}
+          >
+            Resume job
           </Button>
         </BottomAction>
       ) : working ? (

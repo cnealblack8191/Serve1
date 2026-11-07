@@ -43,6 +43,7 @@ import { requireRole, OFFICE_VIEW } from "@/lib/access";
 interface Search {
   attention?: JobAttention;
   type?: WorkType;
+  status?: JobStatus;
 }
 
 export const Route = createFileRoute("/_authenticated/jobs/")({
@@ -54,6 +55,9 @@ export const Route = createFileRoute("/_authenticated/jobs/")({
         ? s["attention"]
         : undefined,
     type: WORK_TYPES.includes(s["type"] as WorkType) ? (s["type"] as WorkType) : undefined,
+    status: JOB_STATUSES.includes(s["status"] as JobStatus)
+      ? (s["status"] as JobStatus)
+      : undefined,
   }),
   component: Page,
 });
@@ -70,7 +74,13 @@ function Page() {
   const customers = useCustomers();
   const techs = useTechNames();
   const [q, setQ] = useState("");
-  const [status, setStatus] = useState<JobStatus | "all">("all");
+  const status: JobStatus | "all" = search.status ?? "all";
+  const setStatus = (v: JobStatus | "all") =>
+    void navigate({
+      to: "/jobs",
+      search: { ...search, status: v === "all" ? undefined : v },
+      replace: true,
+    });
 
   const customerName = new Map((customers.data ?? []).map((c) => [c.id, c.name]));
   const techName = new Map((techs.data ?? []).map((t) => [t.identityId, t.name]));

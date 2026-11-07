@@ -27,7 +27,18 @@ const office = ["Admin", "Office"];
 const readers = ["Admin", "Office", "Owner"];
 
 const schema = a.schema({
-  JobStatus: a.enum(["New", "Scheduled", "InProgress", "Complete", "Invoiced"]),
+  JobStatus: a.enum([
+    "New",
+    "Scheduled",
+    "EnRoute",
+    "InProgress",
+    "OnHold",
+    "Complete",
+    "Reviewed",
+    "Invoiced",
+    "Paid",
+    "Cancelled",
+  ]),
   JobPriority: a.enum(["Low", "Normal", "High", "Emergency"]),
   InvoiceStatus: a.enum(["Draft", "Sent", "Paid"]),
   UserRole: a.enum(["Admin", "Office", "Tech", "Owner"]),
@@ -129,6 +140,10 @@ const schema = a.schema({
       completedAt: a.datetime(),
       notes: a.string(),
       laborHours: a.float(),
+      // Phase 3: on-hold or cancel reason, and the office review.
+      holdReason: a.string(),
+      reviewNote: a.string(),
+      reviewedAt: a.datetime(),
       // Business Services tracking (Phase 2). No money here: techs read their jobs.
       opportunityId: a.id(),
       workType: a.ref("WorkType"),
