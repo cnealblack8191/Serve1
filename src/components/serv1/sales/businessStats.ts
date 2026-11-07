@@ -18,7 +18,7 @@ import {
   type JobAttention,
   type OppAttention,
 } from "./attention";
-import { todayIso } from "./format";
+import { NO_REP, todayIso } from "./format";
 
 /** One bar in a dashboard list; `search` opens the matching Opportunities list. */
 export interface Bar {
@@ -124,7 +124,7 @@ export function businessStats(
     wonByContract: CUSTOMER_CONTRACTS.map((c: CustomerContract) => ({
       label: CONTRACT_LABEL[c],
       count: won.filter((o) => o.customerContract === c).length,
-      search: withSearch({ contract: c, stage: "ClosedWon" }),
+      search: withSearch({ contract: c, stage: "ClosedWon", closedYear: year }),
     })).filter((b) => b.count > 0),
     health: (type ? [type] : WORK_TYPES).map((t) => {
       const active = jobs.filter((j) => j.workType === t && ACTIVE_JOB.has(j.status));
@@ -145,7 +145,7 @@ export function businessStats(
     byRep: bars(
       open.map((o) => ({
         label: o.salesRep ?? "No rep",
-        search: withSearch(o.salesRep ? { rep: o.salesRep } : {}),
+        search: withSearch({ rep: o.salesRep ?? NO_REP }),
       })),
     ),
   };

@@ -149,6 +149,15 @@ describe("businessStats", () => {
     assert.deepEqual(hv.byStage[0]!.search, { stage: "Prospect", type: "HighVoltage" });
   });
 
+  it("drill-down links carry the same filters as the counts", () => {
+    assert.deepEqual(s.wonByContract[0]!.search, {
+      contract: "DeKalbGov",
+      stage: "ClosedWon",
+      closedYear: "2026",
+    });
+    assert.deepEqual(s.byRep.find((b) => b.label === "No rep")!.search, { rep: "none" });
+  });
+
   it("open by rep", () => {
     assert.deepEqual(
       s.byRep.map((b) => [b.label, b.count]),

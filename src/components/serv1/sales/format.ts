@@ -37,3 +37,6 @@ export const MONEY_FIELDS: {
   { key: "probability", label: "Probability %", kind: "pct" },
   { key: "hoursQuoted", label: "Hours quoted", kind: "hours" },
 ];
+
+/** Address value for "opportunities with no sales rep". */
+export const NO_REP = "none";

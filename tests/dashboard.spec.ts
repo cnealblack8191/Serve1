@@ -58,3 +58,20 @@ test("needs-attention job links open the filtered jobs list", async ({ page }) =
   await expect(page.getByText("Completed jobs without completion photos").first()).toBeVisible();
   await expect(page.getByRole("link", { name: "Show all jobs" })).toBeVisible();
 });
+
+test("count links open exactly the records counted", async ({ page }) => {
+  await signIn(page, "office");
+  const list = page.getByRole("list", { name: "Opportunities" });
+  // Site visits to schedule: Assessment with no visit booked (the seed has one of each).
+  await page.getByRole("link", { name: /Site visits to schedule/ }).click();
+  await expect(list.getByRole("link")).toHaveCount(1);
+  await expect(list).toContainText("Middle school intercom");
+  // Results this year: won by contract keeps the year.
+  await page.goto("/");
+  await page.getByRole("region", { name: "Results this year" }).getByRole("link").first().click();
+  await expect(page).toHaveURL(/closedYear=/);
+  await expect(list.getByText("Closed won").first()).toBeVisible();
+  // No rep.
+  await page.goto("/opportunities?rep=none&stage=all");
+  await expect(page.getByRole("combobox", { name: "Sales rep" })).toHaveValue("none");
+});

@@ -85,7 +85,7 @@ export function BusinessDashboard() {
           label="Site visits to schedule"
           value={String(s.siteVisitsToSchedule)}
           hint="Assessment, not yet booked"
-          to={{ to: "/opportunities", search: t({ stage: "Assessment" }) }}
+          to={{ to: "/opportunities", search: t({ stage: "Assessment", visit: "unbooked" }) }}
         />
         <KeyNumber
           label="Past expected close"
