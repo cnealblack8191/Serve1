@@ -249,7 +249,17 @@ function withParents(rows: Row[], primary: string) {
   const stack: { level: number; text: string }[] = [];
   // Flat headings (no indented rows, e.g. a CSV): one per kind, so a work-type heading under a
   // contract heading keeps the contract. Each lasts until the next heading of the same kind.
-  const sections: { contract?: string; type?: string } = {};
+  // In an outlined sheet a flat heading also ends where its outline branch ends.
+  const sections: {
+    contract?: { text: string; level: number };
+    type?: { text: string; level: number };
+  } = {};
+  const expire = (deeperThan: number, orAt = false) => {
+    for (const k of ["contract", "type"] as const) {
+      const sec = sections[k];
+      if (sec && (sec.level > deeperThan || (orAt && sec.level === deeperThan))) delete sections[k];
+    }
+  };
   rows.forEach((row, i) => {
     const filled = row.raw.cells.filter((c) => c !== null && c !== "").length;
     const name = text(row.get(primary));
@@ -262,16 +272,17 @@ function withParents(rows: Row[], primary: string) {
     const isType = !!name && !!cleanType(name);
     const headingOnly = !!name && filled === 1 && (isContract || isType);
     while (stack.length && stack[stack.length - 1]!.level >= row.level) stack.pop();
+    expire(row.level, hasChildren); // leaving a branch, or a new branch at this level
     if (hasChildren) {
       if (name) stack.push({ level: row.level, text: name });
       // A name-only row with rows under it is a heading, never a record of its own.
       if (filled === 1) return;
     } else if (headingOnly) {
-      if (isContract) sections.contract = name;
-      else sections.type = name;
+      if (isContract) sections.contract = { text: name, level: row.level };
+      else sections.type = { text: name, level: row.level };
       return;
     }
-    const flat = [sections.type, sections.contract].filter((x): x is string => !!x);
+    const flat = [sections.type?.text, sections.contract?.text].filter((x): x is string => !!x);
     out.push({ row, parents: [...stack.map((s) => s.text).reverse(), ...flat] });
   });
   return out;
