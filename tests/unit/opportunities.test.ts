@@ -60,6 +60,25 @@ describe("opportunities", () => {
     assert.equal((await b.jobs.list()).filter((j) => j.opportunityId === "opp-6").length, 1);
   });
 
+  it("two people marking won at the same moment end on one job", async () => {
+    await as(b, "office@serv1.demo");
+    const [a, c] = await Promise.all([
+      winOpportunity("opp-6", "cust-1"),
+      winOpportunity("opp-6", "cust-1"),
+    ]);
+    assert.equal(a.id, c.id);
+    assert.equal((await b.jobs.list()).filter((j) => j.opportunityId === "opp-6").length, 1);
+    assert.equal((await b.opportunities.get("opp-6"))?.jobId, a.id);
+  });
+
+  it("the opportunity takes the won job's customer", async () => {
+    await as(b, "office@serv1.demo");
+    await b.opportunities.update("opp-6", { customerId: "cust-2" });
+    const job = await winOpportunity("opp-6", "cust-1");
+    assert.equal(job.customerId, "cust-1");
+    assert.equal((await b.opportunities.get("opp-6"))?.customerId, "cust-1");
+  });
+
   it("a tech sees the won job when assigned, but never the opportunity amounts", async () => {
     await as(b, "office@serv1.demo");
     const job = await winOpportunity("opp-6", "cust-1");

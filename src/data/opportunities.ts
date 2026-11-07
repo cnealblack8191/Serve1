@@ -114,9 +114,15 @@ export function jobFromOpportunity(opp: Opportunity, customerId: string, siteId:
   };
 }
 
+/** The one job for an opportunity when several exist: the earliest created (ties by id). */
+const firstJob = (jobs: Job[]) =>
+  [...jobs].sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id))[0];
+
 /**
- * Closed Won: the opportunity becomes its job, with nothing typed twice. Safe to repeat:
- * if the opportunity already has a job (or a job already points at it) that job is returned.
+ * Closed Won: the opportunity becomes its job, with nothing typed twice. Safe to repeat, and safe
+ * when two people click at once: after creating, every caller re-reads the jobs for this
+ * opportunity, keeps the earliest and deletes its own extra, so all callers end on the same job.
+ * The opportunity always takes the job's customer, so the two records never disagree.
  */
 export async function winOpportunity(
   opportunityId: string,
@@ -126,14 +132,20 @@ export async function winOpportunity(
   const b = backend();
   const opp = await b.opportunities.get(opportunityId);
   if (!opp) throw new Error("Opportunity not found");
+  const linked = async () => (await b.jobs.list()).filter((j) => j.opportunityId === opp.id);
+
   let job = opp.jobId ? await b.jobs.get(opp.jobId) : null;
-  if (!job) job = (await b.jobs.list()).find((j) => j.opportunityId === opp.id) ?? null;
-  if (!job) job = await b.jobs.create(jobFromOpportunity(opp, customerId, siteId));
+  if (!job) job = firstJob(await linked()) ?? null;
+  if (!job) {
+    const mine = await b.jobs.create(jobFromOpportunity(opp, customerId, siteId));
+    job = firstJob(await linked()) ?? mine;
+    if (job.id !== mine.id) await b.jobs.remove(mine.id); // someone else won the race
+  }
   await b.opportunities.update(opp.id, {
     stage: "ClosedWon",
     closedAt: opp.closedAt ?? nowIso(),
     jobId: job.id,
-    customerId: opp.customerId ?? customerId,
+    customerId: job.customerId,
   });
   return job;
 }
