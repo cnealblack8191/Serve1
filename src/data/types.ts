@@ -13,6 +13,57 @@ export type JobPriority = "Low" | "Normal" | "High" | "Emergency";
 export const JOB_PRIORITIES: JobPriority[] = ["Low", "Normal", "High", "Emergency"];
 
 export type InvoiceStatus = "Draft" | "Sent" | "Paid";
+
+/** Business Services work types (owner's Smartsheets). */
+export type WorkType = "HighVoltage" | "LowVoltage" | "Service";
+export const WORK_TYPES: WorkType[] = ["HighVoltage", "LowVoltage", "Service"];
+
+/** Job tracking health (Task Trackers "Health" column). */
+export type JobHealth = "OnTrack" | "Watch" | "Behind";
+export const JOB_HEALTHS: JobHealth[] = ["OnTrack", "Watch", "Behind"];
+
+/** Sales stages 1 to 6, then the three closed outcomes. */
+export type OpportunityStage =
+  | "Prospect"
+  | "Assessment"
+  | "ProposalBidding"
+  | "ProposalSent"
+  | "CustomerReview"
+  | "CustomerFollowUp"
+  | "ClosedWon"
+  | "ClosedLost"
+  | "NoBid";
+export const OPPORTUNITY_STAGES: OpportunityStage[] = [
+  "Prospect",
+  "Assessment",
+  "ProposalBidding",
+  "ProposalSent",
+  "CustomerReview",
+  "CustomerFollowUp",
+  "ClosedWon",
+  "ClosedLost",
+  "NoBid",
+];
+export const OPEN_STAGES: OpportunityStage[] = OPPORTUNITY_STAGES.slice(0, 6);
+
+/** Customer contracts ECI works under (owner's pick list). */
+export type CustomerContract =
+  | "DeKalbGov"
+  | "GwinnettSchools"
+  | "RockdaleGov"
+  | "BarrowSchools"
+  | "DecaturCitySchools"
+  | "DeKalbSchools"
+  | "NonContract";
+export const CUSTOMER_CONTRACTS: CustomerContract[] = [
+  "DeKalbGov",
+  "GwinnettSchools",
+  "RockdaleGov",
+  "BarrowSchools",
+  "DecaturCitySchools",
+  "DeKalbSchools",
+  "NonContract",
+];
 export type AttachmentType = "Photo" | "Document" | "Signature" | "InvoicePdf";
 
 export interface BaseRecord {
@@ -62,6 +113,79 @@ export interface Job extends BaseRecord {
   completedAt: string | null;
   notes: string | null;
   laborHours: number | null;
+  // ---- Business Services tracking (Phase 2). Never money: techs can read jobs. ----
+  /** The opportunity this job was won from (its quote, PO and work order numbers live there). */
+  opportunityId: string | null;
+  workType: WorkType | null;
+  health: JobHealth | null;
+  /** Planned work dates (YYYY-MM-DD). Scheduled visits use scheduledStart/End. */
+  startDate: string | null;
+  endDate: string | null;
+  poReceived: boolean;
+  materialOrdered: boolean;
+  materialDelivered: boolean;
+  liftConnex: boolean;
+  serviceReportApproved: boolean;
+  /** Completion photos are on file somewhere other than this app (set by the importer). */
+  completionPhotosOnFile: boolean;
+}
+
+/** Tracking defaults for a new job. */
+export const JOB_TRACKING_DEFAULTS = {
+  opportunityId: null,
+  workType: null,
+  health: null,
+  startDate: null,
+  endDate: null,
+  poReceived: false,
+  materialOrdered: false,
+  materialDelivered: false,
+  liftConnex: false,
+  serviceReportApproved: false,
+  completionPhotosOnFile: false,
+} satisfies Partial<Job>;
+
+/**
+ * A sales opportunity (replaces the Sales and Service Pipeline Smartsheets).
+ * Office and owner roles only; techs never read this table, so amounts stay here, not on the job.
+ * Dates are YYYY-MM-DD.
+ */
+export interface Opportunity extends BaseRecord {
+  name: string;
+  customerId: string | null;
+  customerContract: CustomerContract;
+  type: WorkType;
+  stage: OpportunityStage;
+  customerContact: string | null;
+  invoiceContact: string | null;
+  eciQuoteNumber: string | null;
+  workOrderNumber: string | null;
+  customerPoNumber: string | null;
+  quoteDue: string | null;
+  expectedClose: string | null;
+  siteVisitDate: string | null;
+  salesRep: string | null;
+  priority: string | null;
+  /** 0 to 100. */
+  probability: number | null;
+  hoursQuoted: number | null;
+  quotedAmount: number | null;
+  forecastAmount: number | null;
+  jobCost: number | null;
+  invoicedAmount: number | null;
+  /** Percent, e.g. 22.5. */
+  quotedMargin: number | null;
+  completedMargin: number | null;
+  notes: string | null;
+  nextStep: string | null;
+  nextStepDue: string | null;
+  /** Show the next step in "Needs attention" once it is due. */
+  nextStepRemind: boolean;
+  closedAt: string | null;
+  /** The job this opportunity became when won. */
+  jobId: string | null;
+  /** Where an imported row came from (sheet and row), so a re-run can skip it. */
+  importKey: string | null;
 }
 
 export interface Attachment extends BaseRecord {
@@ -110,9 +234,17 @@ export type NewJob = Input<Job>;
 export type NewAttachment = Input<Attachment>;
 export type NewSignature = Input<Signature>;
 export type NewInvoice = Input<Invoice>;
+export type NewOpportunity = Input<Opportunity>;
 
 export type TableName =
-  "users" | "customers" | "sites" | "jobs" | "attachments" | "signatures" | "invoices";
+  | "users"
+  | "customers"
+  | "sites"
+  | "jobs"
+  | "attachments"
+  | "signatures"
+  | "invoices"
+  | "opportunities";
 
 export const TABLES: TableName[] = [
   "users",
@@ -122,6 +254,7 @@ export const TABLES: TableName[] = [
   "attachments",
   "signatures",
   "invoices",
+  "opportunities",
 ];
 
 /** The signed-in person, as every screen sees them. */

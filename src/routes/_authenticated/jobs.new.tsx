@@ -18,6 +18,7 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   isOfficeRole,
   JOB_PRIORITIES,
+  JOB_TRACKING_DEFAULTS,
   newJobNumber,
   useCustomers,
   useJobMutations,
@@ -73,6 +74,7 @@ function Page() {
     if (!description.trim()) return setError("Describe the work to be done.");
     try {
       const job = await create.mutateAsync({
+        ...JOB_TRACKING_DEFAULTS,
         jobNumber: newJobNumber(),
         customerId,
         siteId: effectiveSiteId,

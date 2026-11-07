@@ -8,9 +8,11 @@ import type {
   NewCustomer,
   NewInvoice,
   NewJob,
+  NewOpportunity,
   NewSignature,
   NewSite,
   NewUser,
+  Opportunity,
   Signature,
   SignInResult,
   Site,
@@ -60,6 +62,7 @@ export interface Backend {
   attachments: Repo<Attachment, NewAttachment>;
   signatures: Repo<Signature, NewSignature>;
   invoices: Repo<Invoice, NewInvoice>;
+  opportunities: Repo<Opportunity, NewOpportunity>;
   files: FilesApi;
   /** Fires when any table changes (own writes and, on Amplify, other users' writes). */
   onChange(listener: ChangeListener): () => void;
