@@ -7,7 +7,14 @@ import { OpenJobsChart } from "@/components/serv1/billing/OpenJobsChart";
 import { dashboardStats } from "@/components/serv1/billing/dashboardStats";
 import { BusinessDashboard } from "@/components/serv1/sales/BusinessDashboard";
 import { KeyNumber } from "@/components/serv1/sales/DashboardParts";
-import { useCurrentUser, useInvoices, useJobs, useUsers } from "@/data";
+import {
+  ACTIVE_STATUSES,
+  isFinished,
+  useCurrentUser,
+  useInvoices,
+  useJobs,
+  useUsers,
+} from "@/data";
 import { canSeeMoney, OFFICE_VIEW, requireRole } from "@/lib/access";
 
 export const Route = createFileRoute("/_authenticated/")({
@@ -36,8 +43,8 @@ function Page() {
       return {
         id: u.id,
         name: u.name,
-        open: mine.filter((j) => j.status !== "Complete" && j.status !== "Invoiced").length,
-        completed: mine.filter((j) => j.status === "Complete" || j.status === "Invoiced").length,
+        open: mine.filter((j) => ACTIVE_STATUSES.includes(j.status)).length,
+        completed: mine.filter((j) => isFinished(j.status)).length,
       };
     });
 

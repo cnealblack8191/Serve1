@@ -543,11 +543,24 @@ export function buildImportPlan(files: { file: string; sheets: Sheet[] }[]): Imp
         // The task's parent rows can name the contract the sales row did not.
         if (match.data.customerContract === "NonContract" && contract !== "NonContract")
           match.data.customerContract = contract;
+        const startDate = tracking.startDate ?? base.startDate; // blank task dates keep known ones
+        const endDate = tracking.endDate ?? base.endDate;
         match.job = {
           ...base,
           contract: base.contract === "NonContract" ? contract : base.contract,
           ...tracking,
+          health: tracking.health ?? base.health,
+          startDate,
+          endDate,
+          completedAt:
+            base.completedAt ??
+            ((base.status === "Complete" || base.status === "Invoiced") && endDate
+              ? `${endDate}T17:00:00.000Z`
+              : null),
           poReceived: base.poReceived || tracking.poReceived,
+          materialOrdered: base.materialOrdered || tracking.materialOrdered,
+          materialDelivered: base.materialDelivered || tracking.materialDelivered,
+          liftConnex: base.liftConnex || tracking.liftConnex,
           notes: joinNotes(base.notes, notes),
         };
         match.sources.push(`${sheet.label} row ${row.r}`);

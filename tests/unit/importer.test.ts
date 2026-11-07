@@ -96,6 +96,7 @@ describe("import plan", () => {
     assert.equal(gym.job?.completionPhotosOnFile, true);
     assert.equal(gym.job?.liftConnex, true); // from the task tracker row
     assert.equal(gym.job?.poReceived, true);
+    assert.equal(gym.job?.endDate, "2026-08-20"); // the task's blank End Date keeps the service date
 
     const fire = byName["Fire station outlet repair"]!;
     assert.equal(fire.data.type, "Service");
@@ -168,6 +169,20 @@ describe("import plan", () => {
     assert.equal(o.data.customerContract, "GwinnettSchools");
     assert.equal(o.job?.contract, "GwinnettSchools");
     assert.equal(o.job?.status, "New");
+  });
+
+  it("a completed task matched to a sales row gets a completion time", () => {
+    const sales = readCsv("Opportunity,Sales Stage\nPanel upgrade,Closed Won\n");
+    const tasks = readCsv(
+      "Task,Status,Health,End Date\nPanel upgrade,Complete,Green,11/6/26\n",
+      "Tasks",
+    );
+    const plan = sm.buildImportPlan([
+      { file: "s.csv", sheets: [sales] },
+      { file: "t.csv", sheets: [tasks] },
+    ]);
+    assert.equal(plan.opportunities[0]!.job?.status, "Complete");
+    assert.equal(plan.opportunities[0]!.job?.completedAt, "2026-11-06T17:00:00.000Z");
   });
 
   it("a retry after a partial run re-links the job instead of making another", async () => {
