@@ -276,6 +276,32 @@ describe("import plan", () => {
     assert.equal(by["Old loss"]!.closedAt, null);
   });
 
+  it("a task tracker's work type fills in a sales row that had none", () => {
+    const sales = readCsv(
+      "Opportunity,Sales Stage\nPanel upgrade,Closed Won\nTyped job,Closed Won\n",
+    );
+    const tasks = readCsv(
+      "Task,Status,Health\nPanel upgrade,Not Started,Green\nTyped job,Not Started,Green\n",
+      "High Voltage Task Tracker",
+    );
+    const lowSales = readCsv(
+      "Opportunity,Opportunity Type,Sales Stage\nTyped job,Low Voltage,Closed Won\n",
+    );
+    const plan = sm.buildImportPlan([
+      { file: "s.csv", sheets: [sales] },
+      { file: "t.csv", sheets: [tasks] },
+    ]);
+    const panel = plan.opportunities.find((o) => o.data.name === "Panel upgrade")!;
+    assert.equal(panel.data.type, "HighVoltage");
+    assert.equal(panel.job?.workType, "HighVoltage");
+    const plan2 = sm.buildImportPlan([
+      { file: "l.csv", sheets: [lowSales] },
+      { file: "t.csv", sheets: [tasks] },
+    ]);
+    // An explicit sales type is never overwritten.
+    assert.equal(plan2.opportunities[0]!.data.type, "LowVoltage");
+  });
+
   it("a retry after a partial run re-links the job instead of making another", async () => {
     mem.clear();
     const b = createLocalBackend();
