@@ -320,6 +320,25 @@ describe("import plan", () => {
     assert.equal(by["Park lights"], "RockdaleGov");
   });
 
+  it("a flat work-type heading keeps the contract heading above it", () => {
+    const tasks = readCsv(
+      "Task,Status,Health\nGwinnett Schools,,\nHigh Voltage,,\nPanel upgrade,Started,Green\n",
+      "Tasks",
+    );
+    const plan = sm.buildImportPlan([{ file: "t.csv", sheets: [tasks] }]);
+    assert.equal(plan.jobs[0]!.contract, "GwinnettSchools");
+    assert.equal(plan.jobs[0]!.workType, "HighVoltage");
+  });
+
+  it("a lost service row never becomes a won job", () => {
+    const service = readCsv("Service Opportunity,Job Stage\nCancelled panel upgrade,Closed Lost\n");
+    const plan = sm.buildImportPlan([{ file: "v.csv", sheets: [service] }]);
+    assert.equal(plan.opportunities[0]!.data.stage, "ClosedLost");
+    assert.equal(plan.opportunities[0]!.job, null);
+    assert.equal(sm.cleanJobStatus("Closed Lost"), null);
+    assert.equal(sm.cleanJobStatus("Closed"), "Complete");
+  });
+
   it("a retry after a partial run re-links the job instead of making another", async () => {
     mem.clear();
     const b = createLocalBackend();
