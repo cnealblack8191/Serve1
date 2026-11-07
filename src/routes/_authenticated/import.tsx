@@ -40,8 +40,11 @@ function Page() {
     }
   };
 
+  const [running, setRunning] = useState(false);
   const run = async () => {
-    if (!plan) return;
+    // Busy from the first moment: a second click must never start a second import.
+    if (!plan || running) return;
+    setRunning(true);
     setError(null);
     try {
       const r = await runImport(plan, (d, t) => setProgress([d, t]));
@@ -53,6 +56,7 @@ function Page() {
       );
     } finally {
       setProgress(null);
+      setRunning(false);
     }
   };
 
@@ -185,10 +189,12 @@ function Page() {
           ) : (
             <Button
               onClick={() => void run()}
-              disabled={!!progress || plan.opportunities.length + plan.jobs.length === 0}
+              disabled={running || plan.opportunities.length + plan.jobs.length === 0}
             >
-              {progress
-                ? `Importing ${progress[0]} of ${progress[1]}…`
+              {running
+                ? progress
+                  ? `Importing ${progress[0]} of ${progress[1]}…`
+                  : "Starting import…"
                 : `Import ${plan.opportunities.length + plan.jobs.length} records`}
             </Button>
           )}

@@ -66,6 +66,8 @@ describe("cleaning", () => {
     assert.equal(sm.num(0.25, true), 25);
     assert.equal(sm.num("31%", true), 31);
     assert.equal(sm.cleanHealth("Yellow"), "Watch");
+    assert.equal(sm.cleanJobStatus("Not Started"), "New");
+    assert.equal(sm.cleanJobStatus("Started"), "InProgress");
   });
 });
 
@@ -136,6 +138,51 @@ describe("import plan", () => {
     assert.equal(r2.jobsCreated, 0);
     assert.equal((await b.opportunities.list()).length, before.opps + 7);
     assert.equal((await b.jobs.list()).length, before.jobs + 4);
+  });
+
+  it("keeps name-only records that are not headings", () => {
+    const plan = sm.buildImportPlan([
+      { file: "x.csv", sheets: [readCsv("Opportunity,Sales Stage\nNew lead,\n")] },
+    ]);
+    assert.equal(plan.opportunities.length, 1);
+    assert.equal(plan.opportunities[0]!.data.name, "New lead");
+  });
+
+  it("a task's parent contract fills in a matched sales row with none", () => {
+    const sales = readCsv(
+      "Opportunity,Opportunity Type,Sales Stage\nPanel upgrade,Low Voltage,Closed Won\n",
+    );
+    const tasks = {
+      name: "Tasks",
+      rows: [
+        { r: 1, level: 0, cells: ["Task", "Status", "Health"] },
+        { r: 2, level: 0, cells: ["Gwinnett Schools", null, null] },
+        { r: 3, level: 1, cells: ["Panel upgrade", "Not Started", "Green"] },
+      ],
+    };
+    const plan = sm.buildImportPlan([
+      { file: "s.csv", sheets: [sales] },
+      { file: "t.xlsx", sheets: [tasks] },
+    ]);
+    const o = plan.opportunities[0]!;
+    assert.equal(o.data.customerContract, "GwinnettSchools");
+    assert.equal(o.job?.contract, "GwinnettSchools");
+    assert.equal(o.job?.status, "New");
+  });
+
+  it("a retry after a partial run re-links the job instead of making another", async () => {
+    mem.clear();
+    const b = createLocalBackend();
+    setBackend(b);
+    await b.auth.signIn("office@serv1.demo", "serv1demo");
+    const plan = sm.buildImportPlan(await files());
+    await runImport(plan);
+    const gym = (await b.opportunities.list()).find((o) => o.name === "Gym high-bays")!;
+    const jobId = gym.jobId!;
+    await b.opportunities.update(gym.id, { jobId: null }); // as if the link step had failed
+    const r = await runImport(plan);
+    assert.equal(r.jobsCreated, 0);
+    assert.equal((await b.opportunities.get(gym.id))?.jobId, jobId);
   });
 
   it("a tech cannot run the import", async () => {

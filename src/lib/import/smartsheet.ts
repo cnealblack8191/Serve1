@@ -138,9 +138,10 @@ export function cleanJobStatus(text: Cell): JobStatus | null {
   const t = norm(String(text));
   if (/invoic|billed/.test(t)) return "Invoiced";
   if (/complete|done|finished|closed/.test(t)) return "Complete";
+  // "Not started" must be checked before the positive "started".
+  if (/not started|not yet|\bnew\b|pending|open/.test(t)) return "New";
   if (/progress|on site|working|started/.test(t)) return "InProgress";
   if (/schedul|booked/.test(t)) return "Scheduled";
-  if (/not started|new|pending|open/.test(t)) return "New";
   return null;
 }
 
@@ -243,7 +244,9 @@ function withParents(rows: Row[], primary: string) {
     if (!name && filled === 0) return; // blank line
     const next = rows[i + 1];
     const hasChildren = !!next && next.level > row.level;
-    const headingOnly = !!name && filled === 1;
+    // A name-only row is a heading when it names a contract or work type; otherwise it is an
+    // incomplete record and is kept (never dropped silently).
+    const headingOnly = !!name && filled === 1 && (!!cleanContract(name) || !!cleanType(name));
     while (stack.length && stack[stack.length - 1]!.level >= row.level) stack.pop();
     if (hasChildren || headingOnly) {
       if (name) stack.push({ level: row.level, text: name });
@@ -537,8 +540,12 @@ export function buildImportPlan(files: { file: string; sheets: Sheet[] }[]): Imp
           completionPhotosOnFile: false,
           notes: null,
         };
+        // The task's parent rows can name the contract the sales row did not.
+        if (match.data.customerContract === "NonContract" && contract !== "NonContract")
+          match.data.customerContract = contract;
         match.job = {
           ...base,
+          contract: base.contract === "NonContract" ? contract : base.contract,
           ...tracking,
           poReceived: base.poReceived || tracking.poReceived,
           notes: joinNotes(base.notes, notes),
