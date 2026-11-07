@@ -77,3 +77,12 @@ test("filters come from the address, so dashboard links open the right list", as
   await expect(list.getByText("No next step").first()).toBeVisible();
   await expect(list.getByText("Book site visit")).toHaveCount(0);
 });
+
+test("a name of only spaces shows the message instead of saving", async ({ page }) => {
+  await signIn(page, "office");
+  await page.goto("/opportunities/new");
+  await page.getByLabel("Opportunity name").fill("   ");
+  await page.getByRole("button", { name: "Save opportunity" }).click();
+  await expect(page.getByRole("alert")).toHaveText("Give the opportunity a name.");
+  await expect(page).toHaveURL(/\/opportunities\/new$/);
+});
