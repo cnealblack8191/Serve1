@@ -10,6 +10,7 @@ import { Switch } from "@/components/ui/switch";
 import {
   atMinutes,
   canDispatch,
+  findOverlaps,
   formatSlot,
   fromDateInput,
   isUnscheduled,
@@ -27,6 +28,7 @@ import {
 } from "@/data";
 
 import { AssignDialog } from "./AssignDialog";
+import { AttentionQueue } from "./AttentionQueue";
 import { ConfirmDropDialog } from "./ConfirmDropDialog";
 import { JOB_DRAG_TYPE, jobLabel } from "./board";
 import { JobCard } from "./JobCard";
@@ -50,7 +52,14 @@ function readConfirmSetting() {
 const dayText = (d: Date) =>
   d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
 
-type Pending = { job: Job; patch: Partial<NewJob>; message: string; done: string };
+type Pending = {
+  job: Job;
+  patch: Partial<NewJob>;
+  message: string;
+  done: string;
+  /** Set when the move double-books the tech; the board then always asks first. */
+  warning?: string;
+};
 
 /** Office screen: Unscheduled queue on the left, techs on a day timeline (SPEC.md W2). */
 export function DispatchBoard() {
@@ -92,16 +101,20 @@ export function DispatchBoard() {
     }
   };
   /** Ask first when the toggle is on; drops otherwise save straight away. */
-  const propose = (p: Pending, ask: boolean) => (ask ? setPending(p) : void save(p));
+  const propose = (p: Pending, ask: boolean) => (ask || p.warning ? setPending(p) : void save(p));
 
   const scheduleChange = (job: Job, tech: User, start: Date, minutes?: number): Pending => {
     const patch = schedulePatch(job, tech.identityId!, start, minutes);
     const end = new Date(patch.scheduledEnd!);
     const when = `${dayText(start)}, ${formatSlot(start.getHours() * 60 + start.getMinutes())} – ${formatSlot(end.getHours() * 60 + end.getMinutes())}`;
     const verb = job.assignedTechId ? "Move" : "Schedule";
+    const clashes = findOverlaps(allJobs, job.id, tech.identityId!, start, end);
     return {
       job,
       patch,
+      warning: clashes.length
+        ? `${tech.name} already has ${clashes.map(jobLabel).join(", ")} at that time.`
+        : undefined,
       message: `${verb} ${jobLabel(job)} (${customerMap.get(job.customerId)?.name ?? "customer"}) to ${tech.name} on ${when}?`,
       done: `${jobLabel(job)} scheduled with ${tech.name}, ${when}`,
     };
@@ -199,80 +212,84 @@ export function DispatchBoard() {
       ) : loading ? (
         <EmptyState title="Loading the board…" />
       ) : (
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
-          <section
-            aria-label="Unscheduled jobs"
-            className="eci-card flex w-full shrink-0 flex-col gap-2 p-3 lg:sticky lg:top-4 lg:w-72"
-            onDragOver={(e) => {
-              if (
-                dragging &&
-                !isUnscheduled(dragging) &&
-                e.dataTransfer.types.includes(JOB_DRAG_TYPE)
-              )
+        <>
+          <AttentionQueue jobs={allJobs} customers={customerMap} />
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
+            <section
+              aria-label="Unscheduled jobs"
+              className="eci-card flex w-full shrink-0 flex-col gap-2 p-3 lg:sticky lg:top-4 lg:w-72"
+              onDragOver={(e) => {
+                if (
+                  dragging &&
+                  !isUnscheduled(dragging) &&
+                  e.dataTransfer.types.includes(JOB_DRAG_TYPE)
+                )
+                  e.preventDefault();
+              }}
+              onDrop={(e) => {
+                const id = e.dataTransfer.getData(JOB_DRAG_TYPE);
+                if (!id) return;
                 e.preventDefault();
-            }}
-            onDrop={(e) => {
-              const id = e.dataTransfer.getData(JOB_DRAG_TYPE);
-              if (!id) return;
-              e.preventDefault();
-              onDropOnQueue(id);
-            }}
-          >
-            <h2 className="flex items-center justify-between text-sm font-semibold">
-              Unscheduled
-              <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium">
-                {queue.length}
-              </span>
-            </h2>
-            {queue.length === 0 ? (
-              <p className="rounded-md border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
-                No unscheduled jobs
-              </p>
-            ) : (
-              queue.map((job) => (
-                <JobCard
-                  key={job.id}
-                  job={job}
-                  customer={customerMap.get(job.customerId)}
-                  site={job.siteId ? siteMap.get(job.siteId) : undefined}
+                onDropOnQueue(id);
+              }}
+            >
+              <h2 className="flex items-center justify-between text-sm font-semibold">
+                Unscheduled
+                <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium">
+                  {queue.length}
+                </span>
+              </h2>
+              {queue.length === 0 ? (
+                <p className="rounded-md border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
+                  No unscheduled jobs
+                </p>
+              ) : (
+                queue.map((job) => (
+                  <JobCard
+                    key={job.id}
+                    job={job}
+                    customer={customerMap.get(job.customerId)}
+                    site={job.siteId ? siteMap.get(job.siteId) : undefined}
+                    onAssign={setAssigning}
+                    onDragStart={setDragging}
+                    onDragEnd={() => setDragging(null)}
+                  />
+                ))
+              )}
+            </section>
+
+            <div className="min-w-0 flex-1 space-y-2">
+              {techs.length === 0 ? (
+                <EmptyState
+                  title="No active techs"
+                  hint="Add a user with the Tech role to schedule jobs."
+                />
+              ) : (
+                <TechTimeline
+                  techs={techs}
+                  jobs={allJobs}
+                  day={day}
+                  customers={customerMap}
+                  sites={siteMap}
+                  onDropJob={onDropJob}
                   onAssign={setAssigning}
                   onDragStart={setDragging}
                   onDragEnd={() => setDragging(null)}
                 />
-              ))
-            )}
-          </section>
-
-          <div className="min-w-0 flex-1 space-y-2">
-            {techs.length === 0 ? (
-              <EmptyState
-                title="No active techs"
-                hint="Add a user with the Tech role to schedule jobs."
-              />
-            ) : (
-              <TechTimeline
-                techs={techs}
-                jobs={allJobs}
-                day={day}
-                customers={customerMap}
-                sites={siteMap}
-                onDropJob={onDropJob}
-                onAssign={setAssigning}
-                onDragStart={setDragging}
-                onDragEnd={() => setDragging(null)}
-              />
-            )}
-            {unlinkedTechs > 0 ? (
-              <p className="text-xs text-muted-foreground">
-                {unlinkedTechs} tech{unlinkedTechs === 1 ? " has" : "s have"} no login linked yet
-                and can't be scheduled.
-              </p>
-            ) : null}
+              )}
+              {unlinkedTechs > 0 ? (
+                <p className="text-xs text-muted-foreground">
+                  {unlinkedTechs} tech{unlinkedTechs === 1 ? " has" : "s have"} no login linked yet
+                  and can't be scheduled.
+                </p>
+              ) : null}
+            </div>
           </div>
-        </div>
+        </>
       )}
 
       <AssignDialog
+        jobs={allJobs}
         job={assigning}
         techs={techs}
         day={day}
@@ -297,6 +314,7 @@ export function DispatchBoard() {
       />
       <ConfirmDropDialog
         message={pending?.message ?? null}
+        warning={pending?.warning ?? null}
         onCancel={() => setPending(null)}
         onConfirm={() => {
           if (pending) void save(pending);

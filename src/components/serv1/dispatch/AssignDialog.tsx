@@ -14,6 +14,7 @@ import { Input } from "@/components/ui/input";
 import {
   DISPATCH_DEFAULT_HOURS,
   atMinutes,
+  findOverlaps,
   dispatchSlots,
   formatSlot,
   fromDateInput,
@@ -28,6 +29,13 @@ import { jobLabel } from "./board";
 
 const SELECT_CLASS =
   "h-9 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-ring";
+/** "9:00 AM – 11:00 AM" for a scheduled job. */
+function timeText(j: Job): string {
+  if (!j.scheduledStart) return "";
+  const s = new Date(j.scheduledStart);
+  const e = new Date(s.getTime() + jobDurationMinutes(j) * 60_000);
+  return `${formatSlot(minutesOfDay(s))} – ${formatSlot(minutesOfDay(e))}`;
+}
 const LENGTHS = [0.5, 1, 1.5, 2, 2.5, 3, 4, 5, 6, 8];
 const DEFAULT_SLOT = 8 * 60;
 
@@ -43,7 +51,10 @@ export function AssignDialog({
   onClose,
   onSubmit,
   onUnschedule,
+  jobs = [],
 }: {
+  /** All jobs, to warn about double booking (optional). */
+  jobs?: Job[];
   job: Job | null;
   techs: User[];
   day: Date;
@@ -72,6 +83,11 @@ export function AssignDialog({
 
   const parsedDay = fromDateInput(date);
   const valid = !!job && !!techId && !!parsedDay;
+  const start = parsedDay ? atMinutes(parsedDay, slot) : null;
+  const clashes =
+    valid && start
+      ? findOverlaps(jobs, job.id, techId, start, new Date(start.getTime() + hours * 3_600_000))
+      : [];
   const lengths = LENGTHS.includes(hours) ? LENGTHS : [...LENGTHS, hours].sort((a, b) => a - b);
 
   return (
@@ -135,6 +151,17 @@ export function AssignDialog({
             </Field>
           </div>
 
+          {clashes.length ? (
+            <p
+              role="alert"
+              className="rounded-md border border-orange-600 bg-orange-50 p-3 text-sm text-orange-950 dark:bg-orange-950 dark:text-orange-50"
+            >
+              Double booking: {techs.find((t) => t.identityId === techId)?.name ?? "this tech"}{" "}
+              already has {clashes.map((c) => `${jobLabel(c)} (${timeText(c)})`).join(", ")} at that
+              time.
+            </p>
+          ) : null}
+
           <DialogFooter className="gap-2 sm:justify-between">
             {job?.assignedTechId ? (
               <Button
@@ -153,7 +180,7 @@ export function AssignDialog({
                 Cancel
               </Button>
               <Button type="submit" disabled={!valid || busy}>
-                Schedule
+                {clashes.length ? "Schedule anyway" : "Schedule"}
               </Button>
             </div>
           </DialogFooter>
