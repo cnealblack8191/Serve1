@@ -374,6 +374,9 @@ export function buildImportPlan(files: { file: string; sheets: Sheet[] }[]): Imp
     return (same[0] ?? candidates[0])!;
   };
 
+  /** Sales rows whose type was not in the sheet (Service by default); a task can name it. */
+  const typeDefaulted = new Set<PlannedOpportunity>();
+
   // 1. Sales Pipeline
   const byName = new Map<string, PlannedOpportunity[]>();
   const index = (o: PlannedOpportunity) => {
@@ -396,15 +399,13 @@ export function buildImportPlan(files: { file: string; sheets: Sheet[] }[]): Imp
       const closedStage = stage === "ClosedWon" || stage === "ClosedLost" || stage === "NoBid";
       const created = date(row.get("Created"));
       const expectedClose = date(row.get("Expected Close Date"));
+      const salesType =
+        cleanType(typeText) ?? firstOf(parents.map(cleanType)) ?? cleanType(sheet.label);
       const data: NewOpportunity = {
         ...blankOpp(),
         name,
         stage,
-        type:
-          cleanType(typeText) ??
-          firstOf(parents.map(cleanType)) ??
-          cleanType(sheet.label) ??
-          "Service",
+        type: salesType ?? "Service",
         customerContract: contractFrom([typeText, ...parents, name]) ?? "NonContract",
         customerContact: text(row.get("Customer Contact Name")),
         salesRep: text(row.get("Sales Rep")),
@@ -428,6 +429,7 @@ export function buildImportPlan(files: { file: string; sheets: Sheet[] }[]): Imp
         job: null,
         sources: [`${sheet.label} row ${row.r}`],
       };
+      if (!salesType) typeDefaulted.add(o);
       plan.opportunities.push(o);
       index(o);
     }
@@ -533,7 +535,8 @@ export function buildImportPlan(files: { file: string; sheets: Sheet[] }[]): Imp
       const name = text(row.get("Task"));
       if (!name) continue;
       const contract = contractFrom([...parents, name]) ?? "NonContract";
-      const workType = firstOf(parents.map(cleanType)) ?? cleanType(sheet.label) ?? "Service";
+      const explicitType = firstOf(parents.map(cleanType)) ?? cleanType(sheet.label);
+      const workType = explicitType ?? "Service";
       const taskStatus = cleanJobStatus(row.get("Status")); // null when the cell is blank
       const status = taskStatus ?? "New";
       const assigned = text(row.get("Assigned To"));
@@ -574,6 +577,12 @@ export function buildImportPlan(files: { file: string; sheets: Sheet[] }[]): Imp
           completionPhotosOnFile: false,
           notes: null,
         };
+        // A task tracker that names the work type fills in a sales row that had none.
+        if (explicitType && typeDefaulted.has(match)) {
+          match.data.type = explicitType;
+          base.workType = explicitType;
+          typeDefaulted.delete(match);
+        }
         // The task's parent rows can name the contract the sales row did not.
         if (match.data.customerContract === "NonContract" && contract !== "NonContract")
           match.data.customerContract = contract;
