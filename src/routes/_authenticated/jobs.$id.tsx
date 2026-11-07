@@ -17,7 +17,7 @@ import {
   useInvoices,
   useIsOffice,
 } from "@/data";
-import { PRIORITY_LABEL } from "@/lib/status";
+import { JOB_STATUS_LABEL, PRIORITY_LABEL } from "@/lib/status";
 import { requireRole, OFFICE_VIEW } from "@/lib/access";
 
 export const Route = createFileRoute("/_authenticated/jobs/$id")({
@@ -101,7 +101,7 @@ function Page() {
 
       {j.status === "OnHold" || j.status === "Cancelled" ? (
         <p className="eci-card p-4 text-sm" role="status">
-          <span className="font-semibold">{j.status === "OnHold" ? "On hold" : "Cancelled"}:</span>{" "}
+          <span className="font-semibold">{JOB_STATUS_LABEL[j.status]}:</span>{" "}
           {j.holdReason ?? "no reason given"}
         </p>
       ) : null}

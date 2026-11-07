@@ -76,7 +76,14 @@ export function movePatch(job: Job, action: JobAction, reason?: string): Partial
     case "approve":
       return { status: m.to, reviewedAt: nowIso(), reviewNote: null };
     case "sendBack":
-      return { status: m.to, reviewNote: why, reviewedAt: null, completedAt: null };
+      // With nobody assigned (e.g. imported work) the job goes back to New so it can be
+      // scheduled; otherwise straight back to the tech's In progress list.
+      return {
+        status: job.assignedTechId ? m.to : "New",
+        reviewNote: why,
+        reviewedAt: null,
+        completedAt: null,
+      };
     case "reopen":
       return {
         status: m.to,
