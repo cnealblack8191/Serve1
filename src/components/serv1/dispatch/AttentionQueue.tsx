@@ -1,4 +1,5 @@
 import { Link } from "@tanstack/react-router";
+import { useEffect, useState } from "react";
 
 import { ATTENTION_REASON_LABEL, dispatchAttention, type Customer, type Job } from "@/data";
 
@@ -12,7 +13,13 @@ export function AttentionQueue({
   jobs: Job[];
   customers: Map<string, Customer>;
 }) {
-  const items = dispatchAttention(jobs);
+  // Re-check every minute so a job that becomes late shows up without any click or reload.
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const t = window.setInterval(() => setNow(new Date()), 60_000);
+    return () => window.clearInterval(t);
+  }, []);
+  const items = dispatchAttention(jobs, now);
   return (
     <section aria-label="Needs attention" className="eci-card space-y-2 p-3">
       <h2 className="flex items-center justify-between text-sm font-semibold">

@@ -185,6 +185,16 @@ describe("import plan", () => {
     assert.equal(plan.opportunities[0]!.job?.completedAt, "2026-11-06T17:00:00.000Z");
   });
 
+  it("the same name on the same row of two exports stays two records", async () => {
+    const a = readCsv("Opportunity,Sales Stage\nPanel upgrade,1 Prospect\n", "DeKalb");
+    const c = readCsv("Opportunity,Sales Stage\nPanel upgrade,1 Prospect\n", "Gwinnett");
+    const plan = sm.buildImportPlan([
+      { file: "dekalb.csv", sheets: [a] },
+      { file: "gwinnett.csv", sheets: [c] },
+    ]);
+    assert.equal(new Set(plan.opportunities.map((o) => o.key)).size, 2);
+  });
+
   it("a retry after a partial run re-links the job instead of making another", async () => {
     mem.clear();
     const b = createLocalBackend();

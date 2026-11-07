@@ -87,6 +87,14 @@ describe("job flow", () => {
     assert.equal(j.assignedTechId, null);
   });
 
+  it("sending back an unassigned job returns it to New so it can be scheduled", async () => {
+    await as(b, "office@serv1.demo");
+    let j = await b.jobs.update("job-4", { assignedTechId: null });
+    j = await b.jobs.update(j.id, movePatch(j, "sendBack", "Needs a tech"));
+    assert.equal(j.status, "New");
+    assert.equal(j.reviewNote, "Needs a tech");
+  });
+
   it("paying the invoice marks the job paid", async () => {
     await as(b, "office@serv1.demo");
     const inv = (await b.invoices.list()).find((i) => i.jobId === "job-19")!; // Sent

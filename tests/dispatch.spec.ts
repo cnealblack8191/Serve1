@@ -140,3 +140,16 @@ test("the needs-attention queue lists stuck work and links to the job", async ({
   await attention.getByRole("link", { name: new RegExp(jobNo(4)) }).click();
   await expect(page).toHaveURL(/\/jobs\/job-4$/);
 });
+
+test("a job that becomes late appears in Needs attention without a reload", async ({ page }) => {
+  await page.clock.install({ time: new Date() });
+  await openBoard(page);
+  const attention = page.getByRole("region", { name: "Needs attention" });
+  const before = await attention.getByRole("link").count();
+  // Move the clock past every scheduled start today, plus the 30-minute grace.
+  const end = new Date();
+  end.setHours(23, 59, 0, 0);
+  await page.clock.fastForward(Math.max(61_000, end.getTime() - Date.now()));
+  await expect.poll(() => attention.getByRole("link").count()).toBeGreaterThanOrEqual(before);
+  await expect(attention).toContainText("Late: should have started");
+});
