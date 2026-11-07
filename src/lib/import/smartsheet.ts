@@ -195,6 +195,9 @@ const text = (c: Cell): string | null => {
   return t === "" ? null : t;
 };
 
+/** Noon on a known date, or null: an unknown close date stays unknown (never invented). */
+const noon = (d: string | null | undefined) => (d ? `${d}T12:00:00.000Z` : null);
+
 /** Job statuses the importer sets, least to most finished. */
 const STATUS_RANK: JobStatus[] = ["New", "Scheduled", "InProgress", "Complete", "Invoiced"];
 
@@ -253,7 +256,8 @@ function withParents(rows: Row[], primary: string) {
     while (stack.length && stack[stack.length - 1]!.level >= row.level) stack.pop();
     if (hasChildren || headingOnly) {
       if (name) stack.push({ level: row.level, text: name });
-      if (headingOnly) return;
+      // A name-only row with rows under it is a heading too, never a record of its own.
+      if (headingOnly || filled === 1) return;
     }
     out.push({ row, parents: stack.map((s) => s.text).reverse() });
   });
@@ -415,7 +419,7 @@ export function buildImportPlan(files: { file: string; sheets: Sheet[] }[]): Imp
           text(row.get("Notes")),
           status && !cleanStage(status) ? `Smartsheet status: ${status}` : null,
         ),
-        closedAt: closedStage ? `${expectedClose ?? created ?? "2000-01-01"}T12:00:00.000Z` : null,
+        closedAt: closedStage ? noon(expectedClose ?? created) : null,
         importKey: `sales:${norm(sheet.label)}:${row.r}:${matchName(name)}`,
       };
       const o: PlannedOpportunity = {
@@ -484,9 +488,7 @@ export function buildImportPlan(files: { file: string; sheets: Sheet[] }[]): Imp
           stage,
           customerContract: contract ?? "NonContract",
           importKey: `service:${norm(sheet.label)}:${row.r}:${matchName(name)}`,
-          closedAt: jobStatus
-            ? `${completedOn ?? date(row.get("Created")) ?? "2000-01-01"}T12:00:00.000Z`
-            : null,
+          closedAt: jobStatus ? noon(completedOn ?? date(row.get("Created"))) : null,
         });
         target = {
           key: data.importKey!,
@@ -501,7 +503,7 @@ export function buildImportPlan(files: { file: string; sheets: Sheet[] }[]): Imp
       if (jobStatus) {
         if (target.data.stage !== "ClosedWon") {
           target.data.stage = "ClosedWon";
-          target.data.closedAt ??= `${completedOn ?? "2000-01-01"}T12:00:00.000Z`;
+          target.data.closedAt ??= noon(completedOn);
         }
         target.job = {
           key: `job:${target.key}`,
@@ -605,7 +607,7 @@ export function buildImportPlan(files: { file: string; sheets: Sheet[] }[]): Imp
             `${sheet.label} row ${row.r}: task "${name}" matches an opportunity in stage "${match.data.stage}"; it is marked Closed won so the task can be its job.`,
           );
           match.data.stage = "ClosedWon";
-          match.data.closedAt ??= `${tracking.startDate ?? "2000-01-01"}T12:00:00.000Z`;
+          match.data.closedAt ??= noon(tracking.endDate ?? tracking.startDate);
         }
       } else {
         plan.jobs.push({
