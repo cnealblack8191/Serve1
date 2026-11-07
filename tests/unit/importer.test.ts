@@ -302,6 +302,13 @@ describe("import plan", () => {
     assert.equal(plan2.opportunities[0]!.data.type, "LowVoltage");
   });
 
+  it("an unmatched invoiced task keeps its completion time", () => {
+    const tasks = readCsv("Task,Status,Health,End Date\nOld job,Invoiced,Green,11/6/26\n", "Tasks");
+    const plan = sm.buildImportPlan([{ file: "t.csv", sheets: [tasks] }]);
+    assert.equal(plan.jobs[0]!.status, "Invoiced");
+    assert.equal(plan.jobs[0]!.completedAt, "2026-11-06T17:00:00.000Z");
+  });
+
   it("a retry after a partial run re-links the job instead of making another", async () => {
     mem.clear();
     const b = createLocalBackend();

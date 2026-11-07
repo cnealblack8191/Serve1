@@ -627,7 +627,9 @@ export function buildImportPlan(files: { file: string; sheets: Sheet[] }[]): Imp
           status,
           ...tracking,
           completedAt:
-            status === "Complete" && tracking.endDate ? `${tracking.endDate}T17:00:00.000Z` : null,
+            (status === "Complete" || status === "Invoiced") && tracking.endDate
+              ? `${tracking.endDate}T17:00:00.000Z`
+              : null,
           serviceReportApproved: false,
           completionPhotosOnFile: false,
           notes,
