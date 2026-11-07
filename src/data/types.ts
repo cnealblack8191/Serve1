@@ -119,6 +119,9 @@ export interface Customer extends BaseRecord {
   phone: string | null;
   email: string | null;
   notes: string | null;
+  /** Spectrum import (Phase 4): set only on customers imported from Spectrum. */
+  spectrumCompanyCode?: string | null;
+  spectrumCustomerCode?: string | null;
 }
 
 export interface Site extends BaseRecord {
@@ -126,6 +129,8 @@ export interface Site extends BaseRecord {
   name: string | null;
   address: string;
   accessNotes: string | null;
+  /** Spectrum import (Phase 4): set only on sites imported from Spectrum. */
+  spectrumCompanyCode?: string | null;
 }
 
 export interface Job extends BaseRecord {
@@ -164,6 +169,13 @@ export interface Job extends BaseRecord {
   serviceReportApproved: boolean;
   /** Completion photos are on file somewhere other than this app (set by the importer). */
   completionPhotosOnFile: boolean;
+  /**
+   * Spectrum import (Phase 4). The match key is company code + job number (a Spectrum job)
+   * or company code + work order number (a Spectrum work order, which also keeps its job number).
+   */
+  spectrumCompanyCode?: string | null;
+  spectrumJobNumber?: string | null;
+  spectrumWorkOrderNumber?: string | null;
 }
 
 /** Tracking defaults for a new job. */
@@ -266,6 +278,15 @@ export interface Invoice extends BaseRecord {
 
 /** Input shapes: everything except the server-managed fields. */
 type Input<T extends BaseRecord> = Omit<T, keyof BaseRecord>;
+/** One Spectrum connection test, recorded by Serv1 (the connector keeps none). Admin only. */
+export interface SpectrumCheck extends BaseRecord {
+  result: "connected" | "failed";
+  reason: string | null;
+  message: string | null;
+  durationMs: number | null;
+  checkedBy: string;
+}
+
 export type NewUser = Input<User>;
 export type NewCustomer = Input<Customer>;
 export type NewSite = Input<Site>;
@@ -274,6 +295,7 @@ export type NewAttachment = Input<Attachment>;
 export type NewSignature = Input<Signature>;
 export type NewInvoice = Input<Invoice>;
 export type NewOpportunity = Input<Opportunity>;
+export type NewSpectrumCheck = Input<SpectrumCheck>;
 
 export type TableName =
   | "users"
@@ -283,7 +305,8 @@ export type TableName =
   | "attachments"
   | "signatures"
   | "invoices"
-  | "opportunities";
+  | "opportunities"
+  | "spectrumChecks";
 
 export const TABLES: TableName[] = [
   "users",
@@ -294,6 +317,7 @@ export const TABLES: TableName[] = [
   "signatures",
   "invoices",
   "opportunities",
+  "spectrumChecks",
 ];
 
 /** The signed-in person, as every screen sees them. */

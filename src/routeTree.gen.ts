@@ -14,6 +14,7 @@ import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AuthenticatedIndexRouteImport } from './routes/_authenticated/index'
 import { Route as AuthenticatedDispatchRouteImport } from './routes/_authenticated/dispatch'
 import { Route as AuthenticatedImportRouteImport } from './routes/_authenticated/import'
+import { Route as AuthenticatedSpectrumImportRouteImport } from './routes/_authenticated/spectrum-import'
 import { Route as AuthenticatedUsersRouteImport } from './routes/_authenticated/users'
 import { Route as AuthenticatedCustomersIndexRouteImport } from './routes/_authenticated/customers.index'
 import { Route as AuthenticatedCustomersIdRouteImport } from './routes/_authenticated/customers.$id'
@@ -27,6 +28,7 @@ import { Route as AuthenticatedOpportunitiesIdRouteImport } from './routes/_auth
 import { Route as AuthenticatedOpportunitiesNewRouteImport } from './routes/_authenticated/opportunities.new'
 import { Route as AuthenticatedTechIndexRouteImport } from './routes/_authenticated/tech.index'
 import { Route as AuthenticatedTechIdRouteImport } from './routes/_authenticated/tech.$id'
+import { Route as AuthenticatedSettingsIntegrationsSpectrumRouteImport } from './routes/_authenticated/settings.integrations.spectrum'
 
 const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
   id: '/_authenticated',
@@ -52,6 +54,12 @@ const AuthenticatedImportRoute = AuthenticatedImportRouteImport.update({
   path: '/import',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedSpectrumImportRoute =
+  AuthenticatedSpectrumImportRouteImport.update({
+    id: '/spectrum-import',
+    path: '/spectrum-import',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedUsersRoute = AuthenticatedUsersRouteImport.update({
   id: '/users',
   path: '/users',
@@ -123,12 +131,19 @@ const AuthenticatedTechIdRoute = AuthenticatedTechIdRouteImport.update({
   path: '/tech/$id',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedSettingsIntegrationsSpectrumRoute =
+  AuthenticatedSettingsIntegrationsSpectrumRouteImport.update({
+    id: '/settings/integrations/spectrum',
+    path: '/settings/integrations/spectrum',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof AuthenticatedIndexRoute
   '/auth': typeof AuthRoute
   '/dispatch': typeof AuthenticatedDispatchRoute
   '/import': typeof AuthenticatedImportRoute
+  '/spectrum-import': typeof AuthenticatedSpectrumImportRoute
   '/users': typeof AuthenticatedUsersRoute
   '/customers/$id': typeof AuthenticatedCustomersIdRoute
   '/invoices/$id': typeof AuthenticatedInvoicesIdRoute
@@ -142,11 +157,13 @@ export interface FileRoutesByFullPath {
   '/jobs/': typeof AuthenticatedJobsIndexRoute
   '/opportunities/': typeof AuthenticatedOpportunitiesIndexRoute
   '/tech/': typeof AuthenticatedTechIndexRoute
+  '/settings/integrations/spectrum': typeof AuthenticatedSettingsIntegrationsSpectrumRoute
 }
 export interface FileRoutesByTo {
   '/auth': typeof AuthRoute
   '/dispatch': typeof AuthenticatedDispatchRoute
   '/import': typeof AuthenticatedImportRoute
+  '/spectrum-import': typeof AuthenticatedSpectrumImportRoute
   '/users': typeof AuthenticatedUsersRoute
   '/': typeof AuthenticatedIndexRoute
   '/customers/$id': typeof AuthenticatedCustomersIdRoute
@@ -161,6 +178,7 @@ export interface FileRoutesByTo {
   '/jobs': typeof AuthenticatedJobsIndexRoute
   '/opportunities': typeof AuthenticatedOpportunitiesIndexRoute
   '/tech': typeof AuthenticatedTechIndexRoute
+  '/settings/integrations/spectrum': typeof AuthenticatedSettingsIntegrationsSpectrumRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -168,6 +186,7 @@ export interface FileRoutesById {
   '/auth': typeof AuthRoute
   '/_authenticated/dispatch': typeof AuthenticatedDispatchRoute
   '/_authenticated/import': typeof AuthenticatedImportRoute
+  '/_authenticated/spectrum-import': typeof AuthenticatedSpectrumImportRoute
   '/_authenticated/users': typeof AuthenticatedUsersRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
   '/_authenticated/customers/$id': typeof AuthenticatedCustomersIdRoute
@@ -182,6 +201,7 @@ export interface FileRoutesById {
   '/_authenticated/jobs/': typeof AuthenticatedJobsIndexRoute
   '/_authenticated/opportunities/': typeof AuthenticatedOpportunitiesIndexRoute
   '/_authenticated/tech/': typeof AuthenticatedTechIndexRoute
+  '/_authenticated/settings/integrations/spectrum': typeof AuthenticatedSettingsIntegrationsSpectrumRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -190,6 +210,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/dispatch'
     | '/import'
+    | '/spectrum-import'
     | '/users'
     | '/customers/$id'
     | '/invoices/$id'
@@ -203,11 +224,13 @@ export interface FileRouteTypes {
     | '/jobs/'
     | '/opportunities/'
     | '/tech/'
+    | '/settings/integrations/spectrum'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/auth'
     | '/dispatch'
     | '/import'
+    | '/spectrum-import'
     | '/users'
     | '/'
     | '/customers/$id'
@@ -222,12 +245,14 @@ export interface FileRouteTypes {
     | '/jobs'
     | '/opportunities'
     | '/tech'
+    | '/settings/integrations/spectrum'
   id:
     | '__root__'
     | '/_authenticated'
     | '/auth'
     | '/_authenticated/dispatch'
     | '/_authenticated/import'
+    | '/_authenticated/spectrum-import'
     | '/_authenticated/users'
     | '/_authenticated/'
     | '/_authenticated/customers/$id'
@@ -242,6 +267,7 @@ export interface FileRouteTypes {
     | '/_authenticated/jobs/'
     | '/_authenticated/opportunities/'
     | '/_authenticated/tech/'
+    | '/_authenticated/settings/integrations/spectrum'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -284,6 +310,13 @@ declare module '@tanstack/react-router' {
       path: '/import'
       fullPath: '/import'
       preLoaderRoute: typeof AuthenticatedImportRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/spectrum-import': {
+      id: '/_authenticated/spectrum-import'
+      path: '/spectrum-import'
+      fullPath: '/spectrum-import'
+      preLoaderRoute: typeof AuthenticatedSpectrumImportRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/users': {
@@ -377,12 +410,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedTechIdRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/settings/integrations/spectrum': {
+      id: '/_authenticated/settings/integrations/spectrum'
+      path: '/settings/integrations/spectrum'
+      fullPath: '/settings/integrations/spectrum'
+      preLoaderRoute: typeof AuthenticatedSettingsIntegrationsSpectrumRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
   }
 }
 
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedDispatchRoute: typeof AuthenticatedDispatchRoute
   AuthenticatedImportRoute: typeof AuthenticatedImportRoute
+  AuthenticatedSpectrumImportRoute: typeof AuthenticatedSpectrumImportRoute
   AuthenticatedUsersRoute: typeof AuthenticatedUsersRoute
   AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
   AuthenticatedCustomersIdRoute: typeof AuthenticatedCustomersIdRoute
@@ -397,11 +438,13 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedJobsIndexRoute: typeof AuthenticatedJobsIndexRoute
   AuthenticatedOpportunitiesIndexRoute: typeof AuthenticatedOpportunitiesIndexRoute
   AuthenticatedTechIndexRoute: typeof AuthenticatedTechIndexRoute
+  AuthenticatedSettingsIntegrationsSpectrumRoute: typeof AuthenticatedSettingsIntegrationsSpectrumRoute
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedDispatchRoute: AuthenticatedDispatchRoute,
   AuthenticatedImportRoute: AuthenticatedImportRoute,
+  AuthenticatedSpectrumImportRoute: AuthenticatedSpectrumImportRoute,
   AuthenticatedUsersRoute: AuthenticatedUsersRoute,
   AuthenticatedIndexRoute: AuthenticatedIndexRoute,
   AuthenticatedCustomersIdRoute: AuthenticatedCustomersIdRoute,
@@ -416,6 +459,8 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedJobsIndexRoute: AuthenticatedJobsIndexRoute,
   AuthenticatedOpportunitiesIndexRoute: AuthenticatedOpportunitiesIndexRoute,
   AuthenticatedTechIndexRoute: AuthenticatedTechIndexRoute,
+  AuthenticatedSettingsIntegrationsSpectrumRoute:
+    AuthenticatedSettingsIntegrationsSpectrumRoute,
 }
 
 const AuthenticatedRouteRouteWithChildren =

@@ -22,6 +22,7 @@ import {
 } from "./seed";
 import { LocalFileStore } from "./file-store";
 import { TECH_SETTABLE, techMayMove } from "../jobflow";
+import { createFakeSpectrum } from "./spectrum-fake";
 
 /**
  * Local demo backend: runs entirely in the browser, persisted to localStorage,
@@ -38,7 +39,8 @@ type Tables = Record<TableName, BaseRecord[]>;
 function load(): Tables {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) return JSON.parse(raw) as Tables;
+    // Tables added later (Phase 4: spectrumChecks) start empty in older demo data.
+    if (raw) return { spectrumChecks: [], ...(JSON.parse(raw) as Partial<Tables>) } as Tables;
   } catch {
     /* fall through to seed */
   }
@@ -51,6 +53,7 @@ function load(): Tables {
     signatures: [],
     invoices: [...SEED_INVOICES],
     opportunities: [...SEED_OPPORTUNITIES],
+    spectrumChecks: [],
   };
 }
 
@@ -97,6 +100,7 @@ export function createLocalBackend(): Backend {
         listeners.forEach((l) => l("sites"));
         listeners.forEach((l) => l("users"));
         listeners.forEach((l) => l("opportunities"));
+        listeners.forEach((l) => l("spectrumChecks"));
       }
     });
   }
@@ -396,6 +400,12 @@ export function createLocalBackend(): Backend {
       read: (_r, me) => isOffice(me) || me?.role === "Owner",
       write: (_r, me) => isOffice(me),
     }),
+    // Spectrum connection tests: Admin only, add and remove (mirrors the Amplify rule).
+    spectrumChecks: repo("spectrumChecks", {
+      read: (_r, me) => me?.role === "Admin",
+      write: (_r, me, op) => me?.role === "Admin" && op !== "update",
+    }),
+    spectrum: createFakeSpectrum(session),
     files: filesApi,
     onChange(listener) {
       listeners.add(listener);

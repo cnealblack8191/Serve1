@@ -3,6 +3,7 @@ import { ManagedPolicy, PermissionsBoundary, PolicyStatement } from "aws-cdk-lib
 
 import { auth } from "./auth/resource";
 import { data } from "./data/resource";
+import { spectrumCaller } from "./functions/spectrum/resource";
 import { storage } from "./storage/resource";
 
 // Serv1 backend (SPEC.md sections 5, 6, 7). Deployed with
@@ -11,6 +12,7 @@ const backend = defineBackend({
   auth,
   data,
   storage,
+  spectrumCaller,
 });
 
 /**
@@ -46,4 +48,21 @@ if (techRole) {
       resources: [bucketArn + "/tech-files/${cognito-identity.amazonaws.com:sub}/*"],
     }),
   );
+}
+
+/**
+ * Spectrum connector (Phase 4). The connector accepts only the role named at its deployment
+ * (Serv1BackendRoleName), so the caller's role name is published as an output for the owner
+ * to pass on. execute-api:Invoke is granted only when the deployer sets
+ * SPECTRUM_INVOKE_RESOURCE to the connector's Serv1InvokeResource output; no ARN in code.
+ */
+const spectrumRole = backend.spectrumCaller.resources.lambda.role;
+const invokeResource = process.env.SPECTRUM_INVOKE_RESOURCE;
+if (spectrumRole && invokeResource) {
+  spectrumRole.addToPrincipalPolicy(
+    new PolicyStatement({ actions: ["execute-api:Invoke"], resources: [invokeResource] }),
+  );
+}
+if (spectrumRole) {
+  backend.addOutput({ custom: { spectrumCallerRoleName: spectrumRole.roleName } });
 }

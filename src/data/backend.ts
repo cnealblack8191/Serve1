@@ -15,10 +15,17 @@ import type {
   Opportunity,
   Signature,
   SignInResult,
+  NewSpectrumCheck,
   Site,
+  SpectrumCheck,
   TableName,
   User,
 } from "./types";
+import type {
+  SpectrumOperation,
+  SpectrumOps,
+  SpectrumReply,
+} from "../../amplify/functions/spectrum/contract";
 
 /**
  * The one contract between screens and the backend. Two implementations:
@@ -50,6 +57,18 @@ export interface FilesApi {
   remove(path: string): Promise<void>;
 }
 
+/**
+ * Spectrum connector calls. Amplify: the server-side `spectrum` query signs and sends them.
+ * Local demo: a fake connector with synthetic records (src/data/local/spectrum-fake.ts).
+ * Never throws for a refusal: the reply says what went wrong.
+ */
+export interface SpectrumApi {
+  call<O extends SpectrumOperation>(
+    operation: O,
+    params: SpectrumOps[O]["params"],
+  ): Promise<SpectrumReply<O>>;
+}
+
 export type ChangeListener = (table: TableName) => void;
 
 export interface Backend {
@@ -63,6 +82,8 @@ export interface Backend {
   signatures: Repo<Signature, NewSignature>;
   invoices: Repo<Invoice, NewInvoice>;
   opportunities: Repo<Opportunity, NewOpportunity>;
+  spectrumChecks: Repo<SpectrumCheck, NewSpectrumCheck>;
+  spectrum: SpectrumApi;
   files: FilesApi;
   /** Fires when any table changes (own writes and, on Amplify, other users' writes). */
   onChange(listener: ChangeListener): () => void;
