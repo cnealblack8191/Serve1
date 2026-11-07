@@ -1,4 +1,11 @@
-import type { JobPriority, JobStatus } from "@/data";
+import type {
+  CustomerContract,
+  JobHealth,
+  JobPriority,
+  JobStatus,
+  OpportunityStage,
+  WorkType,
+} from "@/data";
 
 /** SPEC.md section 12: one meaning per color, used everywhere. */
 export const JOB_STATUS_LABEL: Record<JobStatus, string> = {
@@ -36,4 +43,68 @@ export const PRIORITY_LABEL: Record<JobPriority, string> = {
   Normal: "Normal",
   High: "High",
   Emergency: "Emergency",
+};
+
+/** Sales stages as the owner numbers them in the Smartsheets. */
+export const STAGE_LABEL: Record<OpportunityStage, string> = {
+  Prospect: "1 Prospect",
+  Assessment: "2 Assessment",
+  ProposalBidding: "3 Proposal / bidding",
+  ProposalSent: "4 Proposal / bid sent",
+  CustomerReview: "5 Customer review",
+  CustomerFollowUp: "6 Customer follow-up",
+  ClosedWon: "Closed won",
+  ClosedLost: "Closed lost",
+  NoBid: "No bid",
+};
+
+/** Stage pills. Job status colors (gray, blue, orange, green, purple) are not reused here. */
+const OPEN_STAGE_CLASS = "bg-background text-foreground ring-zinc-400 dark:ring-zinc-500";
+export const STAGE_CLASS: Record<OpportunityStage, string> = {
+  Prospect: OPEN_STAGE_CLASS,
+  Assessment: OPEN_STAGE_CLASS,
+  ProposalBidding: OPEN_STAGE_CLASS,
+  ProposalSent: OPEN_STAGE_CLASS,
+  CustomerReview: OPEN_STAGE_CLASS,
+  CustomerFollowUp: OPEN_STAGE_CLASS,
+  ClosedWon:
+    "bg-eci-navy text-zinc-50 ring-eci-navy dark:bg-zinc-100 dark:text-eci-navy dark:ring-zinc-100",
+  ClosedLost: "bg-background text-red-800 ring-red-300 dark:text-red-300 dark:ring-red-800",
+  NoBid: "bg-muted text-muted-foreground ring-border",
+};
+
+export const CONTRACT_LABEL: Record<CustomerContract, string> = {
+  DeKalbGov: "DeKalb Gov.",
+  GwinnettSchools: "Gwinnett Schools",
+  RockdaleGov: "Rockdale Gov.",
+  BarrowSchools: "Barrow Schools",
+  DecaturCitySchools: "Decatur City Schools",
+  DeKalbSchools: "DeKalb Schools",
+  NonContract: "Non-contract",
+};
+
+export const WORK_TYPE_LABEL: Record<WorkType, string> = {
+  HighVoltage: "High Voltage",
+  LowVoltage: "Low Voltage",
+  Service: "Service",
+};
+
+/** Work health: green / amber / red, with a text label (never color alone). */
+export const HEALTH_LABEL: Record<JobHealth, string> = {
+  OnTrack: "On track",
+  Watch: "Watch",
+  Behind: "Behind",
+};
+export const HEALTH_CLASS: Record<JobHealth, string> = {
+  OnTrack:
+    "bg-emerald-50 text-emerald-800 ring-emerald-300 dark:bg-emerald-950 dark:text-emerald-200 dark:ring-emerald-800",
+  Watch:
+    "bg-amber-50 text-amber-900 ring-amber-300 dark:bg-amber-950 dark:text-amber-200 dark:ring-amber-800",
+  Behind: "bg-red-50 text-red-800 ring-red-300 dark:bg-red-950 dark:text-red-200 dark:ring-red-800",
+};
+export const HEALTH_HEX: Record<JobHealth | "NotSet", string> = {
+  OnTrack: "#15803d",
+  Watch: "#f59e0b",
+  Behind: "#b91c1c",
+  NotSet: "#d4d4d8",
 };

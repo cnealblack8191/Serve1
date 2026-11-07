@@ -16,6 +16,7 @@ import {
   SEED_CUSTOMERS,
   SEED_INVOICES,
   SEED_JOBS,
+  SEED_OPPORTUNITIES,
   SEED_SITES,
   SEED_USERS,
 } from "./seed";
@@ -27,7 +28,8 @@ import { LocalFileStore } from "./file-store";
  * access rules the Amplify backend enforces: a tech sees, changes and adds only
  * jobs, attachments and signatures carrying their own identity.
  */
-const STORAGE_KEY = "serv1.local.v2";
+// v3: Phase 2 adds opportunities and job tracking fields, so older demo data is re-seeded.
+const STORAGE_KEY = "serv1.local.v3";
 const SESSION_KEY = "serv1.local.session";
 
 type Tables = Record<TableName, BaseRecord[]>;
@@ -47,6 +49,7 @@ function load(): Tables {
     attachments: [],
     signatures: [],
     invoices: [...SEED_INVOICES],
+    opportunities: [...SEED_OPPORTUNITIES],
   };
 }
 
@@ -92,6 +95,7 @@ export function createLocalBackend(): Backend {
         listeners.forEach((l) => l("customers"));
         listeners.forEach((l) => l("sites"));
         listeners.forEach((l) => l("users"));
+        listeners.forEach((l) => l("opportunities"));
       }
     });
   }
@@ -357,6 +361,11 @@ export function createLocalBackend(): Backend {
           me?.role === "Owner" &&
           !!patch &&
           Object.keys(patch).every((k) => k === "status")),
+    }),
+    // Sales pipeline: office edits, owner reads, techs see nothing (amounts live here).
+    opportunities: repo("opportunities", {
+      read: (_r, me) => isOffice(me) || me?.role === "Owner",
+      write: (_r, me) => isOffice(me),
     }),
     files: filesApi,
     onChange(listener) {

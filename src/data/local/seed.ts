@@ -1,5 +1,15 @@
 import { fixedNumber } from "../numbers";
-import type { Customer, Invoice, InvoiceLineItem, Job, Role, Site, User } from "../types";
+import {
+  JOB_TRACKING_DEFAULTS,
+  type Customer,
+  type Invoice,
+  type InvoiceLineItem,
+  type Job,
+  type Opportunity,
+  type Role,
+  type Site,
+  type User,
+} from "../types";
 
 /**
  * Demo data for the local (no-AWS) mode. Fake names only (SPEC.md section 4).
@@ -255,7 +265,9 @@ const unassigned = {
   laborHours: null,
 };
 
-const SEED_JOB_LIST: Job[] = [
+/** Seed jobs before tracking fields; Business Services tracking is added per job below. */
+type SeedJob = Omit<Job, keyof typeof JOB_TRACKING_DEFAULTS>;
+const SEED_JOB_LIST: SeedJob[] = [
   // ---- New: waiting in the dispatch queue (only these two; tests empty the queue) ----
   {
     id: "job-1",
@@ -602,6 +614,39 @@ const SEED_JOB_LIST: Job[] = [
   },
 ];
 
+/** Business Services tracking on a few jobs (two came from won opportunities). */
+const SEED_TRACKING: Record<string, Partial<Job>> = {
+  "job-9": {
+    opportunityId: "opp-11",
+    workType: "LowVoltage",
+    health: "Watch",
+    startDate: at(workday(-1), 8).slice(0, 10),
+    endDate: at(workday(3), 8).slice(0, 10),
+    poReceived: true,
+    materialOrdered: true,
+    materialDelivered: true,
+    liftConnex: false,
+  },
+  "job-14": {
+    opportunityId: "opp-12",
+    workType: "HighVoltage",
+    health: "OnTrack",
+    startDate: at(workday(2), 8).slice(0, 10),
+    endDate: at(workday(2), 8).slice(0, 10),
+    poReceived: true,
+    materialOrdered: true,
+  },
+  "job-10": {
+    workType: "Service",
+    health: "Behind",
+    startDate: at(workday(-3), 8).slice(0, 10),
+    endDate: at(workday(-1), 8).slice(0, 10),
+    poReceived: true,
+    materialOrdered: true,
+  },
+  "job-5": { workType: "Service", serviceReportApproved: true, completionPhotosOnFile: true },
+};
+
 /**
  * Give each job a believable "created" time so the Jobs list (newest first) reads naturally:
  * calls still waiting were taken this morning, everything else was booked a few days ahead.
@@ -614,7 +659,9 @@ export const SEED_JOBS: Job[] = SEED_JOB_LIST.map((j, i) => {
   const createdAt = created.toISOString();
   const n = Number(j.id.replace("job-", ""));
   return {
+    ...JOB_TRACKING_DEFAULTS,
     ...j,
+    ...SEED_TRACKING[j.id],
     jobNumber: fixedNumber("J", created, n),
     createdAt,
     updatedAt: j.completedAt ?? j.startedAt ?? createdAt,
@@ -655,3 +702,190 @@ export const SEED_INVOICES: Invoice[] = [
 
 /** The seeded job number for `job-<n>` (tests use this instead of hard-coding numbers). */
 export const seedJobNumber = (id: string): string => SEED_JOBS.find((j) => j.id === id)!.jobNumber!;
+
+/** Fake sales reps for the demo (the real names come from the owner's import). */
+export const SEED_REPS = ["Rita Reyes", "Dan Kemp"];
+
+const day = (offset: number) => at(offset, 8).slice(0, 10);
+const opp = (
+  id: string,
+  o: Partial<Opportunity> & Pick<Opportunity, "name" | "stage" | "type" | "customerContract">,
+): Opportunity => ({
+  id,
+  customerId: null,
+  customerContact: null,
+  invoiceContact: null,
+  eciQuoteNumber: null,
+  workOrderNumber: null,
+  customerPoNumber: null,
+  quoteDue: null,
+  expectedClose: null,
+  siteVisitDate: null,
+  salesRep: SEED_REPS[0]!,
+  priority: null,
+  probability: null,
+  hoursQuoted: null,
+  quotedAmount: null,
+  forecastAmount: null,
+  jobCost: null,
+  invoicedAmount: null,
+  quotedMargin: null,
+  completedMargin: null,
+  notes: null,
+  nextStep: null,
+  nextStepDue: null,
+  nextStepRemind: false,
+  closedAt: null,
+  jobId: null,
+  importKey: null,
+  ...stamp,
+  ...o,
+});
+
+/** Sample pipeline across every stage, contract and type. All names are made up. */
+export const SEED_OPPORTUNITIES: Opportunity[] = [
+  opp("opp-1", {
+    name: "Library branch parking lot lighting retrofit",
+    stage: "Prospect",
+    type: "HighVoltage",
+    customerContract: "DeKalbGov",
+    customerContact: "Morgan Lee",
+    expectedClose: day(30),
+    nextStep: "Call facilities to set a walk-through",
+    nextStepDue: day(2),
+    nextStepRemind: true,
+  }),
+  opp("opp-2", {
+    name: "Middle school intercom replacement",
+    stage: "Assessment",
+    type: "LowVoltage",
+    customerContract: "GwinnettSchools",
+    customerContact: "Jamie Park",
+    salesRep: SEED_REPS[1]!,
+    expectedClose: day(21),
+    nextStep: "Book site visit",
+    nextStepDue: day(1),
+  }),
+  opp("opp-3", {
+    name: "Fire station generator transfer switch",
+    stage: "Assessment",
+    type: "HighVoltage",
+    customerContract: "RockdaleGov",
+    siteVisitDate: day(3),
+    expectedClose: day(25),
+    nextStep: "Site visit with the battalion chief",
+    nextStepDue: day(3),
+  }),
+  opp("opp-4", {
+    name: "Elementary school gym LED high-bays",
+    stage: "ProposalBidding",
+    type: "HighVoltage",
+    customerContract: "BarrowSchools",
+    eciQuoteNumber: "Q-24-0412",
+    quoteDue: day(-2),
+    expectedClose: day(14),
+    hoursQuoted: 64,
+    quotedAmount: 38500,
+    forecastAmount: 38500,
+    probability: 50,
+    nextStep: "Finish fixture count and send bid",
+    nextStepDue: day(-1),
+    nextStepRemind: true,
+  }),
+  opp("opp-5", {
+    name: "Admin building access control, 12 doors",
+    stage: "ProposalSent",
+    type: "LowVoltage",
+    customerContract: "DecaturCitySchools",
+    eciQuoteNumber: "Q-24-0398",
+    quoteDue: day(-6),
+    expectedClose: day(-3),
+    quotedAmount: 46200,
+    forecastAmount: 46200,
+    probability: 60,
+    salesRep: SEED_REPS[1]!,
+  }),
+  opp("opp-6", {
+    name: "Courthouse annex panel upgrade",
+    stage: "CustomerReview",
+    type: "HighVoltage",
+    customerContract: "DeKalbGov",
+    eciQuoteNumber: "Q-24-0377",
+    expectedClose: day(7),
+    quotedAmount: 72900,
+    forecastAmount: 72900,
+    probability: 70,
+    nextStep: "Answer the engineer's questions on the one-line",
+    nextStepDue: day(4),
+  }),
+  opp("opp-7", {
+    name: "High school camera system expansion",
+    stage: "CustomerFollowUp",
+    type: "LowVoltage",
+    customerContract: "DeKalbSchools",
+    eciQuoteNumber: "Q-24-0350",
+    expectedClose: day(-10),
+    quotedAmount: 28800,
+    forecastAmount: 20000,
+    probability: 40,
+    salesRep: SEED_REPS[1]!,
+  }),
+  opp("opp-8", {
+    name: "Restaurant kitchen circuits and hood lights",
+    stage: "CustomerFollowUp",
+    type: "Service",
+    customerContract: "NonContract",
+    customerId: "cust-7",
+    customerContact: "Jordan (kitchen manager)",
+    eciQuoteNumber: "Q-24-0421",
+    expectedClose: day(5),
+    quotedAmount: 3400,
+    nextStep: "Follow up on the quote",
+    nextStepDue: day(0),
+    nextStepRemind: true,
+  }),
+  opp("opp-9", {
+    name: "Park pavilion receptacles",
+    stage: "ClosedLost",
+    type: "Service",
+    customerContract: "RockdaleGov",
+    quotedAmount: 5200,
+    closedAt: at(-20, 9),
+  }),
+  opp("opp-10", {
+    name: "Bus depot fiber run",
+    stage: "NoBid",
+    type: "LowVoltage",
+    customerContract: "GwinnettSchools",
+    closedAt: at(-15, 9),
+    notes: "Outside our fiber scope this year.",
+  }),
+  opp("opp-11", {
+    name: "Self storage corridor LED wall packs",
+    stage: "ClosedWon",
+    type: "LowVoltage",
+    customerContract: "NonContract",
+    customerId: "cust-6",
+    eciQuoteNumber: "Q-24-0333",
+    customerPoNumber: "PO-77812",
+    workOrderNumber: "WO-5521",
+    quotedAmount: 9800,
+    jobCost: 6100,
+    quotedMargin: 37.8,
+    closedAt: at(-6, 9),
+    jobId: "job-9",
+  }),
+  opp("opp-12", {
+    name: "Pool equipment room GFCI protection",
+    stage: "ClosedWon",
+    type: "HighVoltage",
+    customerContract: "NonContract",
+    customerId: "cust-2",
+    eciQuoteNumber: "Q-24-0340",
+    customerPoNumber: "PO-4410-22",
+    quotedAmount: 4600,
+    closedAt: at(-4, 9),
+    jobId: "job-14",
+    salesRep: SEED_REPS[1]!,
+  }),
+];

@@ -20,6 +20,9 @@ import { Route as AuthenticatedInvoicesIdRouteImport } from './routes/_authentic
 import { Route as AuthenticatedJobsIndexRouteImport } from './routes/_authenticated/jobs.index'
 import { Route as AuthenticatedJobsIdRouteImport } from './routes/_authenticated/jobs.$id'
 import { Route as AuthenticatedJobsNewRouteImport } from './routes/_authenticated/jobs.new'
+import { Route as AuthenticatedOpportunitiesIndexRouteImport } from './routes/_authenticated/opportunities.index'
+import { Route as AuthenticatedOpportunitiesIdRouteImport } from './routes/_authenticated/opportunities.$id'
+import { Route as AuthenticatedOpportunitiesNewRouteImport } from './routes/_authenticated/opportunities.new'
 import { Route as AuthenticatedTechIndexRouteImport } from './routes/_authenticated/tech.index'
 import { Route as AuthenticatedTechIdRouteImport } from './routes/_authenticated/tech.$id'
 
@@ -80,6 +83,24 @@ const AuthenticatedJobsNewRoute = AuthenticatedJobsNewRouteImport.update({
   path: '/jobs/new',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedOpportunitiesIndexRoute =
+  AuthenticatedOpportunitiesIndexRouteImport.update({
+    id: '/opportunities/',
+    path: '/opportunities/',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedOpportunitiesIdRoute =
+  AuthenticatedOpportunitiesIdRouteImport.update({
+    id: '/opportunities/$id',
+    path: '/opportunities/$id',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedOpportunitiesNewRoute =
+  AuthenticatedOpportunitiesNewRouteImport.update({
+    id: '/opportunities/new',
+    path: '/opportunities/new',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedTechIndexRoute = AuthenticatedTechIndexRouteImport.update({
   id: '/tech/',
   path: '/tech/',
@@ -99,10 +120,13 @@ export interface FileRoutesByFullPath {
   '/invoices/$id': typeof AuthenticatedInvoicesIdRoute
   '/jobs/$id': typeof AuthenticatedJobsIdRoute
   '/jobs/new': typeof AuthenticatedJobsNewRoute
+  '/opportunities/$id': typeof AuthenticatedOpportunitiesIdRoute
+  '/opportunities/new': typeof AuthenticatedOpportunitiesNewRoute
   '/tech/$id': typeof AuthenticatedTechIdRoute
   '/customers/': typeof AuthenticatedCustomersIndexRoute
   '/invoices/': typeof AuthenticatedInvoicesIndexRoute
   '/jobs/': typeof AuthenticatedJobsIndexRoute
+  '/opportunities/': typeof AuthenticatedOpportunitiesIndexRoute
   '/tech/': typeof AuthenticatedTechIndexRoute
 }
 export interface FileRoutesByTo {
@@ -113,10 +137,13 @@ export interface FileRoutesByTo {
   '/invoices/$id': typeof AuthenticatedInvoicesIdRoute
   '/jobs/$id': typeof AuthenticatedJobsIdRoute
   '/jobs/new': typeof AuthenticatedJobsNewRoute
+  '/opportunities/$id': typeof AuthenticatedOpportunitiesIdRoute
+  '/opportunities/new': typeof AuthenticatedOpportunitiesNewRoute
   '/tech/$id': typeof AuthenticatedTechIdRoute
   '/customers': typeof AuthenticatedCustomersIndexRoute
   '/invoices': typeof AuthenticatedInvoicesIndexRoute
   '/jobs': typeof AuthenticatedJobsIndexRoute
+  '/opportunities': typeof AuthenticatedOpportunitiesIndexRoute
   '/tech': typeof AuthenticatedTechIndexRoute
 }
 export interface FileRoutesById {
@@ -129,10 +156,13 @@ export interface FileRoutesById {
   '/_authenticated/invoices/$id': typeof AuthenticatedInvoicesIdRoute
   '/_authenticated/jobs/$id': typeof AuthenticatedJobsIdRoute
   '/_authenticated/jobs/new': typeof AuthenticatedJobsNewRoute
+  '/_authenticated/opportunities/$id': typeof AuthenticatedOpportunitiesIdRoute
+  '/_authenticated/opportunities/new': typeof AuthenticatedOpportunitiesNewRoute
   '/_authenticated/tech/$id': typeof AuthenticatedTechIdRoute
   '/_authenticated/customers/': typeof AuthenticatedCustomersIndexRoute
   '/_authenticated/invoices/': typeof AuthenticatedInvoicesIndexRoute
   '/_authenticated/jobs/': typeof AuthenticatedJobsIndexRoute
+  '/_authenticated/opportunities/': typeof AuthenticatedOpportunitiesIndexRoute
   '/_authenticated/tech/': typeof AuthenticatedTechIndexRoute
 }
 export interface FileRouteTypes {
@@ -145,10 +175,13 @@ export interface FileRouteTypes {
     | '/invoices/$id'
     | '/jobs/$id'
     | '/jobs/new'
+    | '/opportunities/$id'
+    | '/opportunities/new'
     | '/tech/$id'
     | '/customers/'
     | '/invoices/'
     | '/jobs/'
+    | '/opportunities/'
     | '/tech/'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -159,10 +192,13 @@ export interface FileRouteTypes {
     | '/invoices/$id'
     | '/jobs/$id'
     | '/jobs/new'
+    | '/opportunities/$id'
+    | '/opportunities/new'
     | '/tech/$id'
     | '/customers'
     | '/invoices'
     | '/jobs'
+    | '/opportunities'
     | '/tech'
   id:
     | '__root__'
@@ -174,10 +210,13 @@ export interface FileRouteTypes {
     | '/_authenticated/invoices/$id'
     | '/_authenticated/jobs/$id'
     | '/_authenticated/jobs/new'
+    | '/_authenticated/opportunities/$id'
+    | '/_authenticated/opportunities/new'
     | '/_authenticated/tech/$id'
     | '/_authenticated/customers/'
     | '/_authenticated/invoices/'
     | '/_authenticated/jobs/'
+    | '/_authenticated/opportunities/'
     | '/_authenticated/tech/'
   fileRoutesById: FileRoutesById
 }
@@ -265,6 +304,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedJobsNewRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/opportunities/': {
+      id: '/_authenticated/opportunities/'
+      path: '/opportunities'
+      fullPath: '/opportunities/'
+      preLoaderRoute: typeof AuthenticatedOpportunitiesIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/opportunities/$id': {
+      id: '/_authenticated/opportunities/$id'
+      path: '/opportunities/$id'
+      fullPath: '/opportunities/$id'
+      preLoaderRoute: typeof AuthenticatedOpportunitiesIdRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/opportunities/new': {
+      id: '/_authenticated/opportunities/new'
+      path: '/opportunities/new'
+      fullPath: '/opportunities/new'
+      preLoaderRoute: typeof AuthenticatedOpportunitiesNewRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/tech/': {
       id: '/_authenticated/tech/'
       path: '/tech'
@@ -289,10 +349,13 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedInvoicesIdRoute: typeof AuthenticatedInvoicesIdRoute
   AuthenticatedJobsIdRoute: typeof AuthenticatedJobsIdRoute
   AuthenticatedJobsNewRoute: typeof AuthenticatedJobsNewRoute
+  AuthenticatedOpportunitiesIdRoute: typeof AuthenticatedOpportunitiesIdRoute
+  AuthenticatedOpportunitiesNewRoute: typeof AuthenticatedOpportunitiesNewRoute
   AuthenticatedTechIdRoute: typeof AuthenticatedTechIdRoute
   AuthenticatedCustomersIndexRoute: typeof AuthenticatedCustomersIndexRoute
   AuthenticatedInvoicesIndexRoute: typeof AuthenticatedInvoicesIndexRoute
   AuthenticatedJobsIndexRoute: typeof AuthenticatedJobsIndexRoute
+  AuthenticatedOpportunitiesIndexRoute: typeof AuthenticatedOpportunitiesIndexRoute
   AuthenticatedTechIndexRoute: typeof AuthenticatedTechIndexRoute
 }
 
@@ -303,10 +366,13 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedInvoicesIdRoute: AuthenticatedInvoicesIdRoute,
   AuthenticatedJobsIdRoute: AuthenticatedJobsIdRoute,
   AuthenticatedJobsNewRoute: AuthenticatedJobsNewRoute,
+  AuthenticatedOpportunitiesIdRoute: AuthenticatedOpportunitiesIdRoute,
+  AuthenticatedOpportunitiesNewRoute: AuthenticatedOpportunitiesNewRoute,
   AuthenticatedTechIdRoute: AuthenticatedTechIdRoute,
   AuthenticatedCustomersIndexRoute: AuthenticatedCustomersIndexRoute,
   AuthenticatedInvoicesIndexRoute: AuthenticatedInvoicesIndexRoute,
   AuthenticatedJobsIndexRoute: AuthenticatedJobsIndexRoute,
+  AuthenticatedOpportunitiesIndexRoute: AuthenticatedOpportunitiesIndexRoute,
   AuthenticatedTechIndexRoute: AuthenticatedTechIndexRoute,
 }
 

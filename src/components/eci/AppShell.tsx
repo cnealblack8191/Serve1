@@ -1,5 +1,6 @@
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import {
+  Briefcase,
   CalendarRange,
   ClipboardList,
   LayoutDashboard,
@@ -34,6 +35,12 @@ import { cn } from "@/lib/utils";
  */
 const NAV: { to: string; label: string; icon: typeof LayoutDashboard; roles: Role[] }[] = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard, roles: ["Admin", "Office", "Owner"] },
+  {
+    to: "/opportunities",
+    label: "Opportunities",
+    icon: Briefcase,
+    roles: ["Admin", "Office", "Owner"],
+  },
   { to: "/customers", label: "Customers", icon: Users, roles: ["Admin", "Office", "Owner"] },
   { to: "/jobs", label: "Jobs", icon: ClipboardList, roles: ["Admin", "Office", "Owner"] },
   { to: "/dispatch", label: "Dispatch", icon: CalendarRange, roles: ["Admin", "Office"] },

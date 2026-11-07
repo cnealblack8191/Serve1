@@ -3,9 +3,11 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import { dashboardStats } from "../../src/components/serv1/billing/dashboardStats.ts";
+import { JOB_TRACKING_DEFAULTS } from "../../src/data/types.ts";
 import type { Invoice, Job, JobStatus } from "../../src/data/types.ts";
 
 const job = (id: string, status: JobStatus, completedAt: string | null = null): Job => ({
+  ...JOB_TRACKING_DEFAULTS,
   id,
   jobNumber: id,
   customerId: "c",

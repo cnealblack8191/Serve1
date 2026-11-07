@@ -26,7 +26,11 @@ export default defineConfig({
     timeout: 120_000,
   },
   projects: [
-    { name: "laptop", use: { ...devices["Desktop Chrome"] }, testIgnore: /phone\.spec\.ts$/ },
+    {
+      name: "laptop",
+      use: { ...devices["Desktop Chrome"] },
+      testIgnore: [/phone\.spec\.ts$/, /unit\//],
+    },
     { name: "phone", use: { ...devices["Pixel 7"] }, testMatch: /phone\.spec\.ts$/ },
   ],
 });

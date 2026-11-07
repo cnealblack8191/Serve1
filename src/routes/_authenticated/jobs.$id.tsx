@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 
 import { DataRow, EmptyState, PageHeader, SectionHeading } from "@/components/eci/primitives";
 import { JobStatusBadge } from "@/components/serv1/office/JobStatusBadge";
+import { JobTracking } from "@/components/serv1/office/JobTracking";
 import { Button } from "@/components/ui/button";
 import {
   fileUrl,
@@ -130,6 +131,12 @@ function Page() {
         <DataRow label="Started" value={fmt(j.startedAt)} />
         <DataRow label="Completed" value={fmt(j.completedAt)} />
       </section>
+
+      <JobTracking
+        job={j}
+        canEdit={isOffice}
+        photoCount={photos.filter((a) => a.type === "Photo").length}
+      />
 
       <section className="space-y-3">
         <SectionHeading title="Photos and files" />

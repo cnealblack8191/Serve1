@@ -21,6 +21,7 @@ export * from "./numbers";
 export * from "./tech";
 export * from "./dispatch";
 export * from "./billing";
+export * from "./opportunities";
 export { backendKind, onDataChange } from "./hooks";
 
 /**
@@ -73,5 +74,8 @@ export const data = {
   },
   get invoices() {
     return backend().invoices;
+  },
+  get opportunities() {
+    return backend().opportunities;
   },
 };

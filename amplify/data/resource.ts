@@ -2,7 +2,8 @@ import { type ClientSchema, a, defineData } from "@aws-amplify/backend";
 
 /**
  * Pilot tables (SPEC.md section 5, marked ★): users, customers, sites, jobs,
- * attachments, signatures, invoices. Non-pilot tables (assets, quotes,
+ * attachments, signatures, invoices. Phase 2 (owner-approved Serv1 plan, decision 95)
+ * adds opportunities and job tracking fields. Non-pilot tables (assets, quotes,
  * time_entries) are added later, by decision.
  *
  * Access (SPEC.md section 2):
@@ -31,6 +32,28 @@ const schema = a.schema({
   InvoiceStatus: a.enum(["Draft", "Sent", "Paid"]),
   UserRole: a.enum(["Admin", "Office", "Tech", "Owner"]),
   AttachmentType: a.enum(["Photo", "Document", "Signature", "InvoicePdf"]),
+  WorkType: a.enum(["HighVoltage", "LowVoltage", "Service"]),
+  JobHealth: a.enum(["OnTrack", "Watch", "Behind"]),
+  OpportunityStage: a.enum([
+    "Prospect",
+    "Assessment",
+    "ProposalBidding",
+    "ProposalSent",
+    "CustomerReview",
+    "CustomerFollowUp",
+    "ClosedWon",
+    "ClosedLost",
+    "NoBid",
+  ]),
+  CustomerContract: a.enum([
+    "DeKalbGov",
+    "GwinnettSchools",
+    "RockdaleGov",
+    "BarrowSchools",
+    "DecaturCitySchools",
+    "DeKalbSchools",
+    "NonContract",
+  ]),
 
   User: a
     .model({
@@ -106,6 +129,18 @@ const schema = a.schema({
       completedAt: a.datetime(),
       notes: a.string(),
       laborHours: a.float(),
+      // Business Services tracking (Phase 2). No money here: techs read their jobs.
+      opportunityId: a.id(),
+      workType: a.ref("WorkType"),
+      health: a.ref("JobHealth"),
+      startDate: a.date(),
+      endDate: a.date(),
+      poReceived: a.boolean().default(false),
+      materialOrdered: a.boolean().default(false),
+      materialDelivered: a.boolean().default(false),
+      liftConnex: a.boolean().default(false),
+      serviceReportApproved: a.boolean().default(false),
+      completionPhotosOnFile: a.boolean().default(false),
       attachments: a.hasMany("Attachment", "jobId"),
       signatures: a.hasMany("Signature", "jobId"),
       invoice: a.hasOne("Invoice", "jobId"),
@@ -178,6 +213,47 @@ const schema = a.schema({
       pdfPath: a.string(),
     })
     .identifier(["jobId"])
+    .authorization((allow) => [
+      allow.groups(office).to(["create", "read", "update", "delete"]),
+      allow.groups(["Owner"]).to(["read"]),
+    ]),
+
+  // Sales opportunity (replaces the Sales and Service Pipeline Smartsheets). Office edits,
+  // owner reads; techs have no access, so quote amounts and margins never reach a tech.
+  // A won opportunity links to the job it became (jobId); the job links back (opportunityId).
+  Opportunity: a
+    .model({
+      name: a.string().required(),
+      customerId: a.id(),
+      customerContract: a.ref("CustomerContract").required(),
+      type: a.ref("WorkType").required(),
+      stage: a.ref("OpportunityStage").required(),
+      customerContact: a.string(),
+      invoiceContact: a.string(),
+      eciQuoteNumber: a.string(),
+      workOrderNumber: a.string(),
+      customerPoNumber: a.string(),
+      quoteDue: a.date(),
+      expectedClose: a.date(),
+      siteVisitDate: a.date(),
+      salesRep: a.string(),
+      priority: a.string(),
+      probability: a.float(),
+      hoursQuoted: a.float(),
+      quotedAmount: a.float(),
+      forecastAmount: a.float(),
+      jobCost: a.float(),
+      invoicedAmount: a.float(),
+      quotedMargin: a.float(),
+      completedMargin: a.float(),
+      notes: a.string(),
+      nextStep: a.string(),
+      nextStepDue: a.date(),
+      nextStepRemind: a.boolean().default(false),
+      closedAt: a.datetime(),
+      jobId: a.id(),
+      importKey: a.string(),
+    })
     .authorization((allow) => [
       allow.groups(office).to(["create", "read", "update", "delete"]),
       allow.groups(["Owner"]).to(["read"]),
