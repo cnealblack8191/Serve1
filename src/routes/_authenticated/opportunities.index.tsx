@@ -101,9 +101,14 @@ function Page() {
         }
       >
         {isOffice ? (
-          <Button asChild>
-            <Link to="/opportunities/new">Add opportunity</Link>
-          </Button>
+          <>
+            <Button asChild variant="outline">
+              <Link to="/import">Import from Smartsheet</Link>
+            </Button>
+            <Button asChild>
+              <Link to="/opportunities/new">Add opportunity</Link>
+            </Button>
+          </>
         ) : null}
       </PageHeader>
 
