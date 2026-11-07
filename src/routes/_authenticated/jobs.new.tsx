@@ -27,11 +27,13 @@ import {
 import { PRIORITY_LABEL } from "@/lib/status";
 import { cn } from "@/lib/utils";
 
-const JOB_TYPES = ["Service call", "Repair", "Install", "Inspection", "Emergency"];
+import { OFFICE_VIEW, requireRole } from "@/lib/access";
+import { JOB_TYPES } from "@/lib/job-types";
 
 export const Route = createFileRoute("/_authenticated/jobs/new")({
   beforeLoad: ({ context }) => {
-    if (!isOfficeRole(context.user.role)) throw redirect({ to: "/jobs" });
+    requireRole(context.user.role, OFFICE_VIEW); // techs go to Today
+    if (!isOfficeRole(context.user.role)) throw redirect({ to: "/jobs" }); // owners read only
   },
   validateSearch: (s: Record<string, unknown>): { customerId?: string } =>
     typeof s["customerId"] === "string" ? { customerId: s["customerId"] } : {},
@@ -48,7 +50,7 @@ function Page() {
   const [q, setQ] = useState("");
   const [customerId, setCustomerId] = useState(search.customerId ?? "");
   const [siteId, setSiteId] = useState("");
-  const [jobType, setJobType] = useState(JOB_TYPES[0]!);
+  const [jobType, setJobType] = useState<string>(JOB_TYPES[0]);
   const [priority, setPriority] = useState<JobPriority>("Normal");
   const [description, setDescription] = useState("");
   const [error, setError] = useState("");

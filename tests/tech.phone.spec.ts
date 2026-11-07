@@ -4,8 +4,8 @@ import { signIn } from "./helpers";
 
 /**
  * Tech lane (TASKS.md 6, 7, 8) on a phone screen, local demo mode.
- * Seed: tech1 has J-1002 (Oak Hill Apartments, Scheduled today) and a Complete job yesterday;
- * tech2 has J-1003 (Peachtree Logistics, In Progress today).
+ * Seed: tech1 has job-2 (Oak Hill Apartments, Scheduled today) and a Complete job yesterday;
+ * tech2 has job-3 (Peachtree Logistics, In Progress today).
  */
 
 // 1x1 PNG, generated in the test so no binary file is checked in.

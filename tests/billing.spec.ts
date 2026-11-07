@@ -1,12 +1,12 @@
 import { expect, test } from "@playwright/test";
 
-import { signIn } from "./helpers";
+import { jobNo, signIn } from "./helpers";
 
 test("office turns the completed job into an invoice with one click", async ({ page }) => {
   await signIn(page, "office");
   await page.goto("/invoices");
 
-  const ready = page.getByRole("listitem").filter({ hasText: "J-1004" });
+  const ready = page.getByRole("listitem").filter({ hasText: jobNo(4) });
   await expect(ready).toBeVisible();
   await ready.getByRole("button", { name: "Create invoice" }).click();
 
@@ -23,7 +23,7 @@ test("office turns the completed job into an invoice with one click", async ({ p
   await expect(row).toContainText("Draft");
 
   // The job is now Invoiced, so it is no longer waiting (other seeded Complete jobs still are).
-  await expect(page.getByRole("listitem").filter({ hasText: "J-1004" })).toHaveCount(0);
+  await expect(page.getByRole("listitem").filter({ hasText: jobNo(4) })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Create invoice" }).first()).toBeVisible();
 });
 
@@ -33,9 +33,10 @@ test("owner dashboard shows the summary cards", async ({ page }) => {
   for (const label of [
     "Completed today",
     "Completed this week",
-    "Invoiced this week",
-    "Invoiced total",
     "Open jobs",
+    "Waiting to invoice",
+    "Draft (not yet sent)",
+    "Sent, unpaid",
   ]) {
     await expect(page.getByText(label, { exact: true })).toBeVisible();
   }

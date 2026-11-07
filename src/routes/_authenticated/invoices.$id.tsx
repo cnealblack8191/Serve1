@@ -5,8 +5,10 @@ import { EmptyState, PageHeader } from "@/components/eci/primitives";
 import { InvoiceDocument } from "@/components/serv1/billing/InvoiceDocument";
 import { Button } from "@/components/ui/button";
 import { useCustomers, useInvoiceMutations, useInvoices, useJobs, useSites } from "@/data";
+import { requireRole, OFFICE_VIEW } from "@/lib/access";
 
 export const Route = createFileRoute("/_authenticated/invoices/$id")({
+  beforeLoad: ({ context }) => requireRole(context.user.role, OFFICE_VIEW),
   component: Page,
 });
 

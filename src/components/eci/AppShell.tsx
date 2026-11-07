@@ -38,7 +38,7 @@ const NAV: { to: string; label: string; icon: typeof LayoutDashboard; roles: Rol
   { to: "/jobs", label: "Jobs", icon: ClipboardList, roles: ["Admin", "Office", "Owner"] },
   { to: "/dispatch", label: "Dispatch", icon: CalendarRange, roles: ["Admin", "Office"] },
   { to: "/invoices", label: "Invoices", icon: Receipt, roles: ["Admin", "Office", "Owner"] },
-  { to: "/tech", label: "Today", icon: Smartphone, roles: ["Admin", "Office", "Tech"] },
+  { to: "/tech", label: "Today", icon: Smartphone, roles: ["Tech"] },
 ];
 
 export const navFor = (role: Role) => NAV.filter((n) => n.roles.includes(role));
@@ -141,7 +141,7 @@ function Sidebar({
   );
 }
 
-function ThemeToggle() {
+function ThemeToggle({ className }: { className?: string }) {
   const [theme, setTheme] = useState(() => resolveTheme(readTheme()));
   const toggle = () => {
     const next = theme === "dark" ? "light" : "dark";
@@ -153,6 +153,7 @@ function ThemeToggle() {
       variant="ghost"
       size="icon"
       onClick={toggle}
+      className={className}
       aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
     >
       {theme === "dark" ? <Sun className="size-5" /> : <Moon className="size-5" />}
@@ -188,7 +189,10 @@ export function AppShell({ children }: { children: ReactNode }) {
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <button
-          className="flex items-center gap-2 rounded-md px-1 py-1 hover:bg-muted"
+          className={cn(
+            "flex items-center gap-2 rounded-md px-1 py-1 hover:bg-muted",
+            techLayout && "min-h-12 min-w-12 justify-center",
+          )}
           aria-label="Account menu"
         >
           <span className="grid size-9 place-items-center rounded-full bg-eci-navy text-xs font-semibold text-zinc-100 ring-1 ring-black/5">
@@ -230,7 +234,8 @@ export function AppShell({ children }: { children: ReactNode }) {
             <span className="font-semibold tracking-tight">Serv1</span>
           </div>
           <div className="flex items-center gap-1">
-            <ThemeToggle />
+            {/* 48 px targets on the phone (SPEC.md section 13). */}
+            <ThemeToggle className="size-12" />
             {userMenu}
           </div>
         </header>
@@ -259,7 +264,11 @@ export function AppShell({ children }: { children: ReactNode }) {
                   <Menu className="size-5" />
                 </Button>
               </SheetTrigger>
-              <SheetContent side="left" className="w-64 border-0 p-0">
+              <SheetContent
+                side="left"
+                className="w-64 border-0 p-0"
+                closeClassName="text-zinc-100 hover:bg-white/10 focus-visible:ring-offset-eci-navy"
+              >
                 <Sidebar role={role} name={me.name} onNavigate={() => setMobileOpen(false)} />
               </SheetContent>
             </Sheet>

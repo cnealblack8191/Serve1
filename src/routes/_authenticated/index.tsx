@@ -1,53 +1,31 @@
-import { createFileRoute, redirect } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { useMemo } from "react";
 
 import { EmptyState, PageHeader, SectionHeading, SummaryCard } from "@/components/eci/primitives";
 import { money } from "@/components/serv1/billing/format";
 import { OpenJobsChart } from "@/components/serv1/billing/OpenJobsChart";
-import { useInvoices, useJobs, useUsers, type JobStatus } from "@/data";
+import { dashboardStats } from "@/components/serv1/billing/dashboardStats";
+import { useCurrentUser, useInvoices, useJobs, useUsers } from "@/data";
+import { canSeeMoney, OFFICE_VIEW, requireRole } from "@/lib/access";
 
 export const Route = createFileRoute("/_authenticated/")({
   // Techs have no dashboard; their home is Today (SPEC.md section 13).
-  beforeLoad: ({ context }) => {
-    if (context.user.role === "Tech") throw redirect({ to: "/tech", replace: true });
-  },
+  beforeLoad: ({ context }) => requireRole(context.user.role, OFFICE_VIEW),
   component: Page,
 });
-
-const OPEN_STATUSES: JobStatus[] = ["New", "Scheduled", "InProgress", "Complete"];
 
 function Page() {
   const jobs = useJobs();
   const invoices = useInvoices();
   const users = useUsers();
+  const me = useCurrentUser();
+  const showMoney = canSeeMoney(me.data?.role);
 
-  const stats = useMemo(() => {
-    const now = new Date();
-    const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    // Week runs Monday to Sunday.
-    const startOfWeek = new Date(startOfDay);
-    startOfWeek.setDate(startOfDay.getDate() - ((startOfDay.getDay() + 6) % 7));
-
-    const allJobs = jobs.data ?? [];
-    const allInvoices = invoices.data ?? [];
-    const doneAt = (j: (typeof allJobs)[number]) =>
-      j.completedAt ? new Date(j.completedAt) : null;
-    const finished = allJobs.filter((j) => j.status === "Complete" || j.status === "Invoiced");
-
-    return {
-      today: finished.filter((j) => (doneAt(j) ?? 0) >= startOfDay).length,
-      week: finished.filter((j) => (doneAt(j) ?? 0) >= startOfWeek).length,
-      weekRevenue: allInvoices
-        .filter((i) => new Date(i.createdAt) >= startOfWeek)
-        .reduce((s, i) => s + i.total, 0),
-      totalRevenue: allInvoices.reduce((s, i) => s + i.total, 0),
-      open: allJobs.filter((j) => j.status !== "Invoiced").length,
-      byStatus: OPEN_STATUSES.map((status) => ({
-        status,
-        count: allJobs.filter((j) => j.status === status).length,
-      })),
-    };
-  }, [jobs.data, invoices.data]);
+  const stats = useMemo(
+    () => dashboardStats(jobs.data ?? [], invoices.data ?? []),
+    [jobs.data, invoices.data],
+  );
+  const plural = (n: number) => `${n} invoice${n === 1 ? "" : "s"}`;
 
   const techRows = (users.data ?? [])
     .filter((u) => u.role === "Tech" && u.active)
@@ -65,13 +43,45 @@ function Page() {
     <>
       <PageHeader title="Dashboard" description="Jobs, revenue and workload at a glance." />
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
-        <SummaryCard label="Completed today" value={String(stats.today)} />
-        <SummaryCard label="Completed this week" value={String(stats.week)} />
-        <SummaryCard label="Invoiced this week" value={money(stats.weekRevenue)} />
-        <SummaryCard label="Invoiced total" value={money(stats.totalRevenue)} />
-        <SummaryCard label="Open jobs" value={String(stats.open)} />
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <SummaryCard label="Completed today" value={String(stats.completedToday)} />
+        <SummaryCard label="Completed this week" value={String(stats.completedThisWeek)} />
+        <SummaryCard
+          label="Open jobs"
+          value={String(stats.open)}
+          hint="New, scheduled or in progress"
+        />
+        <SummaryCard
+          label="Waiting to invoice"
+          value={String(stats.waitingToInvoice)}
+          hint="Complete, no invoice yet"
+          to="/invoices"
+        />
       </div>
+
+      {showMoney ? (
+        <section className="space-y-3">
+          <SectionHeading title="Money by invoice status" />
+          <div className="grid gap-4 sm:grid-cols-3">
+            <SummaryCard
+              label="Draft (not yet sent)"
+              value={money(stats.money.draft)}
+              hint={plural(stats.counts.draft)}
+            />
+            <SummaryCard
+              label="Sent, unpaid"
+              value={money(stats.money.sentUnpaid)}
+              hint={plural(stats.counts.sentUnpaid)}
+            />
+            <SummaryCard
+              label="Paid"
+              value={money(stats.money.paid)}
+              hint={plural(stats.counts.paid)}
+              hintTone="green"
+            />
+          </div>
+        </section>
+      ) : null}
 
       <section className="space-y-3">
         <SectionHeading title="Open jobs by status" />

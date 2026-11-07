@@ -4,9 +4,11 @@ import { EmptyState, PageHeader } from "@/components/eci/primitives";
 import { byStart, isToday, OPEN_STATUSES } from "@/components/serv1/tech/format";
 import { TechJobCard } from "@/components/serv1/tech/TechJobCard";
 import { useCustomers, useJobs, useSites } from "@/data";
+import { requireRole, TECH_ONLY } from "@/lib/access";
 
 /** Tech home (SPEC.md W3): today's jobs by time, then the tech's other open jobs. */
 export const Route = createFileRoute("/_authenticated/tech/")({
+  beforeLoad: ({ context }) => requireRole(context.user.role, TECH_ONLY),
   component: Page,
 });
 
