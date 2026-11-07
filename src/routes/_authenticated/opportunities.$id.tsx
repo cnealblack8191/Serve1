@@ -16,6 +16,7 @@ import {
   useJob,
   useOpportunities,
   useOpportunity,
+  changedFields,
   useOpportunityMutations,
 } from "@/data";
 import { canSeeMoney, OFFICE_VIEW, requireRole } from "@/lib/access";
@@ -67,7 +68,10 @@ function Opportunity({ id }: { id: string }) {
           saving={update.isPending}
           submitLabel="Save changes"
           onSubmit={(d) =>
-            update.mutate({ id: o.id, patch: d }, { onSuccess: () => setEditing(false) })
+            update.mutate(
+              { id: o.id, patch: changedFields(draft, d) },
+              { onSuccess: () => setEditing(false) },
+            )
           }
           onCancel={() => setEditing(false)}
         />
