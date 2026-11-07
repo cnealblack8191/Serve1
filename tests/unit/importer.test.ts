@@ -225,6 +225,24 @@ describe("import plan", () => {
     assert.ok(plan.warnings.some((w) => w.includes("matches 2 sales rows")));
   });
 
+  it("a completed task finishes an in-progress service job; a blank task status changes nothing", () => {
+    const service = readCsv(
+      "Service Opportunity,Job Stage\nPanel upgrade,In Progress\nLight swap,Complete\n",
+    );
+    const tasks = readCsv(
+      "Task,Status,Health,End Date\nPanel upgrade,Complete,Green,11/6/26\nLight swap,,Green,\n",
+      "Tasks",
+    );
+    const plan = sm.buildImportPlan([
+      { file: "v.csv", sheets: [service] },
+      { file: "t.csv", sheets: [tasks] },
+    ]);
+    const by = Object.fromEntries(plan.opportunities.map((o) => [o.data.name, o.job!]));
+    assert.equal(by["Panel upgrade"]!.status, "Complete");
+    assert.equal(by["Panel upgrade"]!.completedAt, "2026-11-06T17:00:00.000Z");
+    assert.equal(by["Light swap"]!.status, "Complete");
+  });
+
   it("a retry after a partial run re-links the job instead of making another", async () => {
     mem.clear();
     const b = createLocalBackend();
