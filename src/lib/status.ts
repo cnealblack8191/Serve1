@@ -58,6 +58,21 @@ export const STAGE_LABEL: Record<OpportunityStage, string> = {
   NoBid: "No bid",
 };
 
+/** Stage pills. Job status colors (gray, blue, orange, green, purple) are not reused here. */
+const OPEN_STAGE_CLASS = "bg-background text-foreground ring-zinc-400 dark:ring-zinc-500";
+export const STAGE_CLASS: Record<OpportunityStage, string> = {
+  Prospect: OPEN_STAGE_CLASS,
+  Assessment: OPEN_STAGE_CLASS,
+  ProposalBidding: OPEN_STAGE_CLASS,
+  ProposalSent: OPEN_STAGE_CLASS,
+  CustomerReview: OPEN_STAGE_CLASS,
+  CustomerFollowUp: OPEN_STAGE_CLASS,
+  ClosedWon:
+    "bg-eci-navy text-zinc-50 ring-eci-navy dark:bg-zinc-100 dark:text-eci-navy dark:ring-zinc-100",
+  ClosedLost: "bg-background text-red-800 ring-red-300 dark:text-red-300 dark:ring-red-800",
+  NoBid: "bg-muted text-muted-foreground ring-border",
+};
+
 export const CONTRACT_LABEL: Record<CustomerContract, string> = {
   DeKalbGov: "DeKalb Gov.",
   GwinnettSchools: "Gwinnett Schools",
