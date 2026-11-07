@@ -393,7 +393,7 @@ export function buildImportPlan(files: { file: string; sheets: Sheet[] }[]): Imp
           status && !cleanStage(status) ? `Smartsheet status: ${status}` : null,
         ),
         closedAt: closedStage ? `${expectedClose ?? created ?? "2000-01-01"}T12:00:00.000Z` : null,
-        importKey: `sales:${row.r}:${matchName(name)}`,
+        importKey: `sales:${norm(sheet.label)}:${row.r}:${matchName(name)}`,
       };
       const o: PlannedOpportunity = {
         key: data.importKey!,
@@ -456,7 +456,7 @@ export function buildImportPlan(files: { file: string; sheets: Sheet[] }[]): Imp
           type: "Service",
           stage,
           customerContract: contract ?? "NonContract",
-          importKey: `service:${row.r}:${matchName(name)}`,
+          importKey: `service:${norm(sheet.label)}:${row.r}:${matchName(name)}`,
           closedAt: jobStatus
             ? `${completedOn ?? date(row.get("Created")) ?? "2000-01-01"}T12:00:00.000Z`
             : null,
