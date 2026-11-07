@@ -6,7 +6,15 @@ import { money } from "@/components/serv1/billing/format";
 import { OpenJobsChart } from "@/components/serv1/billing/OpenJobsChart";
 import { dashboardStats } from "@/components/serv1/billing/dashboardStats";
 import { BusinessDashboard } from "@/components/serv1/sales/BusinessDashboard";
-import { useCurrentUser, useInvoices, useJobs, useUsers } from "@/data";
+import { KeyNumber } from "@/components/serv1/sales/DashboardParts";
+import {
+  ACTIVE_STATUSES,
+  isFinished,
+  useCurrentUser,
+  useInvoices,
+  useJobs,
+  useUsers,
+} from "@/data";
 import { canSeeMoney, OFFICE_VIEW, requireRole } from "@/lib/access";
 
 export const Route = createFileRoute("/_authenticated/")({
@@ -35,8 +43,8 @@ function Page() {
       return {
         id: u.id,
         name: u.name,
-        open: mine.filter((j) => j.status !== "Complete" && j.status !== "Invoiced").length,
-        completed: mine.filter((j) => j.status === "Complete" || j.status === "Invoiced").length,
+        open: mine.filter((j) => ACTIVE_STATUSES.includes(j.status)).length,
+        completed: mine.filter((j) => isFinished(j.status)).length,
       };
     });
 
@@ -48,13 +56,19 @@ function Page() {
 
       <SectionHeading title="Field work" />
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
         <SummaryCard label="Completed today" value={String(stats.completedToday)} />
         <SummaryCard label="Completed this week" value={String(stats.completedThisWeek)} />
         <SummaryCard
           label="Open jobs"
           value={String(stats.open)}
           hint="New, scheduled or in progress"
+        />
+        <KeyNumber
+          label="To review"
+          value={String((jobs.data ?? []).filter((j) => j.status === "Complete").length)}
+          hint="Complete, office to approve or send back"
+          to={{ to: "/jobs", search: { status: "Complete" } }}
         />
         <SummaryCard
           label="Waiting to invoice"

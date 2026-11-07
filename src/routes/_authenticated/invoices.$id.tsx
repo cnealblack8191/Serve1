@@ -4,7 +4,7 @@ import { toast } from "sonner";
 import { EmptyState, PageHeader } from "@/components/eci/primitives";
 import { InvoiceDocument } from "@/components/serv1/billing/InvoiceDocument";
 import { Button } from "@/components/ui/button";
-import { useCustomers, useInvoiceMutations, useInvoices, useJobs, useSites } from "@/data";
+import { useCustomers, useInvoices, useJobs, useSetInvoiceStatus, useSites } from "@/data";
 import { requireRole, OFFICE_VIEW } from "@/lib/access";
 
 export const Route = createFileRoute("/_authenticated/invoices/$id")({
@@ -18,7 +18,7 @@ function Page() {
   const jobs = useJobs();
   const customers = useCustomers();
   const sites = useSites();
-  const { update } = useInvoiceMutations();
+  const update = useSetInvoiceStatus();
 
   const invoice = invoices.data?.find((i) => i.id === id);
   if (!invoice) {
@@ -35,7 +35,7 @@ function Page() {
 
   const setStatus = (status: "Sent" | "Paid") =>
     update.mutate(
-      { id: invoice.id, patch: { status } },
+      { invoice, status },
       {
         onSuccess: () => toast.success(`Marked ${status.toLowerCase()}`),
         onError: () => toast.error("Could not update the invoice."),

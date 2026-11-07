@@ -1,4 +1,5 @@
 import {
+  ACTIVE_STATUSES,
   CUSTOMER_CONTRACTS,
   OPEN_STAGES,
   WORK_TYPES,
@@ -53,7 +54,7 @@ export interface BusinessStats {
 }
 
 const QUOTE_OUT: OpportunityStage[] = ["ProposalSent", "CustomerReview"];
-const ACTIVE_JOB = new Set(["New", "Scheduled", "InProgress"]);
+const ACTIVE_JOB = new Set<string>(ACTIVE_STATUSES);
 
 /** Open work in a non-contract bucket is split by type, as on the owner's mockup. */
 function contractBucket(o: Opportunity): { label: string; search: Record<string, string> } {
