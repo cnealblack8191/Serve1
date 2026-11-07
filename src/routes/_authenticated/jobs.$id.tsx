@@ -13,7 +13,7 @@ import {
   useJob,
   useSignatures,
   useSites,
-  useTechNames,
+  useUsers,
   useInvoices,
   useIsOffice,
 } from "@/data";
@@ -59,7 +59,8 @@ function Page() {
   const isOffice = useIsOffice();
   const customer = useCustomer(job.data?.customerId);
   const sites = useSites();
-  const techs = useTechNames();
+  // Full roster, so a job keeps the name of a tech who has since been turned off.
+  const techs = useUsers();
   const attachments = useAttachments();
   const signatures = useSignatures();
   const invoices = useInvoices();

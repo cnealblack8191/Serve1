@@ -15,7 +15,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { ROLES, useUserMutations, useUsers, type Role, type User } from "@/data";
+import { ROLES, backendKind, useUserMutations, useUsers, type Role, type User } from "@/data";
 import { ADMIN_ONLY, requireRole } from "@/lib/access";
 
 /** Admin-only list of the people who use Serv1 (SPEC.md section 2). */
@@ -48,7 +48,8 @@ function Page() {
         This list sets each person&apos;s name, role and phone in Serv1. Their sign-in (email and
         password) is created separately in the company&apos;s AWS account; until then the person
         shows &quot;Sign-in not set up&quot;. Turn someone off instead of deleting them so their
-        past jobs keep their name.
+        past jobs keep their name. On the live system, role changes and turning someone off must
+        also be made to their AWS sign-in before they take effect.
       </p>
       <SearchBox label="Search users" placeholder="Name, email or role" value={q} onChange={setQ} />
       {users.isLoading ? (
@@ -196,6 +197,12 @@ function UserDialog({
             />
             Active (turn off when someone leaves)
           </label>
+          {backendKind() === "amplify" && user ? (
+            <p className="rounded-md border border-orange-600 bg-orange-50 p-3 text-sm text-orange-950 dark:bg-orange-950 dark:text-orange-50">
+              On the live system, a new role or turning someone off takes effect only after the same
+              change is made to their sign-in in AWS (Cognito groups or disable user).
+            </p>
+          ) : null}
           {error ? (
             <p role="alert" className="text-sm text-destructive">
               {error}

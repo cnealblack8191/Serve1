@@ -283,4 +283,16 @@ describe("local backend: technician isolation", () => {
     const j = await b.jobs.update("job-1", { notes: "office edit" });
     assert.equal(j.notes, "office edit");
   });
+
+  it("the Users screen's role and active flag decide demo access", async () => {
+    await as(b, "admin@serv1.demo");
+    const tom = (await b.users.list()).find((u) => u.email === "tech2@serv1.demo")!;
+    const owen = (await b.users.list()).find((u) => u.email === "owner@serv1.demo")!;
+    await b.users.update(tom.id, { active: false });
+    await b.users.update(owen.id, { role: "Office" });
+    const r = await b.auth.signIn("tech2@serv1.demo", "serv1demo");
+    assert.equal(r.kind, "error");
+    await as(b, "owner@serv1.demo");
+    assert.equal((await b.auth.currentUser())?.role, "Office");
+  });
 });

@@ -68,3 +68,26 @@ test("only admins open Users", async ({ page }) => {
   await page.goto("/users");
   await expect(page).toHaveURL(/\/$/);
 });
+
+test("a turned-off tech keeps their name on past jobs and can no longer sign in", async ({
+  page,
+}) => {
+  await signIn(page, "admin");
+  await page.goto("/users");
+  await page.getByRole("button", { name: "Edit Tom Tech" }).click();
+  await page
+    .getByRole("dialog")
+    .getByLabel(/Active/)
+    .uncheck();
+  await page.getByRole("dialog").getByRole("button", { name: "Save changes" }).click();
+  await expect(page.getByRole("button", { name: "Edit Tom Tech" })).toContainText("Turned off");
+  await page.goto("/jobs/job-3"); // Tom's job
+  await expect(page.getByText("Tom Tech").first()).toBeVisible();
+
+  await page.evaluate(() => localStorage.removeItem("serv1.local.session"));
+  await page.goto("/auth");
+  await page.getByLabel("Email").fill("tech2@serv1.demo");
+  await page.getByLabel("Password", { exact: true }).fill("serv1demo");
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await expect(page.getByText("This account is turned off.")).toBeVisible();
+});
