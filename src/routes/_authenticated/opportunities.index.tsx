@@ -9,7 +9,7 @@ import {
   oppNeedsAttention,
   type OppAttention,
 } from "@/components/serv1/sales/attention";
-import { dateLabel, isPast, SELECT_CLASS } from "@/components/serv1/sales/format";
+import { dateLabel, isPast, NO_REP, SELECT_CLASS } from "@/components/serv1/sales/format";
 import { StageBadge } from "@/components/serv1/sales/StageBadge";
 import { Button } from "@/components/ui/button";
 import {
@@ -31,8 +31,13 @@ interface Search {
   stage?: StageFilter;
   type?: WorkType;
   contract?: CustomerContract;
+  /** A rep's name, or NO_REP for opportunities with no rep. */
   rep?: string;
   attention?: OppAttention;
+  /** "unbooked": Assessment with no site-visit date (dashboard "Site visits to schedule"). */
+  visit?: "unbooked";
+  /** Closed in this year (closed date, or created date when none): "Results this year". */
+  closedYear?: string;
 }
 const oneOf = <T extends string>(v: unknown, list: readonly T[]) =>
   typeof v === "string" && (list as readonly string[]).includes(v) ? (v as T) : undefined;
@@ -46,6 +51,9 @@ export const Route = createFileRoute("/_authenticated/opportunities/")({
     contract: oneOf(s["contract"], CUSTOMER_CONTRACTS),
     rep: typeof s["rep"] === "string" ? s["rep"] : undefined,
     attention: oneOf(s["attention"], Object.keys(OPP_ATTENTION_LABEL) as OppAttention[]),
+    visit: s["visit"] === "unbooked" ? "unbooked" : undefined,
+    // The router may read "2026" from the address as a number, so compare as text.
+    closedYear: /^\d{4}$/.test(String(s["closedYear"] ?? "")) ? String(s["closedYear"]) : undefined,
   }),
   component: Page,
 });
@@ -67,7 +75,9 @@ function Page() {
     )
     .filter((o) => !search.type || o.type === search.type)
     .filter((o) => !search.contract || o.customerContract === search.contract)
-    .filter((o) => !search.rep || o.salesRep === search.rep)
+    .filter((o) => !search.rep || (search.rep === NO_REP ? !o.salesRep : o.salesRep === search.rep))
+    .filter((o) => search.visit !== "unbooked" || !o.siteVisitDate)
+    .filter((o) => !search.closedYear || (o.closedAt ?? o.createdAt).startsWith(search.closedYear))
     .filter((o) => !search.attention || oppNeedsAttention(o, search.attention))
     .filter((o) =>
       matches(
@@ -170,6 +180,7 @@ function Page() {
           onChange={(e) => setFilter({ rep: e.target.value || undefined })}
         >
           <option value="">All reps</option>
+          <option value={NO_REP}>No rep</option>
           {reps.sort().map((r) => (
             <option key={r} value={r}>
               {r}
@@ -177,9 +188,21 @@ function Page() {
           ))}
         </select>
       </div>
-      {search.attention ? (
-        <Button variant="outline" size="sm" onClick={() => setFilter({ attention: undefined })}>
-          Show all, not just “{OPP_ATTENTION_LABEL[search.attention]}”
+      {search.attention || search.visit || search.closedYear ? (
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() =>
+            setFilter({ attention: undefined, visit: undefined, closedYear: undefined })
+          }
+        >
+          Show all, not just “
+          {search.attention
+            ? OPP_ATTENTION_LABEL[search.attention]
+            : search.visit
+              ? "site visits to schedule"
+              : `closed in ${search.closedYear}`}
+          ”
         </Button>
       ) : null}
 

@@ -82,7 +82,8 @@ export function OpportunityForm({
       <section className="eci-card space-y-4 p-5">
         <h2 className="eci-panel-title">Opportunity</h2>
         <Field label="Opportunity name">
-          <Input {...text("name")} value={d.name} required />
+          {/* The name stays a string (required); only optional fields become null when blank. */}
+          <Input value={d.name} onChange={(e) => set("name", e.target.value)} required />
         </Field>
         <div className="grid gap-4 sm:grid-cols-3">
           <Field label="Stage">
