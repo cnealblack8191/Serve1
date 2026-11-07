@@ -10,6 +10,7 @@ import type {
   TableName,
   User,
 } from "../types";
+import { TABLES } from "../types";
 import {
   DEMO_ACCOUNTS,
   LOCAL_PASSWORD,
@@ -22,6 +23,7 @@ import {
 } from "./seed";
 import { LocalFileStore } from "./file-store";
 import { TECH_SETTABLE, techMayMove } from "../jobflow";
+import { createFakeSpectrum } from "./spectrum-fake";
 
 /**
  * Local demo backend: runs entirely in the browser, persisted to localStorage,
@@ -38,7 +40,11 @@ type Tables = Record<TableName, BaseRecord[]>;
 function load(): Tables {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) return JSON.parse(raw) as Tables;
+    // A table missing from older demo data (e.g. Phase 4's spectrumChecks) starts empty.
+    if (raw) {
+      const empty = Object.fromEntries(TABLES.map((t) => [t, []])) as unknown as Tables;
+      return { ...empty, ...(JSON.parse(raw) as Partial<Tables>) };
+    }
   } catch {
     /* fall through to seed */
   }
@@ -51,6 +57,7 @@ function load(): Tables {
     signatures: [],
     invoices: [...SEED_INVOICES],
     opportunities: [...SEED_OPPORTUNITIES],
+    spectrumChecks: [],
   };
 }
 
@@ -97,6 +104,7 @@ export function createLocalBackend(): Backend {
         listeners.forEach((l) => l("sites"));
         listeners.forEach((l) => l("users"));
         listeners.forEach((l) => l("opportunities"));
+        listeners.forEach((l) => l("spectrumChecks"));
       }
     });
   }
@@ -204,12 +212,14 @@ export function createLocalBackend(): Backend {
         const row = rows().find((r) => r.id === id) ?? null;
         return row && rules.read(row, me) ? row : null;
       },
-      async create(input) {
+      async create(input, opts) {
         refresh();
         const me = session();
+        if (opts?.id && rows().some((r) => r.id === opts.id))
+          throw new DuplicateError(`${table}: ${opts.id} already exists`);
         const row = {
           ...(input as object),
-          id: newId(),
+          id: opts?.id ?? newId(),
           createdAt: nowIso(),
           updatedAt: nowIso(),
         } as T;
@@ -396,6 +406,12 @@ export function createLocalBackend(): Backend {
       read: (_r, me) => isOffice(me) || me?.role === "Owner",
       write: (_r, me) => isOffice(me),
     }),
+    // Spectrum connection tests: Admin only, add and remove (mirrors the Amplify rule).
+    spectrumChecks: repo("spectrumChecks", {
+      read: (_r, me) => me?.role === "Admin",
+      write: (_r, me, op) => me?.role === "Admin" && op !== "update",
+    }),
+    spectrum: createFakeSpectrum(session),
     files: filesApi,
     onChange(listener) {
       listeners.add(listener);

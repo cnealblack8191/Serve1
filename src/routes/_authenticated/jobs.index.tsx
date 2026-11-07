@@ -106,9 +106,14 @@ function Page() {
         }
       >
         {isOffice ? (
-          <Button asChild>
-            <Link to="/jobs/new">New job</Link>
-          </Button>
+          <>
+            <Button asChild variant="outline">
+              <Link to="/spectrum-import">Import from Spectrum</Link>
+            </Button>
+            <Button asChild>
+              <Link to="/jobs/new">New job</Link>
+            </Button>
+          </>
         ) : null}
       </PageHeader>
       {search.attention ? (

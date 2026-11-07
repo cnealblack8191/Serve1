@@ -1,5 +1,7 @@
 import { type ClientSchema, a, defineData } from "@aws-amplify/backend";
 
+import { spectrumCaller } from "../functions/spectrum/resource";
+
 /**
  * Pilot tables (SPEC.md section 5, marked ★): users, customers, sites, jobs,
  * attachments, signatures, invoices. Phase 2 (owner-approved Serv1 plan, decision 95)
@@ -17,6 +19,11 @@ import { type ClientSchema, a, defineData } from "@aws-amplify/backend";
  *
  * Reassignment: when a job's assignedTechId changes, src/data updates the
  * assignedTechId on its attachments and signatures so access follows the job.
+ *
+ * Phase 4 (Spectrum): customers, sites and jobs imported from Spectrum keep the Spectrum
+ * company code and record numbers (match key: company code + job or work order number), and
+ * "Remove test imports" deletes by company code. SpectrumCheck keeps the last connection tests
+ * (Admin only). The `spectrum` query runs amplify/functions/spectrum on the server.
  *
  * Known limit (pilot): AppSync cannot check, inside the Attachment or Signature
  * create rule, that the referenced job is really assigned to the caller; that
@@ -89,6 +96,9 @@ const schema = a.schema({
       phone: a.phone(),
       email: a.email(),
       notes: a.string(),
+      // Spectrum import (Phase 4): company code and Spectrum customer code.
+      spectrumCompanyCode: a.string(),
+      spectrumCustomerCode: a.string(),
       sites: a.hasMany("Site", "customerId"),
       jobs: a.hasMany("Job", "customerId"),
       invoices: a.hasMany("Invoice", "customerId"),
@@ -105,6 +115,7 @@ const schema = a.schema({
       name: a.string(),
       address: a.string().required(),
       accessNotes: a.string(),
+      spectrumCompanyCode: a.string(),
       jobs: a.hasMany("Job", "siteId"),
     })
     .authorization((allow) => [
@@ -156,6 +167,10 @@ const schema = a.schema({
       liftConnex: a.boolean().default(false),
       serviceReportApproved: a.boolean().default(false),
       completionPhotosOnFile: a.boolean().default(false),
+      // Spectrum import (Phase 4). No amounts: Spectrum records carry none.
+      spectrumCompanyCode: a.string(),
+      spectrumJobNumber: a.string(),
+      spectrumWorkOrderNumber: a.string(),
       attachments: a.hasMany("Attachment", "jobId"),
       signatures: a.hasMany("Signature", "jobId"),
       invoice: a.hasOne("Invoice", "jobId"),
@@ -273,6 +288,26 @@ const schema = a.schema({
       allow.groups(office).to(["create", "read", "update", "delete"]),
       allow.groups(["Owner"]).to(["read"]),
     ]),
+
+  // Last Spectrum connection tests (the connector stores none). Admin only. Never credentials.
+  SpectrumCheck: a
+    .model({
+      result: a.string().required(), // "connected" | "failed"
+      reason: a.string(),
+      message: a.string(),
+      durationMs: a.integer(),
+      checkedBy: a.string().required(),
+    })
+    .authorization((allow) => [allow.groups(["Admin"]).to(["create", "read", "delete"])]),
+
+  // Server-side Spectrum call (amplify/functions/spectrum). Office may read jobs and work
+  // orders; the function itself allows credentials.* to Admin only.
+  spectrum: a
+    .query()
+    .arguments({ operation: a.string().required(), params: a.json() })
+    .returns(a.json())
+    .authorization((allow) => [allow.groups(office)])
+    .handler(a.handler.function(spectrumCaller)),
 });
 
 export type Schema = ClientSchema<typeof schema>;

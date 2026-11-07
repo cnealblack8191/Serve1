@@ -8,6 +8,7 @@ import {
   Menu,
   Moon,
   Receipt,
+  Settings,
   Smartphone,
   Sun,
   UserCog,
@@ -34,7 +35,14 @@ import { cn } from "@/lib/utils";
  * Navigation by role (SPEC.md sections 2 and 13).
  * Office (web): Dashboard, Customers, Jobs, Dispatch, Invoices. Tech (phone): Today.
  */
-const NAV: { to: string; label: string; icon: typeof LayoutDashboard; roles: Role[] }[] = [
+const NAV: {
+  to: string;
+  label: string;
+  icon: typeof LayoutDashboard;
+  roles: Role[];
+  /** false: left out of the phone tab bar (reached from the account menu instead). */
+  tabs?: false;
+}[] = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard, roles: ["Admin", "Office", "Owner"] },
   {
     to: "/opportunities",
@@ -48,6 +56,13 @@ const NAV: { to: string; label: string; icon: typeof LayoutDashboard; roles: Rol
   { to: "/invoices", label: "Invoices", icon: Receipt, roles: ["Admin", "Office", "Owner"] },
   { to: "/tech", label: "Today", icon: Smartphone, roles: ["Tech"] },
   { to: "/users", label: "Users", icon: UserCog, roles: ["Admin"] },
+  {
+    to: "/settings/integrations/spectrum",
+    label: "Settings",
+    icon: Settings,
+    roles: ["Admin"],
+    tabs: false,
+  },
 ];
 
 export const navFor = (role: Role) => NAV.filter((n) => n.roles.includes(role));
@@ -64,13 +79,14 @@ function NavList({
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const items = navFor(role);
   if (variant === "tabs") {
+    const tabs = items.filter((i) => i.tabs !== false);
     return (
       <nav
         className="fixed inset-x-0 bottom-0 z-20 grid border-t border-border bg-background pb-[env(safe-area-inset-bottom)]"
-        style={{ gridTemplateColumns: `repeat(${items.length}, 1fr)` }}
+        style={{ gridTemplateColumns: `repeat(${tabs.length}, 1fr)` }}
         aria-label="Main"
       >
-        {items.map((item) => {
+        {tabs.map((item) => {
           const active = item.to === "/" ? pathname === "/" : pathname.startsWith(item.to);
           const Icon = item.icon;
           return (
@@ -219,6 +235,14 @@ export function AppShell({ children }: { children: ReactNode }) {
           <span className="block text-xs text-muted-foreground">{me.email}</span>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
+        {role === "Admin" ? (
+          <DropdownMenuItem asChild>
+            <Link to="/settings/integrations/spectrum">
+              <Settings className="size-4" />
+              Settings
+            </Link>
+          </DropdownMenuItem>
+        ) : null}
         <DropdownMenuItem onSelect={() => void doSignOut()}>
           <LogOut className="size-4" />
           Sign out

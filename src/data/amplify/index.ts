@@ -11,7 +11,7 @@ import { generateClient } from "aws-amplify/data";
 import { getUrl, remove as removeObject, uploadData } from "aws-amplify/storage";
 
 import type { Schema } from "../../../amplify/data/resource";
-import type { AuthApi, Backend, ChangeListener, FilesApi, Repo } from "../backend";
+import type { AuthApi, Backend, ChangeListener, FilesApi, Repo, SpectrumApi } from "../backend";
 import type {
   Attachment,
   AuthUser,
@@ -31,10 +31,17 @@ import type {
   Role,
   Signature,
   SignInResult,
+  NewSpectrumCheck,
   Site,
+  SpectrumCheck,
   TableName,
   User,
 } from "../types";
+import {
+  refusal,
+  SPECTRUM_ERROR_CODES,
+  type SpectrumReply,
+} from "../../../amplify/functions/spectrum/contract";
 
 /**
  * Real backend: Cognito (login + groups), AppSync/DynamoDB (tables), S3 (files).
@@ -134,6 +141,8 @@ export function createAmplifyBackend(outputs: object): Backend {
     phone: text(r.phone),
     email: text(r.email),
     notes: text(r.notes),
+    spectrumCompanyCode: text(r.spectrumCompanyCode),
+    spectrumCustomerCode: text(r.spectrumCustomerCode),
   });
   const mapSite = (r: Row<"Site">): Site => ({
     id: r.id,
@@ -143,6 +152,7 @@ export function createAmplifyBackend(outputs: object): Backend {
     name: text(r.name),
     address: r.address,
     accessNotes: text(r.accessNotes),
+    spectrumCompanyCode: text(r.spectrumCompanyCode),
   });
   const mapJob = (r: Row<"Job">): Job => ({
     id: r.id,
@@ -176,6 +186,19 @@ export function createAmplifyBackend(outputs: object): Backend {
     liftConnex: !!r.liftConnex,
     serviceReportApproved: !!r.serviceReportApproved,
     completionPhotosOnFile: !!r.completionPhotosOnFile,
+    spectrumCompanyCode: text(r.spectrumCompanyCode),
+    spectrumJobNumber: text(r.spectrumJobNumber),
+    spectrumWorkOrderNumber: text(r.spectrumWorkOrderNumber),
+  });
+  const mapSpectrumCheck = (r: Row<"SpectrumCheck">): SpectrumCheck => ({
+    id: r.id,
+    createdAt: r.createdAt,
+    updatedAt: r.updatedAt,
+    result: r.result === "connected" ? "connected" : "failed",
+    reason: text(r.reason),
+    message: text(r.message),
+    durationMs: num(r.durationMs),
+    checkedBy: r.checkedBy,
   });
   const mapOpportunity = (r: Row<"Opportunity">): Opportunity => ({
     id: r.id,
@@ -308,8 +331,12 @@ export function createAmplifyBackend(outputs: object): Backend {
         fail(r.errors);
         return r.data ? map(r.data) : null;
       },
-      async create(input) {
-        const r = await m.create(encode(input as Partial<N>));
+      async create(input, opts) {
+        // A fixed id makes DynamoDB refuse a second create of the same row (conditional put).
+        const r = await m.create({
+          ...encode(input as Partial<N>),
+          ...(opts?.id ? { [keyField]: opts.id } : {}),
+        });
         fail(r.errors);
         if (!r.data) throw new Error(`${table}: create returned no row`);
         notify(table);
@@ -386,6 +413,29 @@ export function createAmplifyBackend(outputs: object): Backend {
     },
   };
 
+  /**
+   * Spectrum calls go to the server-side `spectrum` query; the function signs them
+   * (amplify/functions/spectrum). The browser never sees connector credentials.
+   */
+  const spectrum: SpectrumApi = {
+    async call(operation, params) {
+      type Query = (args: object) => Promise<{ data: unknown; errors?: { message: string }[] }>;
+      const q = (client.queries as unknown as { spectrum?: Query }).spectrum;
+      if (!q) return refusal("internal", "Spectrum is not connected in this Serv1 yet.") as never;
+      try {
+        const r = await q({ operation, params: JSON.stringify(params ?? {}) });
+        const reply = (typeof r.data === "string" ? JSON.parse(r.data) : r.data) as SpectrumReply;
+        const known =
+          reply?.ok === true ||
+          (reply?.ok === false &&
+            (SPECTRUM_ERROR_CODES as readonly string[]).includes(reply.error?.code));
+        return (known ? reply : refusal("internal")) as never;
+      } catch {
+        return refusal("internal") as never;
+      }
+    },
+  };
+
   return {
     kind: "amplify",
     auth,
@@ -427,6 +477,14 @@ export function createAmplifyBackend(outputs: object): Backend {
       "id",
       plain,
     ),
+    spectrumChecks: repo<"SpectrumCheck", SpectrumCheck, NewSpectrumCheck>(
+      "spectrumChecks",
+      "SpectrumCheck",
+      mapSpectrumCheck,
+      "id",
+      plain,
+    ),
+    spectrum,
     files: filesApi,
     onChange(listener) {
       listeners.add(listener);

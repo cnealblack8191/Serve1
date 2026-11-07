@@ -15,10 +15,17 @@ import type {
   Opportunity,
   Signature,
   SignInResult,
+  NewSpectrumCheck,
   Site,
+  SpectrumCheck,
   TableName,
   User,
 } from "./types";
+import type {
+  SpectrumOperation,
+  SpectrumOps,
+  SpectrumReply,
+} from "../../amplify/functions/spectrum/contract";
 
 /**
  * The one contract between screens and the backend. Two implementations:
@@ -29,7 +36,11 @@ import type {
 export interface Repo<T, N> {
   list(): Promise<T[]>;
   get(id: string): Promise<T | null>;
-  create(input: N): Promise<T>;
+  /**
+   * `opts.id` fixes the new row's id (e.g. a Spectrum match key). The database refuses a second
+   * row with the same id, so two people importing the same record at once cannot both create it.
+   */
+  create(input: N, opts?: { id?: string }): Promise<T>;
   update(id: string, patch: Partial<N>): Promise<T>;
   remove(id: string): Promise<void>;
 }
@@ -50,6 +61,18 @@ export interface FilesApi {
   remove(path: string): Promise<void>;
 }
 
+/**
+ * Spectrum connector calls. Amplify: the server-side `spectrum` query signs and sends them.
+ * Local demo: a fake connector with synthetic records (src/data/local/spectrum-fake.ts).
+ * Never throws for a refusal: the reply says what went wrong.
+ */
+export interface SpectrumApi {
+  call<O extends SpectrumOperation>(
+    operation: O,
+    params: SpectrumOps[O]["params"],
+  ): Promise<SpectrumReply<O>>;
+}
+
 export type ChangeListener = (table: TableName) => void;
 
 export interface Backend {
@@ -63,6 +86,8 @@ export interface Backend {
   signatures: Repo<Signature, NewSignature>;
   invoices: Repo<Invoice, NewInvoice>;
   opportunities: Repo<Opportunity, NewOpportunity>;
+  spectrumChecks: Repo<SpectrumCheck, NewSpectrumCheck>;
+  spectrum: SpectrumApi;
   files: FilesApi;
   /** Fires when any table changes (own writes and, on Amplify, other users' writes). */
   onChange(listener: ChangeListener): () => void;
