@@ -161,3 +161,22 @@ export function useWinOpportunity() {
     },
   });
 }
+
+/** Fields set only by Mark won or the importer; an ordinary edit never sends them. */
+const MANAGED = new Set<keyof NewOpportunity>(["jobId", "closedAt", "importKey"]);
+
+/**
+ * Only what the person changed, so a form opened before someone else's save (for example a
+ * Mark won in another tab) cannot put back the old stage or drop the job link.
+ */
+export function changedFields(
+  before: NewOpportunity,
+  after: NewOpportunity,
+): Partial<NewOpportunity> {
+  const out: Partial<NewOpportunity> = {};
+  for (const k of Object.keys(after) as (keyof NewOpportunity)[]) {
+    if (MANAGED.has(k)) continue;
+    if (after[k] !== before[k]) (out as Record<string, unknown>)[k] = after[k];
+  }
+  return out;
+}
