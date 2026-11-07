@@ -10,6 +10,7 @@ import type {
   TableName,
   User,
 } from "../types";
+import { TABLES } from "../types";
 import {
   DEMO_ACCOUNTS,
   LOCAL_PASSWORD,
@@ -39,8 +40,11 @@ type Tables = Record<TableName, BaseRecord[]>;
 function load(): Tables {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    // Tables added later (Phase 4: spectrumChecks) start empty in older demo data.
-    if (raw) return { spectrumChecks: [], ...(JSON.parse(raw) as Partial<Tables>) } as Tables;
+    // A table missing from older demo data (e.g. Phase 4's spectrumChecks) starts empty.
+    if (raw) {
+      const empty = Object.fromEntries(TABLES.map((t) => [t, []])) as unknown as Tables;
+      return { ...empty, ...(JSON.parse(raw) as Partial<Tables>) };
+    }
   } catch {
     /* fall through to seed */
   }
@@ -208,12 +212,14 @@ export function createLocalBackend(): Backend {
         const row = rows().find((r) => r.id === id) ?? null;
         return row && rules.read(row, me) ? row : null;
       },
-      async create(input) {
+      async create(input, opts) {
         refresh();
         const me = session();
+        if (opts?.id && rows().some((r) => r.id === opts.id))
+          throw new DuplicateError(`${table}: ${opts.id} already exists`);
         const row = {
           ...(input as object),
-          id: newId(),
+          id: opts?.id ?? newId(),
           createdAt: nowIso(),
           updatedAt: nowIso(),
         } as T;

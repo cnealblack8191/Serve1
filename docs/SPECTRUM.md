@@ -22,6 +22,10 @@ technician and dates go into the job notes. Spectrum records carry no amounts.
 
 ## Before it can go live (owner steps, not done)
 
+0. Update the owner's `serv1-builder` stack from `infra/serv1-builder/serv1-builder.yaml`
+   (RUNBOOK.md). Its permissions boundary now allows `execute-api:Invoke` on the connector's
+   `POST /v1/*` routes in us-east-2; without this, every Spectrum call is refused by AWS even
+   after the steps below.
 1. Deploy the Spectrum connector (ECI-ECOSYSTEM). Note its outputs `ApiEndpoint` and
    `Serv1InvokeResource`.
 2. Deploy Serv1 with these set in the deploying shell (values come from step 1, never from code):

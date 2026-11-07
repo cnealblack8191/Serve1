@@ -208,6 +208,39 @@ export function formatAddress(a: SpectrumAddress): string | null {
   return s || null;
 }
 
+/**
+ * Fixed ids for imported rows, built from the match key. Creating a row with an id that already
+ * exists fails in the database (both backends), so two people importing the same Spectrum
+ * record at the same moment get one row, not two (Codex review of PR #17).
+ */
+const key = (...parts: string[]) => parts.map(encodeURIComponent).join(":");
+export const spectrumIds = {
+  job: (cc: string, jobNumber: string) => `spectrum:${key(cc, "job", jobNumber)}`,
+  workOrder: (cc: string, won: string) => `spectrum:${key(cc, "wo", won)}`,
+  customer: (cc: string, code: string | null, name: string) =>
+    `spectrum:${key(cc, "customer", code ?? `name ${name}`)}`,
+  site: (cc: string, customerId: string, address: string) =>
+    `spectrum:${key(cc, "site", customerId, address)}`,
+};
+
+/**
+ * Creates the row with a fixed id, or returns the row already there when someone else created
+ * it first. `created` says which.
+ */
+async function createOnce<T, N>(
+  repo: { create(n: N, o?: { id?: string }): Promise<T>; get(id: string): Promise<T | null> },
+  id: string,
+  input: N,
+): Promise<{ row: T; created: boolean }> {
+  try {
+    return { row: await repo.create(input, { id }), created: true };
+  } catch (e) {
+    const existing = await repo.get(id).catch(() => null);
+    if (existing) return { row: existing, created: false };
+    throw e;
+  }
+}
+
 export interface SpectrumImportResult {
   jobsCreated: number;
   customersCreated: number;
@@ -249,17 +282,21 @@ export async function importFromSpectrum(
         (c.code ? x.spectrumCustomerCode === c.code : !x.spectrumCustomerCode && x.name === name),
     );
     if (found) return found;
-    const created = await b.customers.create({
-      name,
-      billingAddress: null,
-      phone: null,
-      email: null,
-      notes: `Imported from Spectrum (company ${cc}${c.code ? `, customer ${c.code}` : ""}).`,
-      spectrumCompanyCode: cc,
-      spectrumCustomerCode: c.code,
-    });
+    const { row: created, created: isNew } = await createOnce(
+      b.customers,
+      spectrumIds.customer(cc, c.code, name),
+      {
+        name,
+        billingAddress: null,
+        phone: null,
+        email: null,
+        notes: `Imported from Spectrum (company ${cc}${c.code ? `, customer ${c.code}` : ""}).`,
+        spectrumCompanyCode: cc,
+        spectrumCustomerCode: c.code,
+      },
+    );
     customers.push(created);
-    result.customersCreated++;
+    if (isNew) result.customersCreated++;
     return created;
   };
 
@@ -275,15 +312,19 @@ export async function importFromSpectrum(
       (s) => s.spectrumCompanyCode === cc && s.customerId === customerId && s.address === address,
     );
     if (found) return found;
-    const created = await b.sites.create({
-      customerId,
-      name,
-      address,
-      accessNotes: null,
-      spectrumCompanyCode: cc,
-    });
+    const { row: created, created: isNew } = await createOnce(
+      b.sites,
+      spectrumIds.site(cc, customerId, address),
+      {
+        customerId,
+        name,
+        address,
+        accessNotes: null,
+        spectrumCompanyCode: cc,
+      },
+    );
     sites.push(created);
-    result.sitesCreated++;
+    if (isNew) result.sitesCreated++;
     return created;
   };
 
@@ -329,6 +370,15 @@ export async function importFromSpectrum(
       let customerId = parentInServ1?.customerId ?? null;
       if (!customerId && r.jobNumber) {
         const parent = await parentJob(cc, r.jobNumber);
+        if (parent && parent.companyCode !== cc) {
+          // Spectrum was switched to another company since this list was looked up: never mix
+          // two companies' records (Codex review of PR #17).
+          result.skipped.push({
+            number: r.workOrderNumber,
+            reason: `Spectrum is now set to company ${parent.companyCode}; look the work orders up again`,
+          });
+          continue;
+        }
         if (parent) customerId = (await ensureCustomer(cc, parent.customer)).id;
       }
       if (!customerId) {
@@ -376,8 +426,14 @@ export async function importFromSpectrum(
         spectrumWorkOrderNumber: null,
       };
     }
-    jobs.push(await b.jobs.create(job));
-    result.jobsCreated++;
+    const id =
+      "workOrderNumber" in r
+        ? spectrumIds.workOrder(cc, r.workOrderNumber)
+        : spectrumIds.job(cc, r.jobNumber);
+    const { row, created } = await createOnce(b.jobs, id, job);
+    jobs.push(row);
+    if (created) result.jobsCreated++;
+    else result.alreadyImported++;
   }
   onProgress?.(records.length, records.length);
   return result;
@@ -499,8 +555,10 @@ export async function removeTestImports(
 ): Promise<{ removed: number; changed: boolean }> {
   const fresh = await loadRemovalPlan(shown.companyCode);
   const ids = (p: RemovalPlan) =>
+    // Ids and last-changed times: an edit to a counted record (notes, schedule, assignment)
+    // also means the admin must count again (Codex review of PR #17).
     [...p.jobs, ...p.sites, ...p.customers]
-      .map((r) => r.id)
+      .map((r) => `${r.id}@${r.updatedAt}`)
       .sort()
       .join(",");
   if (ids(fresh) !== ids(shown)) return { removed: 0, changed: true };

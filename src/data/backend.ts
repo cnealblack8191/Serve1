@@ -36,7 +36,11 @@ import type {
 export interface Repo<T, N> {
   list(): Promise<T[]>;
   get(id: string): Promise<T | null>;
-  create(input: N): Promise<T>;
+  /**
+   * `opts.id` fixes the new row's id (e.g. a Spectrum match key). The database refuses a second
+   * row with the same id, so two people importing the same record at once cannot both create it.
+   */
+  create(input: N, opts?: { id?: string }): Promise<T>;
   update(id: string, patch: Partial<N>): Promise<T>;
   remove(id: string): Promise<void>;
 }

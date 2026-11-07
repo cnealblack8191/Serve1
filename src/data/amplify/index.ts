@@ -331,8 +331,12 @@ export function createAmplifyBackend(outputs: object): Backend {
         fail(r.errors);
         return r.data ? map(r.data) : null;
       },
-      async create(input) {
-        const r = await m.create(encode(input as Partial<N>));
+      async create(input, opts) {
+        // A fixed id makes DynamoDB refuse a second create of the same row (conditional put).
+        const r = await m.create({
+          ...encode(input as Partial<N>),
+          ...(opts?.id ? { [keyField]: opts.id } : {}),
+        });
         fail(r.errors);
         if (!r.data) throw new Error(`${table}: create returned no row`);
         notify(table);

@@ -100,6 +100,7 @@ Resources:
           account, or IAM users, whatever its own policy says.
         must:
           - Same service allow-list as the execution policy; same explicit denies.
+          - "One runtime-only addition: execute-api:Invoke on the Spectrum connector's POST /v1/* routes in us-east-2, this account (Phase 4). The Spectrum caller role still needs its own grant, which amplify/backend.ts adds only for the connector's Serv1InvokeResource."
           - Only the owner changes it (deployments are denied policy-version writes on serv1-* policies).
     Properties:
       ManagedPolicyName: serv1-permissions-boundary
@@ -128,6 +129,10 @@ Resources:
               - xray:*
               - sts:AssumeRole
             Resource: "*"
+          - Sid: SpectrumConnectorCallsOnly
+            Effect: Allow
+            Action: execute-api:Invoke
+            Resource: !Sub arn:${AWS::Partition}:execute-api:us-east-2:${AWS::AccountId}:*/*/POST/v1/*
           - Sid: NeverServersDatabasesOrAccount
             Effect: Deny
             Action:

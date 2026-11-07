@@ -374,6 +374,42 @@ describe("local fake connector, import and removal", () => {
     const r = await sp.removeTestImports(plan);
     assert.deepEqual(r, { removed: 0, changed: true });
   });
+  it("two people importing the same records at once get one copy (fixed ids)", async () => {
+    await saveTst();
+    const recs = (await sp.listSpectrumJobs("A")).records.slice(0, 3);
+    const [r1, r2] = await Promise.all([sp.importFromSpectrum(recs), sp.importFromSpectrum(recs)]);
+    assert.equal(r1.jobsCreated + r2.jobsCreated, 3);
+    assert.equal(r1.alreadyImported + r2.alreadyImported, 3);
+    const tst = (await b.jobs.list()).filter((j) => j.spectrumCompanyCode === "TST");
+    assert.equal(tst.length, 3);
+    assert.equal(
+      tst.find((j) => j.spectrumJobNumber === recs[0]!.jobNumber)?.id,
+      sp.spectrumIds.job("TST", recs[0]!.jobNumber),
+    );
+    const custs = (await b.customers.list()).filter((c) => c.spectrumCompanyCode === "TST");
+    assert.equal(new Set(custs.map((c) => c.spectrumCustomerCode)).size, custs.length);
+    const sites = (await b.sites.list()).filter((x) => x.spectrumCompanyCode === "TST");
+    assert.equal(sites.length, 3);
+  });
+  it("removal refuses when a counted record was edited since the count", async () => {
+    await saveTst();
+    await sp.importFromSpectrum((await sp.listSpectrumJobs("A")).records.slice(0, 2));
+    const plan = await sp.loadRemovalPlan("TST");
+    await new Promise((r) => setTimeout(r, 5)); // a later updatedAt
+    await b.jobs.update(plan.jobs[0]!.id, { notes: "Tech left a note" });
+    assert.deepEqual(await sp.removeTestImports(plan), { removed: 0, changed: true });
+    assert.equal((await b.jobs.list()).filter((j) => j.spectrumCompanyCode === "TST").length, 2);
+  });
+  it("a work order is not attached to another company's job after Spectrum is switched", async () => {
+    await saveTst();
+    const wos = (await sp.listSpectrumWorkOrders({ jobNumber: "2401" })).records;
+    await sp.saveSpectrumCredentials({ ...GOOD_SAVE, companyCode: "AAA" });
+    const r = await sp.importFromSpectrum(wos);
+    assert.equal(r.jobsCreated, 0);
+    assert.equal(r.skipped.length, 2);
+    assert.match(r.skipped[0]!.reason, /now set to company AAA/);
+    assert.equal((await b.customers.list()).filter((c) => c.spectrumCompanyCode).length, 0);
+  });
   it("spectrum checks are Admin only", async () => {
     await saveTst();
     await sp.testSpectrumConnection();
