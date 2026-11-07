@@ -10,6 +10,7 @@ import {
   Receipt,
   Smartphone,
   Sun,
+  UserCog,
   Users,
 } from "lucide-react";
 import { useState, type ReactNode } from "react";
@@ -46,6 +47,7 @@ const NAV: { to: string; label: string; icon: typeof LayoutDashboard; roles: Rol
   { to: "/dispatch", label: "Dispatch", icon: CalendarRange, roles: ["Admin", "Office"] },
   { to: "/invoices", label: "Invoices", icon: Receipt, roles: ["Admin", "Office", "Owner"] },
   { to: "/tech", label: "Today", icon: Smartphone, roles: ["Tech"] },
+  { to: "/users", label: "Users", icon: UserCog, roles: ["Admin"] },
 ];
 
 export const navFor = (role: Role) => NAV.filter((n) => n.roles.includes(role));

@@ -28,7 +28,7 @@ import {
   useCustomers,
   useIsOffice,
   useJobs,
-  useTechNames,
+  useUsers,
   type JobStatus,
   type WorkType,
 } from "@/data";
@@ -72,7 +72,8 @@ function Page() {
   );
   const jobs = useJobs();
   const customers = useCustomers();
-  const techs = useTechNames();
+  // Names come from the full roster so past jobs keep a tech who has since been turned off.
+  const techs = useUsers();
   const [q, setQ] = useState("");
   const status: JobStatus | "all" = search.status ?? "all";
   const setStatus = (v: JobStatus | "all") =>
@@ -83,7 +84,9 @@ function Page() {
     });
 
   const customerName = new Map((customers.data ?? []).map((c) => [c.id, c.name]));
-  const techName = new Map((techs.data ?? []).map((t) => [t.identityId, t.name]));
+  const techName = new Map(
+    (techs.data ?? []).filter((t) => t.identityId).map((t) => [t.identityId, t.name]),
+  );
 
   const rows = (jobs.data ?? [])
     .filter((j) => status === "all" || j.status === status)

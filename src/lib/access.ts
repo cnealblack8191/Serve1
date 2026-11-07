@@ -6,6 +6,7 @@ import type { Role } from "@/data";
 export const OFFICE_VIEW: Role[] = ["Admin", "Office", "Owner"]; // read office screens
 export const OFFICE_EDIT: Role[] = ["Admin", "Office"]; // change office records
 export const TECH_ONLY: Role[] = ["Tech"]; // the tech's own job screens
+export const ADMIN_ONLY: Role[] = ["Admin"]; // users and settings
 
 /** Each role's home screen. */
 export const homeFor = (role: Role) => (role === "Tech" ? "/tech" : "/");

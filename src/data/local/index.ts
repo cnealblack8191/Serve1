@@ -114,10 +114,17 @@ export function createLocalBackend(): Backend {
     listeners.forEach((l) => l(table));
   };
 
+  /** The demo account's User record decides its role and whether it may sign in at all. */
+  const applyRoster = (u: AuthUser): AuthUser | null => {
+    const record = (tables.users as User[]).find((r) => r.identityId === u.identityId);
+    if (!record) return u;
+    if (!record.active) return null;
+    return { ...u, name: record.name, role: record.role, roles: [record.role] };
+  };
   const session = (): AuthUser | null => {
     try {
       const raw = localStorage.getItem(SESSION_KEY);
-      return raw ? (JSON.parse(raw) as AuthUser) : null;
+      return raw ? applyRoster(JSON.parse(raw) as AuthUser) : null;
     } catch {
       return null;
     }
@@ -139,6 +146,8 @@ export function createLocalBackend(): Backend {
         roles: [account.role],
         role: account.role,
       };
+      refresh();
+      if (!applyRoster(user)) return { kind: "error", message: "This account is turned off." };
       localStorage.setItem(SESSION_KEY, JSON.stringify(user));
       return { kind: "done" };
     },

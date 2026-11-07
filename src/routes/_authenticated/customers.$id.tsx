@@ -3,6 +3,7 @@ import { useState } from "react";
 
 import { DataRow, EmptyState, PageHeader, SectionHeading } from "@/components/eci/primitives";
 import { JobStatusBadge } from "@/components/serv1/office/JobStatusBadge";
+import { CustomerDialog } from "@/components/serv1/office/CustomerDialog";
 import { SiteDialog } from "@/components/serv1/office/SiteDialog";
 import { Button } from "@/components/ui/button";
 import { useCustomer, useIsOffice, useJobs, useSites, type Site } from "@/data";
@@ -21,6 +22,7 @@ function Page() {
   const jobs = useJobs();
   const [editing, setEditing] = useState<Site | null>(null);
   const [adding, setAdding] = useState(false);
+  const [editingCustomer, setEditingCustomer] = useState(false);
 
   if (customer.isLoading) return <p className="text-sm text-muted-foreground">Loading…</p>;
   if (!customer.data) {
@@ -43,6 +45,11 @@ function Page() {
   return (
     <div className="space-y-8">
       <PageHeader title={c.name}>
+        {isOffice ? (
+          <Button variant="outline" onClick={() => setEditingCustomer(true)}>
+            Edit customer
+          </Button>
+        ) : null}
         {isOffice ? (
           <Button asChild>
             <Link to="/jobs/new" search={{ customerId: id }}>
@@ -127,6 +134,7 @@ function Page() {
         )}
       </section>
 
+      <CustomerDialog open={editingCustomer} onOpenChange={setEditingCustomer} customer={c} />
       <SiteDialog open={adding} onOpenChange={setAdding} customerId={id} />
       <SiteDialog
         open={!!editing}
