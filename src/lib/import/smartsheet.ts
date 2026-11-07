@@ -195,6 +195,9 @@ const text = (c: Cell): string | null => {
   return t === "" ? null : t;
 };
 
+/** Job statuses the importer sets, least to most finished. */
+const STATUS_RANK: JobStatus[] = ["New", "Scheduled", "InProgress", "Complete", "Invoiced"];
+
 // ---------------------------------------------------------------- sheets
 
 type Row = { get: (header: string) => Cell; r: number; level: number; raw: SheetRow };
@@ -529,7 +532,8 @@ export function buildImportPlan(files: { file: string; sheets: Sheet[] }[]): Imp
       if (!name) continue;
       const contract = contractFrom([...parents, name]) ?? "NonContract";
       const workType = firstOf(parents.map(cleanType)) ?? cleanType(sheet.label) ?? "Service";
-      const status = cleanJobStatus(row.get("Status")) ?? "New";
+      const taskStatus = cleanJobStatus(row.get("Status")); // null when the cell is blank
+      const status = taskStatus ?? "New";
       const assigned = text(row.get("Assigned To"));
       const tracking = {
         health: cleanHealth(row.get("Health")),
@@ -578,19 +582,23 @@ export function buildImportPlan(files: { file: string; sheets: Sheet[] }[]): Imp
           contract: base.contract === "NonContract" ? contract : base.contract,
           ...tracking,
           health: tracking.health ?? base.health,
+          // The further-along of the service status and the task's own (a blank task status
+          // never sets known progress back).
+          status:
+            taskStatus && STATUS_RANK.indexOf(taskStatus) > STATUS_RANK.indexOf(base.status)
+              ? taskStatus
+              : base.status,
           startDate,
           endDate,
-          completedAt:
-            base.completedAt ??
-            ((base.status === "Complete" || base.status === "Invoiced") && endDate
-              ? `${endDate}T17:00:00.000Z`
-              : null),
+          completedAt: null, // set just below from the reconciled status
           poReceived: base.poReceived || tracking.poReceived,
           materialOrdered: base.materialOrdered || tracking.materialOrdered,
           materialDelivered: base.materialDelivered || tracking.materialDelivered,
           liftConnex: base.liftConnex || tracking.liftConnex,
           notes: joinNotes(base.notes, notes),
         };
+        if (match.job.status === "Complete" || match.job.status === "Invoiced")
+          match.job.completedAt = base.completedAt ?? (endDate ? `${endDate}T17:00:00.000Z` : null);
         match.sources.push(`${sheet.label} row ${row.r}`);
         if (match.data.stage !== "ClosedWon") {
           plan.warnings.push(
