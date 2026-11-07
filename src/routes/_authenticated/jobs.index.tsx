@@ -23,23 +23,49 @@ import {
 } from "@/components/ui/table";
 import {
   JOB_STATUSES,
+  WORK_TYPES,
+  useAttachments,
   useCustomers,
   useIsOffice,
   useJobs,
   useTechNames,
   type JobStatus,
+  type WorkType,
 } from "@/data";
+import {
+  JOB_ATTENTION_LABEL,
+  jobNeedsAttention,
+  type JobAttention,
+} from "@/components/serv1/sales/attention";
 import { JOB_STATUS_LABEL } from "@/lib/status";
 import { requireRole, OFFICE_VIEW } from "@/lib/access";
 
+interface Search {
+  attention?: JobAttention;
+  type?: WorkType;
+}
+
 export const Route = createFileRoute("/_authenticated/jobs/")({
   beforeLoad: ({ context }) => requireRole(context.user.role, OFFICE_VIEW),
+  // Dashboard "Needs attention" links open this list pre-filtered.
+  validateSearch: (s: Record<string, unknown>): Search => ({
+    attention:
+      s["attention"] === "pastEndDate" || s["attention"] === "noPhotos"
+        ? s["attention"]
+        : undefined,
+    type: WORK_TYPES.includes(s["type"] as WorkType) ? (s["type"] as WorkType) : undefined,
+  }),
   component: Page,
 });
 
 function Page() {
   const isOffice = useIsOffice();
   const navigate = useNavigate();
+  const search = Route.useSearch();
+  const attachments = useAttachments();
+  const photoJobIds = new Set(
+    (attachments.data ?? []).filter((a) => a.type === "Photo").map((a) => a.jobId),
+  );
   const jobs = useJobs();
   const customers = useCustomers();
   const techs = useTechNames();
@@ -51,6 +77,8 @@ function Page() {
 
   const rows = (jobs.data ?? [])
     .filter((j) => status === "all" || j.status === status)
+    .filter((j) => !search.type || j.workType === search.type)
+    .filter((j) => !search.attention || jobNeedsAttention(j, search.attention, photoJobIds))
     .filter((j) =>
       matches(q, j.jobNumber, j.description, j.jobType, customerName.get(j.customerId)),
     )
@@ -58,13 +86,25 @@ function Page() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Jobs" description="Every job, newest first.">
+      <PageHeader
+        title="Jobs"
+        description={
+          search.attention ? JOB_ATTENTION_LABEL[search.attention] : "Every job, newest first."
+        }
+      >
         {isOffice ? (
           <Button asChild>
             <Link to="/jobs/new">New job</Link>
           </Button>
         ) : null}
       </PageHeader>
+      {search.attention ? (
+        <Button asChild variant="outline" size="sm">
+          <Link to="/jobs" search={{}}>
+            Show all jobs
+          </Link>
+        </Button>
+      ) : null}
       <div className="flex flex-wrap items-center gap-3">
         <SearchBox
           label="Search jobs"
@@ -90,9 +130,11 @@ function Page() {
         <p className="text-sm text-muted-foreground">Loading jobs…</p>
       ) : rows.length === 0 ? (
         <EmptyState
-          title={q || status !== "all" ? "No jobs match your filters" : "No jobs yet"}
+          title={
+            q || status !== "all" || search.attention ? "No jobs match your filters" : "No jobs yet"
+          }
           hint={
-            q || status !== "all"
+            q || status !== "all" || search.attention
               ? "Clear the search or pick All statuses."
               : isOffice
                 ? "Use New job when a customer calls."

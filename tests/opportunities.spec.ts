@@ -4,8 +4,8 @@ import { signIn } from "./helpers";
 
 test("office adds an opportunity, marks it won, and the job carries it", async ({ page }) => {
   await signIn(page, "office");
-  await page.getByRole("link", { name: "Opportunities" }).first().click();
-  await expect(page.getByRole("heading", { name: "Opportunities" })).toBeVisible();
+  await page.getByRole("link", { name: "Opportunities", exact: true }).first().click();
+  await expect(page.getByRole("heading", { name: "Opportunities", exact: true })).toBeVisible();
   await page.getByRole("link", { name: "Add opportunity" }).click();
 
   await page.getByLabel("Opportunity name").fill("Gym scoreboard circuit");
