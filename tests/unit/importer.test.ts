@@ -330,6 +330,24 @@ describe("import plan", () => {
     assert.equal(plan.jobs[0]!.workType, "HighVoltage");
   });
 
+  it("an empty heading in an outlined sheet does not leak into another branch", () => {
+    const tasks = {
+      name: "Tasks",
+      rows: [
+        { r: 1, level: 0, cells: ["Task", "Status", "Health"] },
+        { r: 2, level: 0, cells: ["Gwinnett Schools", null, null] },
+        { r: 3, level: 1, cells: ["Gym lights", "Not Started", "Green"] },
+        { r: 4, level: 1, cells: ["High Voltage", null, null] },
+        { r: 5, level: 0, cells: ["DeKalb Schools", null, null] },
+        { r: 6, level: 1, cells: ["Library outlets", "Not Started", "Green"] },
+      ],
+    };
+    const plan = sm.buildImportPlan([{ file: "t.xlsx", sheets: [tasks] }]);
+    const lib = plan.jobs.find((j) => j.description === "Library outlets")!;
+    assert.equal(lib.contract, "DeKalbSchools");
+    assert.equal(lib.workType, "Service"); // not the empty High Voltage heading from Gwinnett
+  });
+
   it("a lost service row never becomes a won job", () => {
     const service = readCsv("Service Opportunity,Job Stage\nCancelled panel upgrade,Closed Lost\n");
     const plan = sm.buildImportPlan([{ file: "v.csv", sheets: [service] }]);
