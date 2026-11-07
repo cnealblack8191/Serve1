@@ -5,6 +5,7 @@ import { EmptyState, PageHeader, SectionHeading, SummaryCard } from "@/component
 import { money } from "@/components/serv1/billing/format";
 import { OpenJobsChart } from "@/components/serv1/billing/OpenJobsChart";
 import { dashboardStats } from "@/components/serv1/billing/dashboardStats";
+import { BusinessDashboard } from "@/components/serv1/sales/BusinessDashboard";
 import { useCurrentUser, useInvoices, useJobs, useUsers } from "@/data";
 import { canSeeMoney, OFFICE_VIEW, requireRole } from "@/lib/access";
 
@@ -41,7 +42,11 @@ function Page() {
 
   return (
     <>
-      <PageHeader title="Dashboard" description="Jobs, revenue and workload at a glance." />
+      <PageHeader title="Dashboard" description="Pipeline, field work and billing at a glance." />
+
+      <BusinessDashboard />
+
+      <SectionHeading title="Field work" />
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <SummaryCard label="Completed today" value={String(stats.completedToday)} />
