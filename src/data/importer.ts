@@ -47,8 +47,11 @@ export async function runImport(
     (await b.opportunities.list()).filter((o) => o.importKey).map((o) => [o.importKey!, o]),
   );
   const jobs = await b.jobs.list();
-  const existingJobKeys = new Set(
-    jobs.flatMap((j) => [...(j.notes ?? "").matchAll(/\[import ([^\]]+)\]/g)].map((m) => m[1]!)),
+  // Import key -> job id, so a retry after a partial run can re-link instead of re-creating.
+  const existingJobKeys = new Map<string, string>(
+    jobs.flatMap((j) =>
+      [...(j.notes ?? "").matchAll(/\[import ([^\]]+)\]/g)].map((m) => [m[1]!, j.id] as const),
+    ),
   );
 
   const customers = await b.customers.list();
@@ -73,8 +76,13 @@ export async function runImport(
     return found.id;
   };
 
-  const makeJob = async (j: PlannedJob, opportunityId: string | null): Promise<string | null> => {
-    if (existingJobKeys.has(j.key)) return null;
+  /** Returns the job id and whether it was created now. */
+  const makeJob = async (
+    j: PlannedJob,
+    opportunityId: string | null,
+  ): Promise<{ id: string; created: boolean }> => {
+    const existing = existingJobKeys.get(j.key);
+    if (existing) return { id: existing, created: false };
     const input: NewJob = {
       ...JOB_TRACKING_DEFAULTS,
       jobNumber: newJobNumber(),
@@ -104,9 +112,9 @@ export async function runImport(
       completionPhotosOnFile: j.completionPhotosOnFile,
     };
     const job = await b.jobs.create(input);
-    existingJobKeys.add(j.key);
+    existingJobKeys.set(j.key, job.id);
     result.jobsCreated++;
-    return job.id;
+    return { id: job.id, created: true };
   };
 
   for (const o of plan.opportunities) {
@@ -117,17 +125,16 @@ export async function runImport(
       result.opportunitiesCreated++;
     }
     if (o.job && !opp.jobId) {
-      const jobId = await makeJob(o.job, opp.id);
-      if (jobId)
-        await b.opportunities.update(opp.id, {
-          jobId,
-          customerId: opp.customerId ?? (await ensureCustomer(o.job.contract)),
-        });
+      const { id: jobId } = await makeJob(o.job, opp.id);
+      await b.opportunities.update(opp.id, {
+        jobId,
+        customerId: opp.customerId ?? (await ensureCustomer(o.job.contract)),
+      });
     }
     step();
   }
   for (const j of plan.jobs) {
-    if ((await makeJob(j, null)) === null) result.skipped++;
+    if (!(await makeJob(j, null)).created) result.skipped++;
     step();
   }
   return result;
