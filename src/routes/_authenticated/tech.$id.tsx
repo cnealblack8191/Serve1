@@ -11,6 +11,8 @@ import { JobPhotos } from "@/components/serv1/tech/JobPhotos";
 import { JobStatusBadge, PriorityTag } from "@/components/serv1/tech/JobStatusBadge";
 import { HoldDialog } from "@/components/serv1/tech/HoldDialog";
 import { SignatureStep } from "@/components/serv1/tech/SignatureStep";
+import { JOB_STATUS_CLASS, JOB_STATUS_LABEL } from "@/lib/status";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
   isFinished,
@@ -147,10 +149,10 @@ function JobScreen({ id }: { id: string }) {
 
       {onHold ? (
         <section
-          className="rounded-md border border-yellow-500 bg-yellow-50 p-4 text-base text-yellow-950 dark:bg-yellow-950 dark:text-yellow-50"
+          className={cn("rounded-md p-4 text-base ring-1", JOB_STATUS_CLASS.OnHold)}
           role="status"
         >
-          <p className="font-semibold">On hold</p>
+          <p className="font-semibold">{JOB_STATUS_LABEL.OnHold}</p>
           {j.holdReason ? <p>{j.holdReason}</p> : null}
         </section>
       ) : null}

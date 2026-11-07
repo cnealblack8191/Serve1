@@ -39,6 +39,19 @@ export const JOB_MOVES: Record<JobAction, Move> = {
 /** Statuses a tech may set on their own job (Complete is set by the signature step). */
 export const TECH_SETTABLE: JobStatus[] = ["EnRoute", "InProgress", "OnHold", "Complete"];
 
+/**
+ * Whether a tech may move their job from the stored status `from` to `to`: one of the tech
+ * moves above, or In progress -> Complete (signature). Checked against the saved job, so a
+ * stale screen cannot, for example, restart a job the office cancelled.
+ */
+export function techMayMove(from: JobStatus, to: JobStatus): boolean {
+  if (from === to) return true;
+  if (from === "InProgress" && to === "Complete") return true;
+  return Object.values(JOB_MOVES).some(
+    (m) => m.by === "tech" && m.to === to && m.from.includes(from),
+  );
+}
+
 const isOfficeRole = (r: Role | undefined) => r === "Admin" || r === "Office";
 
 export function canMove(job: Job, action: JobAction, role: Role | undefined): boolean {

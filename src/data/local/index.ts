@@ -21,7 +21,7 @@ import {
   SEED_USERS,
 } from "./seed";
 import { LocalFileStore } from "./file-store";
-import { TECH_SETTABLE } from "../jobflow";
+import { TECH_SETTABLE, techMayMove } from "../jobflow";
 
 /**
  * Local demo backend: runs entirely in the browser, persisted to localStorage,
@@ -277,7 +277,10 @@ export function createLocalBackend(): Backend {
       const p = (patch ?? {}) as Partial<Job>;
       if (!Object.keys(p).every((k) => TECH_FIELDS.has(k) || k === "assignedTechId")) return false;
       if ("assignedTechId" in p && p.assignedTechId !== job.assignedTechId) return false;
-      return p.status === undefined || p.status === job.status || TECH_SETTABLE.includes(p.status);
+      return (
+        p.status === undefined ||
+        (TECH_SETTABLE.concat(job.status).includes(p.status) && techMayMove(job.status, p.status))
+      );
     },
   };
 

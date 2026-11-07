@@ -58,6 +58,15 @@ describe("job flow", () => {
     );
   });
 
+  it("a stale tech screen cannot restart a job the office cancelled", async () => {
+    await as(b, "office@serv1.demo");
+    const j = (await b.jobs.get("job-2"))!;
+    await b.jobs.update(j.id, movePatch(j, "cancel", "Customer cancelled"));
+    await as(b, "tech1@serv1.demo");
+    await assert.rejects(b.jobs.update(j.id, movePatch(j, "start")), NotAllowedError);
+    await assert.rejects(b.jobs.update("job-2", { status: "Complete" }), NotAllowedError);
+  });
+
   it("office: approve, send back with a note, cancel and reopen", async () => {
     await as(b, "office@serv1.demo");
     let j = (await b.jobs.get("job-4"))!; // Complete
