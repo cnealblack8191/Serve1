@@ -136,6 +136,8 @@ export function cleanHealth(text: Cell): JobHealth | null {
 export function cleanJobStatus(text: Cell): JobStatus | null {
   if (text === null || text === undefined) return null;
   const t = norm(String(text));
+  // Sales outcomes are not job progress: "Closed Lost" or "No Bid" must never become a job.
+  if (/\blost\b|no ?bid|cancel/.test(t)) return null;
   if (/invoic|billed/.test(t)) return "Invoiced";
   if (/complete|done|finished|closed/.test(t)) return "Complete";
   // "Not started" must be checked before the positive "started".
@@ -243,9 +245,11 @@ function rowsOf(sheet: Sheet, h: { index: number; headers: string[] }): Row[] {
  */
 function withParents(rows: Row[], primary: string) {
   const out: { row: Row; parents: string[] }[] = [];
-  // `section`: a flat heading (no indented rows, e.g. in a CSV) that applies to the rows below
-  // it until the next heading, rather than only to indented children.
-  const stack: { level: number; text: string; section: boolean }[] = [];
+  // Indented hierarchy (Excel outline levels).
+  const stack: { level: number; text: string }[] = [];
+  // Flat headings (no indented rows, e.g. a CSV): one per kind, so a work-type heading under a
+  // contract heading keeps the contract. Each lasts until the next heading of the same kind.
+  const sections: { contract?: string; type?: string } = {};
   rows.forEach((row, i) => {
     const filled = row.raw.cells.filter((c) => c !== null && c !== "").length;
     const name = text(row.get(primary));
@@ -254,20 +258,21 @@ function withParents(rows: Row[], primary: string) {
     const hasChildren = !!next && next.level > row.level;
     // A name-only row is a heading when it names a contract or work type; otherwise it is an
     // incomplete record and is kept (never dropped silently).
-    const headingOnly = !!name && filled === 1 && (!!cleanContract(name) || !!cleanType(name));
-    const top = () => stack[stack.length - 1];
-    while (
-      stack.length &&
-      (top()!.level > row.level ||
-        (top()!.level === row.level && (!top()!.section || hasChildren || headingOnly)))
-    )
-      stack.pop();
-    if (hasChildren || headingOnly) {
-      if (name) stack.push({ level: row.level, text: name, section: !hasChildren });
-      // A name-only row with rows under it is a heading too, never a record of its own.
-      if (headingOnly || filled === 1) return;
+    const isContract = !!name && !!cleanContract(name);
+    const isType = !!name && !!cleanType(name);
+    const headingOnly = !!name && filled === 1 && (isContract || isType);
+    while (stack.length && stack[stack.length - 1]!.level >= row.level) stack.pop();
+    if (hasChildren) {
+      if (name) stack.push({ level: row.level, text: name });
+      // A name-only row with rows under it is a heading, never a record of its own.
+      if (filled === 1) return;
+    } else if (headingOnly) {
+      if (isContract) sections.contract = name;
+      else sections.type = name;
+      return;
     }
-    out.push({ row, parents: stack.map((s) => s.text).reverse() });
+    const flat = [sections.type, sections.contract].filter((x): x is string => !!x);
+    out.push({ row, parents: [...stack.map((s) => s.text).reverse(), ...flat] });
   });
   return out;
 }
