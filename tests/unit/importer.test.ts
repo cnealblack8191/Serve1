@@ -309,6 +309,17 @@ describe("import plan", () => {
     assert.equal(plan.jobs[0]!.completedAt, "2026-11-06T17:00:00.000Z");
   });
 
+  it("flat CSV headings apply to the rows below them", () => {
+    const tasks = readCsv(
+      "Task,Status,Health\nGwinnett Schools,,\nStadium light poles,Complete,Green\nRockdale Gov,,\nPark lights,Complete,Green\n",
+      "Tasks",
+    );
+    const plan = sm.buildImportPlan([{ file: "t.csv", sheets: [tasks] }]);
+    const by = Object.fromEntries(plan.jobs.map((j) => [j.description, j.contract]));
+    assert.equal(by["Stadium light poles"], "GwinnettSchools");
+    assert.equal(by["Park lights"], "RockdaleGov");
+  });
+
   it("a retry after a partial run re-links the job instead of making another", async () => {
     mem.clear();
     const b = createLocalBackend();
