@@ -14,7 +14,8 @@ const mem = new Map<string, string>();
 
 const { createLocalBackend, NotAllowedError } = await import("../../src/data/local/index.ts");
 const { setBackend } = await import("../../src/data/backend.ts");
-const { winOpportunity, emptyOpportunity } = await import("../../src/data/opportunities.ts");
+const { winOpportunity, emptyOpportunity, changedFields } =
+  await import("../../src/data/opportunities.ts");
 const { oppNeedsAttention, jobNeedsAttention } =
   await import("../../src/components/serv1/sales/attention.ts");
 
@@ -88,6 +89,23 @@ describe("opportunities", () => {
     assert.ok(seen);
     assert.equal("quotedAmount" in (seen as object), false);
     assert.equal(await b.opportunities.get("opp-6"), null);
+  });
+
+  it("a stale edit form cannot reopen a won opportunity or drop its job", async () => {
+    await as(b, "office@serv1.demo");
+    const {
+      id: _i,
+      createdAt: _c,
+      updatedAt: _u,
+      ...draft
+    } = (await b.opportunities.get("opp-6"))!;
+    await winOpportunity("opp-6", "cust-1"); // someone else marks it won meanwhile
+    const patch = changedFields(draft, { ...draft, notes: "edited" });
+    assert.deepEqual(patch, { notes: "edited" });
+    await b.opportunities.update("opp-6", patch);
+    const after = await b.opportunities.get("opp-6");
+    assert.equal(after?.stage, "ClosedWon");
+    assert.ok(after?.jobId);
   });
 
   it("needs-attention rules", () => {
