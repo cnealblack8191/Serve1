@@ -84,7 +84,9 @@ function Page() {
     });
 
   const customerName = new Map((customers.data ?? []).map((c) => [c.id, c.name]));
-  const techName = new Map((techs.data ?? []).map((t) => [t.identityId, t.name]));
+  const techName = new Map(
+    (techs.data ?? []).filter((t) => t.identityId).map((t) => [t.identityId, t.name]),
+  );
 
   const rows = (jobs.data ?? [])
     .filter((j) => status === "all" || j.status === status)

@@ -76,7 +76,9 @@ function Page() {
   }
   const j = job.data;
   const site = (sites.data ?? []).find((s) => s.id === j.siteId);
-  const tech = (techs.data ?? []).find((t) => t.identityId === j.assignedTechId);
+  const tech = j.assignedTechId
+    ? (techs.data ?? []).find((t) => t.identityId === j.assignedTechId)
+    : undefined;
   const photos = (attachments.data ?? []).filter((a) => a.jobId === id);
   const sigs = (signatures.data ?? []).filter((s) => s.jobId === id);
   const invoice = (invoices.data ?? []).find((i) => i.jobId === id);

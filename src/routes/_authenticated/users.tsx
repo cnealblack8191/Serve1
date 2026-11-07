@@ -129,7 +129,8 @@ function UserDialog({
     !!user &&
     user.role === "Admin" &&
     user.active &&
-    others.filter((u) => u.role === "Admin" && u.active).length === 1;
+    // Only admins who can actually sign in count as someone who could take over.
+    !others.some((u) => u.id !== user.id && u.role === "Admin" && u.active && !!u.identityId);
 
   async function submit(e: FormEvent) {
     e.preventDefault();

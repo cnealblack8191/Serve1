@@ -91,3 +91,26 @@ test("a turned-off tech keeps their name on past jobs and can no longer sign in"
   await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page.getByText("This account is turned off.")).toBeVisible();
 });
+
+test("an admin with no sign-in does not count as a replacement admin", async ({ page }) => {
+  await signIn(page, "admin");
+  await page.goto("/users");
+  await page.getByRole("button", { name: "Add user" }).click();
+  let dialog = page.getByRole("dialog");
+  await dialog.getByLabel("Name").fill("Paper Admin");
+  await dialog.getByLabel("Email").fill("paper@serv1.demo");
+  await dialog.getByLabel("Role").selectOption("Admin");
+  await dialog.getByRole("button", { name: "Add user" }).click();
+  await expect(dialog).toBeHidden();
+
+  await page.getByRole("button", { name: "Edit Alex Admin" }).click();
+  dialog = page.getByRole("dialog");
+  await dialog.getByLabel(/Active/).uncheck();
+  await dialog.getByRole("button", { name: "Save changes" }).click();
+  await expect(dialog.getByRole("alert")).toContainText("at least one active Admin");
+
+  // A new unlinked user never shows as the tech on an unassigned job.
+  await page.goto("/jobs/job-1");
+  await expect(page.getByText("Unassigned").first()).toBeVisible();
+  await expect(page.getByText("Paper Admin")).toHaveCount(0);
+});
