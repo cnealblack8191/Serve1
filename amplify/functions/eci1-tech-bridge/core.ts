@@ -167,10 +167,24 @@ export interface BridgeStore {
    */
   updateJob(id: string, patch: Partial<BJob>, expect: JobExpect): Promise<void>;
   /** Creates a row with this id unless it exists (repeats then do nothing). */
-  addNote(row: BNote & { assignedTechId: string; actionId: string }): Promise<void>;
-  addPhoto(row: BPhoto & { assignedTechId: string; uploadedBy: string }): Promise<void>;
-  addReceipt(row: BReceipt & { assignedTechId: string; actionId: string }): Promise<void>;
-  addSignature(row: BSignature & { assignedTechId: string; storagePath: string }): Promise<void>;
+  // Each add is atomic with a check that the job still matches `expect` (else JobChanged), so a
+  // reassignment or office lock made meanwhile never gets a row tagged for the wrong tech.
+  addNote(
+    row: BNote & { assignedTechId: string; actionId: string },
+    expect: JobExpect,
+  ): Promise<void>;
+  addPhoto(
+    row: BPhoto & { assignedTechId: string; uploadedBy: string },
+    expect: JobExpect,
+  ): Promise<void>;
+  addReceipt(
+    row: BReceipt & { assignedTechId: string; actionId: string },
+    expect: JobExpect,
+  ): Promise<void>;
+  addSignature(
+    row: BSignature & { assignedTechId: string; storagePath: string },
+    expect: JobExpect,
+  ): Promise<void>;
   putFile(key: string, bytes: Uint8Array, contentType: string): Promise<void>;
   fileUrl(key: string): Promise<string>;
   /** The saved action for this id, if any (the repeat check). */
@@ -247,6 +261,19 @@ const keyPart = (s: string) => s.replace(/[^A-Za-z0-9._-]/g, "_");
 /** File name from a phone-made actionId: a hash, so distinct ids never share a file. */
 const actionKey = (actionId: string) =>
   createHash("sha256").update(actionId, "utf8").digest("hex").slice(0, 40);
+/**
+ * Only files that belong to this job get a link: Serv1 keeps them under jobs/<jobId>/ (office and
+ * bridge) or tech-files/<storageId>/<jobId>/ (Serv1's tech screens). A row's own path is not
+ * trusted otherwise, since a tech can create attachment rows (Codex review of PR #18).
+ */
+export function pathBelongsToJob(path: string, jobId: string): boolean {
+  if (!path || path.includes("..") || path.includes("\\") || path.startsWith("/")) return false;
+  const parts = path.split("/");
+  if (parts[0] === "jobs") return parts[1] === keyPart(jobId) && parts.length > 2;
+  if (parts[0] === "tech-files") return parts.length > 3 && parts[2] === jobId;
+  return false;
+}
+
 /** Phone times compared as instants (whole and fractional seconds both allowed). */
 const ms = (iso: string) => Date.parse(iso);
 const olderThan = (sent: string, saved: string | null) => !!saved && ms(sent) < ms(saved);
@@ -371,7 +398,8 @@ async function write(route: Route, b: Record<string, unknown>, c: WriteCtx): Pro
   const { store, job, user, actionId, sentAt } = c;
   const tech = user.identityId!;
   const staleStatus = olderThan(sentAt, job.techStatusAt);
-  // Every job update is conditional on the state checked here.
+  // Every job write (and every row added to it) is conditional on the state checked here.
+  const expectJob: JobExpect = { assignedTechId: job.assignedTechId, status: job.status };
   const expectStatus: JobExpect = {
     assignedTechId: job.assignedTechId,
     status: job.status,
@@ -404,15 +432,18 @@ async function write(route: Route, b: Record<string, unknown>, c: WriteCtx): Pro
     }
     case "note": {
       if (!str(b.text, 1, 4000)) return fail("invalid") as WriteOutcome;
-      await store.addNote({
-        id: `eci1-${actionId}`,
-        jobId: job.id,
-        assignedTechId: tech,
-        text: b.text.trim(),
-        by: user.name,
-        at: sentAt,
-        actionId,
-      });
+      await store.addNote(
+        {
+          id: `eci1-${actionId}`,
+          jobId: job.id,
+          assignedTechId: tech,
+          text: b.text.trim(),
+          by: user.name,
+          at: sentAt,
+          actionId,
+        },
+        expectJob,
+      );
       return { ok: true };
     }
     case "photos": {
@@ -424,15 +455,18 @@ async function write(route: Route, b: Record<string, unknown>, c: WriteCtx): Pro
       if (!bytes || !optStr(caption, 500)) return fail("invalid") as WriteOutcome;
       const key = `jobs/${keyPart(job.id)}/tech-photos/${actionKey(actionId)}-${c.index}.jpg`;
       await store.putFile(key, bytes, "image/jpeg");
-      await store.addPhoto({
-        id: `eci1-${actionId}-${c.index}`,
-        jobId: job.id,
-        assignedTechId: tech,
-        storagePath: key,
-        caption: typeof caption === "string" && caption.trim() ? caption.trim() : null,
-        uploadedBy: user.name,
-        createdAt: sentAt,
-      });
+      await store.addPhoto(
+        {
+          id: `eci1-${actionId}-${c.index}`,
+          jobId: job.id,
+          assignedTechId: tech,
+          storagePath: key,
+          caption: typeof caption === "string" && caption.trim() ? caption.trim() : null,
+          uploadedBy: user.name,
+          createdAt: sentAt,
+        },
+        expectJob,
+      );
       return { ok: true };
     }
     case "materials": {
@@ -478,20 +512,23 @@ async function write(route: Route, b: Record<string, unknown>, c: WriteCtx): Pro
       if (!bytes) return fail("invalid") as WriteOutcome;
       const key = `jobs/${keyPart(job.id)}/receipts/${actionKey(actionId)}.jpg`;
       await store.putFile(key, bytes, "image/jpeg");
-      await store.addReceipt({
-        id: `eci1-${actionId}`,
-        jobId: job.id,
-        assignedTechId: tech,
-        actionId,
-        kind: b.kind,
-        vendor: typeof b.vendor === "string" && b.vendor.trim() ? b.vendor.trim() : null,
-        date: typeof b.date === "string" ? b.date : null,
-        amount: Math.round(b.amount * 100) / 100,
-        paidWith: b.paidWith,
-        note: typeof b.note === "string" && b.note.trim() ? b.note.trim() : null,
-        storagePath: key,
-        at: sentAt,
-      });
+      await store.addReceipt(
+        {
+          id: `eci1-${actionId}`,
+          jobId: job.id,
+          assignedTechId: tech,
+          actionId,
+          kind: b.kind,
+          vendor: typeof b.vendor === "string" && b.vendor.trim() ? b.vendor.trim() : null,
+          date: typeof b.date === "string" ? b.date : null,
+          amount: Math.round(b.amount * 100) / 100,
+          paidWith: b.paidWith,
+          note: typeof b.note === "string" && b.note.trim() ? b.note.trim() : null,
+          storagePath: key,
+          at: sentAt,
+        },
+        expectJob,
+      );
       return { ok: true };
     }
     case "complete": {
@@ -518,14 +555,17 @@ async function write(route: Route, b: Record<string, unknown>, c: WriteCtx): Pro
       if (png) {
         const key = `jobs/${keyPart(job.id)}/signatures/${actionKey(actionId)}.png`;
         await store.putFile(key, png, "image/png");
-        await store.addSignature({
-          id: `eci1-${actionId}`,
-          jobId: job.id,
-          assignedTechId: tech,
-          signerName: (signer as string).trim(),
-          signedAt: sentAt,
-          storagePath: key,
-        });
+        await store.addSignature(
+          {
+            id: `eci1-${actionId}`,
+            jobId: job.id,
+            assignedTechId: tech,
+            signerName: (signer as string).trim(),
+            signedAt: sentAt,
+            storagePath: key,
+          },
+          expectJob,
+        );
       }
       // minutesOnJob is information only: pay hours come from TimeX.
       await store.updateJob(
@@ -640,12 +680,14 @@ async function listJobs(
           .map((n) => ({ id: n.id, text: n.text, at: n.at, by: n.by })),
       ],
       photos: await Promise.all(
-        photos.map(async (p) => ({
-          id: p.id,
-          url: await store.fileUrl(p.storagePath),
-          caption: p.caption,
-          at: p.createdAt,
-        })),
+        photos
+          .filter((p) => pathBelongsToJob(p.storagePath, j.id))
+          .map(async (p) => ({
+            id: p.id,
+            url: await store.fileUrl(p.storagePath),
+            caption: p.caption,
+            at: p.createdAt,
+          })),
       ),
       materials: j.materials ?? [],
       receipts: await Promise.all(
@@ -657,7 +699,10 @@ async function listJobs(
           amount: r.amount,
           paidWith: r.paidWith,
           note: r.note,
-          url: r.storagePath ? await store.fileUrl(r.storagePath) : null,
+          url:
+            r.storagePath && pathBelongsToJob(r.storagePath, j.id)
+              ? await store.fileUrl(r.storagePath)
+              : null,
           at: r.at,
         })),
       ),

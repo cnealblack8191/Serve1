@@ -5,6 +5,7 @@ import { beforeEach, describe, it } from "node:test";
 import {
   handleBridge,
   JobChanged,
+  pathBelongsToJob,
   HOLD_REASONS,
   TECH_MOVES,
   type BJob,
@@ -76,6 +77,11 @@ function memoryStore() {
     actions: new Map<string, string>(),
     audit: [] as { route: string; result: string; serv1UserId: string | null }[],
   };
+  const check = (id: string, expect: Record<string, unknown>) => {
+    const cur = jobs.get(id)!;
+    for (const [k, v] of Object.entries(expect))
+      if ((cur[k as keyof BJob] ?? null) !== (v ?? null)) throw new JobChanged();
+  };
   const store: BridgeStore = {
     getUser: async (id) => users.get(id) ?? null,
     getJob: async (id) => jobs.get(id) ?? null,
@@ -87,15 +93,25 @@ function memoryStore() {
     receipts: async (j) => [...rows.receipts.values()].filter((n) => n.jobId === j),
     signature: async (j) => [...rows.signatures.values()].find((n) => n.jobId === j) ?? null,
     updateJob: async (id, patch, expect) => {
-      const cur = jobs.get(id)!;
-      for (const [k, v] of Object.entries(expect))
-        if ((cur[k as keyof BJob] ?? null) !== (v ?? null)) throw new JobChanged();
-      jobs.set(id, { ...cur, ...patch });
+      check(id, expect);
+      jobs.set(id, { ...jobs.get(id)!, ...patch });
     },
-    addNote: async (r) => void (rows.notes.has(r.id) || rows.notes.set(r.id, r)),
-    addPhoto: async (r) => void (rows.photos.has(r.id) || rows.photos.set(r.id, r)),
-    addReceipt: async (r) => void (rows.receipts.has(r.id) || rows.receipts.set(r.id, r)),
-    addSignature: async (r) => void (rows.signatures.has(r.id) || rows.signatures.set(r.id, r)),
+    addNote: async (r, expect) => {
+      check(r.jobId, expect);
+      if (!rows.notes.has(r.id)) rows.notes.set(r.id, r);
+    },
+    addPhoto: async (r, expect) => {
+      check(r.jobId, expect);
+      if (!rows.photos.has(r.id)) rows.photos.set(r.id, r);
+    },
+    addReceipt: async (r, expect) => {
+      check(r.jobId, expect);
+      if (!rows.receipts.has(r.id)) rows.receipts.set(r.id, r);
+    },
+    addSignature: async (r, expect) => {
+      check(r.jobId, expect);
+      if (!rows.signatures.has(r.id)) rows.signatures.set(r.id, r);
+    },
     putFile: async (k, b) => void rows.files.set(k, b.length),
     fileUrl: async (k) => `https://signed.example/${k}?short`,
     getAction: async (id) => (rows.actions.has(id) ? { result: rows.actions.get(id)! } : null),
@@ -440,6 +456,51 @@ describe("Codex review of PR #18", () => {
         ).ok,
       );
     assert.equal(m.rows.files.size, 2);
+  });
+});
+
+describe("Codex second review of PR #18", () => {
+  it("a note is never saved for the former tech when the job is reassigned meanwhile", async () => {
+    const real = m.store.getJob;
+    m.store.getJob = async (id) => {
+      const j = await real(id);
+      m.jobs.set(id, { ...m.jobs.get(id)!, assignedTechId: "tech-b" });
+      return j;
+    };
+    const r = (await send("note", { jobId: "j1", text: "x", actionId: "re-1" })) as {
+      code: string;
+    };
+    assert.equal(r.code, "serv1_unavailable");
+    assert.equal(m.rows.notes.size, 0);
+    assert.equal(m.rows.actions.has("re-1"), false);
+    m.store.getJob = real;
+    assert.equal(
+      ((await send("note", { jobId: "j1", text: "x", actionId: "re-1" })) as { code: string }).code,
+      "not_assigned",
+    );
+  });
+  it("links only files stored for this job", async () => {
+    assert.ok(pathBelongsToJob("jobs/j1/tech-photos/a.jpg", "j1"));
+    assert.ok(pathBelongsToJob("tech-files/us-east-1:abc/j1/p.jpg", "j1"));
+    for (const bad of [
+      "jobs/other-job/receipts/private.jpg",
+      "tech-files/us-east-1:abc/other-job/p.jpg",
+      "jobs/j1/../other/x.jpg",
+      "invoices/inv-1/a.pdf",
+      "jobs/j1",
+    ])
+      assert.ok(!pathBelongsToJob(bad, "j1"), bad);
+    m.rows.photos.set("forged", {
+      id: "forged",
+      jobId: "j1",
+      storagePath: "jobs/other-job/receipts/private.jpg",
+      caption: null,
+      createdAt: T(0),
+    });
+    const r = (await send("jobs")) as unknown as {
+      jobs: { id: string; photos: { id: string }[] }[];
+    };
+    assert.equal(r.jobs.find((j) => j.id === "j1")!.photos.length, 0);
   });
 });
 

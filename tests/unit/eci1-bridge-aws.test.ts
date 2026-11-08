@@ -180,25 +180,46 @@ describe("store requests", () => {
     return { store, sent };
   };
 
-  it("creates rows only if absent; a repeat is quietly ignored", async () => {
-    const { store, sent } = fake(() => ({
-      status: 400,
-      json: { __type: "com.amazonaws.dynamodb.v20120810#ConditionalCheckFailedException" },
-    }));
-    await store.addNote({
-      id: "eci1-a1",
-      jobId: "j1",
-      assignedTechId: "t",
-      actionId: "a1",
-      text: "x",
-      by: "Tara",
-      at: NOW.toISOString(),
+  const note = {
+    id: "eci1-a1",
+    jobId: "j1",
+    assignedTechId: "t",
+    actionId: "a1",
+    text: "x",
+    by: "Tara",
+    at: NOW.toISOString(),
+  };
+  const cancelled = (codes: string[]) => () => ({
+    status: 400,
+    json: {
+      __type: "com.amazonaws.dynamodb.v20120810#TransactionCanceledException",
+      CancellationReasons: codes.map((Code) => ({ Code })),
+    },
+  });
+
+  it("adds rows in one transaction with a check on the job's assignment and status", async () => {
+    const { store, sent } = fake(() => ({ status: 200, json: {} }));
+    await store.addNote(note, { assignedTechId: "t", status: "InProgress" });
+    assert.equal(sent[0]!.target, "DynamoDB_20120810.TransactWriteItems");
+    const [check, put] = sent[0]!.body!.TransactItems as Record<string, Record<string, unknown>>[];
+    assert.equal(check!.ConditionCheck!.TableName, "Job-t");
+    assert.equal(
+      check!.ConditionCheck!.ConditionExpression,
+      "attribute_exists(id) AND #e0 = :e0 AND #e1 = :e1",
+    );
+    assert.equal(put!.Put!.ConditionExpression, "attribute_not_exists(id)");
+    assert.deepEqual((put!.Put!.Item as Record<string, unknown>).__typename, { S: "TechNote" });
+  });
+  it("a repeat (row exists) is quietly ignored; a changed job is JobChanged", async () => {
+    await fake(cancelled(["None", "ConditionalCheckFailed"])).store.addNote(note, {
+      status: "InProgress",
     });
-    assert.equal(sent[0]!.target, "DynamoDB_20120810.PutItem");
-    assert.equal(sent[0]!.body!.ConditionExpression, "attribute_not_exists(id)");
-    assert.deepEqual((sent[0]!.body!.Item as Record<string, unknown>).__typename, {
-      S: "TechNote",
-    });
+    await assert.rejects(
+      fake(cancelled(["ConditionalCheckFailed", "None"])).store.addNote(note, {
+        status: "InProgress",
+      }),
+      JobChanged,
+    );
   });
   it("other database errors surface (the bridge then answers serv1_unavailable)", async () => {
     const { store } = fake(() => ({ status: 500, json: {} }));

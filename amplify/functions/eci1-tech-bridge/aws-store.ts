@@ -104,6 +104,11 @@ const list = <T>(v: unknown): T[] | null => {
 };
 
 export class ConditionFailed extends Error {}
+export class TransactionCanceled extends Error {
+  constructor(readonly reasons: string[]) {
+    super("TransactionCanceled");
+  }
+}
 
 export function createAwsStore(cfg: AwsStoreConfig): BridgeStore {
   const now = () => (cfg.now ? cfg.now() : new Date());
@@ -126,6 +131,12 @@ export function createAwsStore(cfg: AwsStoreConfig): BridgeStore {
     if (res.status >= 400) {
       const type = String(out.__type ?? "");
       if (type.endsWith("ConditionalCheckFailedException")) throw new ConditionFailed();
+      if (type.endsWith("TransactionCanceledException"))
+        throw new TransactionCanceled(
+          ((out.CancellationReasons as { Code?: string }[] | undefined) ?? []).map(
+            (r) => r.Code ?? "None",
+          ),
+        );
       throw new Error(`DynamoDB ${op} failed (${res.status})`);
     }
     return out;
@@ -160,6 +171,70 @@ export function createAwsStore(cfg: AwsStoreConfig): BridgeStore {
     }
     return p;
   };
+
+  /** The condition that the job still matches `expect`, as DynamoDB expression parts. */
+  function expectCondition(expect: Record<string, unknown>) {
+    const names: Record<string, string> = {};
+    const values: Record<string, AV> = {};
+    const conds = ["attribute_exists(id)"];
+    Object.entries(expect).forEach(([k, v], i) => {
+      names[`#e${i}`] = k;
+      if (v === null || v === undefined) {
+        values[":nullType"] = { S: "NULL" };
+        conds.push(`(attribute_not_exists(#e${i}) OR attribute_type(#e${i}, :nullType))`);
+      } else {
+        values[`:e${i}`] = toAV(v);
+        conds.push(`#e${i} = :e${i}`);
+      }
+    });
+    return { names, values, expression: conds.join(" AND ") };
+  }
+
+  /**
+   * Creates the row unless one with this id exists (then does nothing), in one transaction with
+   * a check that the job still matches `expect` (else JobChanged, nothing written).
+   */
+  async function addChild(
+    table: string,
+    typename: string,
+    row: Record<string, unknown> & { jobId: unknown },
+    expect: Record<string, unknown>,
+  ) {
+    const t = now().toISOString();
+    const cond = expectCondition(expect);
+    try {
+      await ddb("TransactWriteItems", {
+        TransactItems: [
+          {
+            ConditionCheck: {
+              TableName: cfg.tables.Job,
+              Key: { id: { S: String(row.jobId) } },
+              ConditionExpression: cond.expression,
+              ExpressionAttributeNames: cond.names,
+              ...(Object.keys(cond.values).length
+                ? { ExpressionAttributeValues: cond.values }
+                : {}),
+            },
+          },
+          {
+            Put: {
+              TableName: table,
+              Item: toItem({ __typename: typename, createdAt: t, updatedAt: t, ...row }),
+              ConditionExpression: "attribute_not_exists(id)",
+            },
+          },
+        ],
+      });
+    } catch (e) {
+      if (!(e instanceof TransactionCanceled)) throw e;
+      const [job, put] = e.reasons;
+      if (job === "ConditionalCheckFailed") throw new JobChanged();
+      if (put !== "ConditionalCheckFailed") throw new Error("transaction cancelled");
+      // The row already exists: a repeat, nothing to do.
+    } finally {
+      scans.delete(table);
+    }
+  }
 
   /** Creates the row unless one with this id exists (then does nothing). */
   async function putOnce(table: string, typename: string, row: Record<string, unknown>) {
@@ -336,26 +411,30 @@ export function createAwsStore(cfg: AwsStoreConfig): BridgeStore {
         scans.delete(cfg.tables.Job);
       }
     },
-    addNote: (r) => putOnce(cfg.tables.TechNote, "TechNote", { ...r }),
-    addPhoto: (r) =>
-      putOnce(cfg.tables.Attachment, "Attachment", {
-        id: r.id,
-        jobId: r.jobId,
-        assignedTechId: r.assignedTechId,
-        storagePath: r.storagePath,
-        type: "Photo",
-        caption: r.caption,
-        uploadedBy: r.uploadedBy,
-      }),
-    addReceipt: (r) =>
-      putOnce(cfg.tables.TechReceipt, "TechReceipt", {
-        ...r,
-        reviewStatus: "Pending",
-        reviewNote: null,
-        reviewedBy: null,
-        reviewedAt: null,
-      }),
-    addSignature: (r) => putOnce(cfg.tables.Signature, "Signature", { ...r }),
+    addNote: (r, expect) => addChild(cfg.tables.TechNote, "TechNote", { ...r }, expect),
+    addPhoto: (r, expect) =>
+      addChild(
+        cfg.tables.Attachment,
+        "Attachment",
+        {
+          id: r.id,
+          jobId: r.jobId,
+          assignedTechId: r.assignedTechId,
+          storagePath: r.storagePath,
+          type: "Photo",
+          caption: r.caption,
+          uploadedBy: r.uploadedBy,
+        },
+        expect,
+      ),
+    addReceipt: (r, expect) =>
+      addChild(
+        cfg.tables.TechReceipt,
+        "TechReceipt",
+        { ...r, reviewStatus: "Pending", reviewNote: null, reviewedBy: null, reviewedAt: null },
+        expect,
+      ),
+    addSignature: (r, expect) => addChild(cfg.tables.Signature, "Signature", { ...r }, expect),
     async putFile(key, bytes, contentType) {
       const url = s3Url(key);
       const headers = signRequest({
