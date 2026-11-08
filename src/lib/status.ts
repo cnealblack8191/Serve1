@@ -3,6 +3,9 @@ import type {
   JobHealth,
   JobPriority,
   JobStatus,
+  NoSignatureReason,
+  ReceiptReview,
+  TechReceipt,
   OpportunityStage,
   WorkType,
 } from "@/data";
@@ -130,4 +133,28 @@ export const HEALTH_HEX: Record<JobHealth | "NotSet", string> = {
   Watch: "#f59e0b",
   Behind: "#b91c1c",
   NotSet: "#d4d4d8",
+};
+
+// ---- ECI1 tech module: receipts and completion (docs/ECI1-BRIDGE.md) ----
+export const RECEIPT_REVIEW_LABEL: Record<ReceiptReview, string> = {
+  Pending: "Waiting for review",
+  Approved: "Approved",
+  Rejected: "Rejected",
+};
+export const RECEIPT_REVIEW_CLASS: Record<ReceiptReview, string> = {
+  Pending:
+    "bg-amber-50 text-amber-900 ring-amber-300 dark:bg-amber-950 dark:text-amber-200 dark:ring-amber-800",
+  Approved:
+    "bg-emerald-50 text-emerald-800 ring-emerald-300 dark:bg-emerald-950 dark:text-emerald-200 dark:ring-emerald-800",
+  Rejected:
+    "bg-red-50 text-red-800 ring-red-300 dark:bg-red-950 dark:text-red-200 dark:ring-red-800",
+};
+export const PAID_WITH_LABEL: Record<TechReceipt["paidWith"], string> = {
+  company_card: "Company card",
+  personal: "Personal (pay back the tech)",
+};
+export const NO_SIGNATURE_LABEL: Record<NoSignatureReason, string> = {
+  not_on_site: "Customer not on site",
+  unable_to_sign: "Customer unable to sign",
+  other: "Other",
 };

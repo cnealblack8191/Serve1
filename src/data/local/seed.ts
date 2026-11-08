@@ -348,6 +348,12 @@ const SEED_JOB_LIST: SeedJob[] = [
     notes:
       "Replaced the breaker and the burned lug, torqued all connections. Cooler running before opening.",
     laborHours: 2,
+    // Sent from the ECI1 phone app (synthetic): materials used, notes and a receipt below.
+    materials: [
+      { name: "40A 2-pole breaker", qty: 1, unit: "ea" },
+      { name: "Mechanical lug", qty: 2, unit: "ea" },
+    ],
+    materialsAt: at(0, 9),
     ...stamp,
   },
   {
@@ -888,4 +894,39 @@ export const SEED_OPPORTUNITIES: Opportunity[] = [
     jobId: "job-14",
     salesRep: SEED_REPS[1]!,
   }),
+];
+
+/** Synthetic ECI1 tech-module rows (notes and receipts sent from the phone) for the demo. */
+export const SEED_TECH_NOTES: import("../types").TechNote[] = [
+  {
+    ...stamp,
+    id: "tnote-1",
+    jobId: "job-7",
+    assignedTechId: "local-tech-3",
+    text: "Lug was heat damaged; replaced both on that leg.",
+    by: "Tess Tech",
+    at: at(0, 8),
+    actionId: "seed-note-1",
+  },
+];
+export const SEED_TECH_RECEIPTS: import("../types").TechReceipt[] = [
+  {
+    ...stamp,
+    id: "trcpt-1",
+    jobId: "job-7",
+    assignedTechId: "local-tech-3",
+    kind: "materials",
+    vendor: "Synthetic Electric Supply",
+    date: at(0, 8).slice(0, 10),
+    amount: 86.4,
+    paidWith: "personal",
+    note: "Bought the breaker on the way",
+    storagePath: null,
+    at: at(0, 8),
+    actionId: "seed-receipt-1",
+    reviewStatus: "Pending",
+    reviewNote: null,
+    reviewedBy: null,
+    reviewedAt: null,
+  },
 ];

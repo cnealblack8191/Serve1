@@ -21,7 +21,7 @@ interface Move {
 }
 
 export const JOB_MOVES: Record<JobAction, Move> = {
-  enRoute: { from: ["Scheduled"], to: "EnRoute", by: "tech" },
+  enRoute: { from: ["New", "Scheduled", "OnHold"], to: "EnRoute", by: "tech" },
   start: { from: ["New", "Scheduled", "EnRoute"], to: "InProgress", by: "tech" },
   hold: { from: ["EnRoute", "InProgress"], to: "OnHold", by: "tech", needsReason: true },
   resume: { from: ["OnHold"], to: "InProgress", by: "tech" },

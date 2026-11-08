@@ -1,13 +1,13 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
 
 import { DataRow, EmptyState, PageHeader, SectionHeading } from "@/components/eci/primitives";
 import { JobStatusBadge } from "@/components/serv1/office/JobStatusBadge";
 import { JobActions } from "@/components/serv1/office/JobActions";
 import { JobTracking } from "@/components/serv1/office/JobTracking";
+import { StoredImage } from "@/components/serv1/office/StoredImage";
+import { TechWork } from "@/components/serv1/office/TechWork";
 import { Button } from "@/components/ui/button";
 import {
-  fileUrl,
   useAttachments,
   useCustomer,
   useJob,
@@ -35,23 +35,6 @@ const fmt = (iso: string | null) =>
         minute: "2-digit",
       })
     : "—";
-
-/** Shows a stored file through a short-lived link. */
-function StoredImage({ path, alt }: { path: string; alt: string }) {
-  const [url, setUrl] = useState("");
-  useEffect(() => {
-    let live = true;
-    fileUrl(path)
-      .then((u) => live && setUrl(u))
-      .catch(() => live && setUrl(""));
-    return () => {
-      live = false;
-    };
-  }, [path]);
-  if (!url)
-    return <div className="aspect-video rounded-md bg-muted" aria-label={`${alt} (loading)`} />;
-  return <img src={url} alt={alt} className="aspect-video w-full rounded-md object-cover" />;
-}
 
 function Page() {
   const { id } = Route.useParams();
@@ -106,6 +89,7 @@ function Page() {
         <p className="eci-card p-4 text-sm" role="status">
           <span className="font-semibold">{JOB_STATUS_LABEL[j.status]}:</span>{" "}
           {j.holdReason ?? "no reason given"}
+          {j.status === "OnHold" && j.holdNote ? ` — ${j.holdNote}` : ""}
         </p>
       ) : null}
       {j.reviewNote ? (
@@ -158,6 +142,8 @@ function Page() {
         canEdit={isOffice}
         photoCount={photos.filter((a) => a.type === "Photo").length}
       />
+
+      <TechWork job={j} canEdit={isOffice} />
 
       <section className="space-y-3">
         <SectionHeading title="Photos and files" />

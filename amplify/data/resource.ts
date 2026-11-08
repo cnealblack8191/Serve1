@@ -171,6 +171,17 @@ const schema = a.schema({
       spectrumCompanyCode: a.string(),
       spectrumJobNumber: a.string(),
       spectrumWorkOrderNumber: a.string(),
+      // ECI1 tech module (docs/ECI1-BRIDGE.md). officeChangedAt moves only on office edits.
+      holdNote: a.string(),
+      officeChangedAt: a.datetime(),
+      officeNote: a.string(),
+      noSignatureReason: a.string(),
+      noSignatureNote: a.string(),
+      // [{ name, qty, unit }], replaced whole by the tech; materialsAt is the phone time of
+      // the list saved, techStatusAt of the last tech status change (late sends are ignored).
+      materials: a.json(),
+      materialsAt: a.datetime(),
+      techStatusAt: a.datetime(),
       attachments: a.hasMany("Attachment", "jobId"),
       signatures: a.hasMany("Signature", "jobId"),
       invoice: a.hasOne("Invoice", "jobId"),
@@ -288,6 +299,73 @@ const schema = a.schema({
       allow.groups(office).to(["create", "read", "update", "delete"]),
       allow.groups(["Owner"]).to(["read"]),
     ]),
+
+  // ECI1 tech module (docs/ECI1-BRIDGE.md). Written by the eci1-tech-bridge function for a
+  // linked tech, on that tech's assigned job only; office reads and reviews.
+  TechNote: a
+    .model({
+      jobId: a.id().required(),
+      assignedTechId: a.string(),
+      text: a.string().required(),
+      by: a.string(),
+      at: a.datetime().required(),
+      actionId: a.string(),
+    })
+    .authorization((allow) => [
+      allow.groups(office).to(["create", "read", "update", "delete"]),
+      allow.groups(["Owner"]).to(["read"]),
+      allow.ownerDefinedIn("assignedTechId").to(["read"]),
+    ]),
+
+  // A receipt for office review: never paid or approved by the tech. "personal" means the tech
+  // is owed the money back.
+  TechReceipt: a
+    .model({
+      jobId: a.id().required(),
+      assignedTechId: a.string(),
+      kind: a.string().required(), // materials | other
+      vendor: a.string(),
+      date: a.date(),
+      amount: a.float().required(),
+      paidWith: a.string().required(), // company_card | personal
+      note: a.string(),
+      storagePath: a.string(),
+      at: a.datetime().required(),
+      actionId: a.string(),
+      reviewStatus: a.string().required(), // Pending | Approved | Rejected
+      reviewNote: a.string(),
+      reviewedBy: a.string(),
+      reviewedAt: a.datetime(),
+    })
+    .authorization((allow) => [
+      allow.groups(office).to(["create", "read", "update", "delete"]),
+      allow.groups(["Owner"]).to(["read"]),
+      allow.ownerDefinedIn("assignedTechId").to(["read"]),
+    ]),
+
+  // One row per tech change the bridge saved, keyed by the phone's actionId (the repeat check).
+  TechAction: a
+    .model({
+      jobId: a.id().required(),
+      route: a.string().required(),
+      serv1UserId: a.string().required(),
+      at: a.datetime().required(),
+      result: a.string().required(), // applied | stale_ignored
+    })
+    .authorization((allow) => [allow.groups(["Admin"]).to(["read"])]),
+
+  // Every bridge call, allowed or refused (design safeguard: the bridge's own audit rows).
+  BridgeAudit: a
+    .model({
+      eciUserId: a.string(),
+      serv1UserId: a.string(),
+      route: a.string().required(),
+      actionId: a.string(),
+      jobId: a.string(),
+      result: a.string().required(),
+      at: a.datetime().required(),
+    })
+    .authorization((allow) => [allow.groups(["Admin"]).to(["read"])]),
 
   // Last Spectrum connection tests (the connector stores none). Admin only. Never credentials.
   SpectrumCheck: a

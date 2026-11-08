@@ -35,6 +35,11 @@ import type {
   Site,
   SpectrumCheck,
   TableName,
+  TechNote,
+  NewTechNote,
+  TechReceipt,
+  NewTechReceipt,
+  JobMaterial,
   User,
 } from "../types";
 import {
@@ -116,6 +121,15 @@ export function createAmplifyBackend(outputs: object): Backend {
   };
 
   const text = (v: string | null | undefined) => v ?? null;
+  /** a.json fields arrive as a JSON string or as the value itself. */
+  const jsonList = <T>(v: unknown): T[] | null => {
+    try {
+      const x = typeof v === "string" ? JSON.parse(v) : v;
+      return Array.isArray(x) ? (x as T[]) : null;
+    } catch {
+      return null;
+    }
+  };
   const num = (v: number | null | undefined) => (typeof v === "number" ? v : null);
 
   type M = Client["models"];
@@ -189,6 +203,47 @@ export function createAmplifyBackend(outputs: object): Backend {
     spectrumCompanyCode: text(r.spectrumCompanyCode),
     spectrumJobNumber: text(r.spectrumJobNumber),
     spectrumWorkOrderNumber: text(r.spectrumWorkOrderNumber),
+    holdNote: text(r.holdNote),
+    officeChangedAt: text(r.officeChangedAt),
+    officeNote: text(r.officeNote),
+    noSignatureReason: (r.noSignatureReason ?? null) as Job["noSignatureReason"],
+    noSignatureNote: text(r.noSignatureNote),
+    materials: jsonList<JobMaterial>(r.materials),
+    materialsAt: text(r.materialsAt),
+    techStatusAt: text(r.techStatusAt),
+  });
+  const mapTechNote = (r: Row<"TechNote">): TechNote => ({
+    id: r.id,
+    createdAt: r.createdAt,
+    updatedAt: r.updatedAt,
+    jobId: r.jobId,
+    assignedTechId: text(r.assignedTechId),
+    text: r.text,
+    by: text(r.by),
+    at: r.at,
+    actionId: text(r.actionId),
+  });
+  const mapTechReceipt = (r: Row<"TechReceipt">): TechReceipt => ({
+    id: r.id,
+    createdAt: r.createdAt,
+    updatedAt: r.updatedAt,
+    jobId: r.jobId,
+    assignedTechId: text(r.assignedTechId),
+    kind: r.kind === "materials" ? "materials" : "other",
+    vendor: text(r.vendor),
+    date: text(r.date),
+    amount: r.amount,
+    paidWith: r.paidWith === "personal" ? "personal" : "company_card",
+    note: text(r.note),
+    storagePath: text(r.storagePath),
+    at: r.at,
+    actionId: text(r.actionId),
+    reviewStatus: (["Approved", "Rejected"].includes(r.reviewStatus)
+      ? r.reviewStatus
+      : "Pending") as TechReceipt["reviewStatus"],
+    reviewNote: text(r.reviewNote),
+    reviewedBy: text(r.reviewedBy),
+    reviewedAt: text(r.reviewedAt),
   });
   const mapSpectrumCheck = (r: Row<"SpectrumCheck">): SpectrumCheck => ({
     id: r.id,
@@ -401,7 +456,29 @@ export function createAmplifyBackend(outputs: object): Backend {
       notify(name === "Attachment" ? "attachments" : "signatures");
     }
   };
-  const jobsRepo = repo<"Job", Job, NewJob>("jobs", "Job", mapJob, "id", plain);
+  const jobEncode = (n: Partial<NewJob>) => ({
+    ...n,
+    ...(n.materials !== undefined
+      ? { materials: n.materials === null ? null : JSON.stringify(n.materials) }
+      : {}),
+  });
+  const jobsBase = repo<"Job", Job, NewJob>("jobs", "Job", mapJob, "id", jobEncode);
+  /** The office's own changes stamp officeChangedAt ("New to you / Changed" on the phone). */
+  const officeStamp = async (): Promise<{ officeChangedAt?: string }> => {
+    const me = await auth.currentUser();
+    return me?.role === "Admin" || me?.role === "Office"
+      ? { officeChangedAt: new Date().toISOString() }
+      : {};
+  };
+  const jobsRepo: Repo<Job, NewJob> = {
+    ...jobsBase,
+    async create(input, opts) {
+      return jobsBase.create({ ...input, ...(await officeStamp()) }, opts);
+    },
+    async update(id, patch) {
+      return jobsBase.update(id, { ...patch, ...(await officeStamp()) });
+    },
+  };
   const jobs: Repo<Job, NewJob> = {
     ...jobsRepo,
     async update(id, patch) {
@@ -485,6 +562,20 @@ export function createAmplifyBackend(outputs: object): Backend {
       plain,
     ),
     spectrum,
+    techNotes: repo<"TechNote", TechNote, NewTechNote>(
+      "techNotes",
+      "TechNote",
+      mapTechNote,
+      "id",
+      plain,
+    ),
+    techReceipts: repo<"TechReceipt", TechReceipt, NewTechReceipt>(
+      "techReceipts",
+      "TechReceipt",
+      mapTechReceipt,
+      "id",
+      plain,
+    ),
     files: filesApi,
     onChange(listener) {
       listeners.add(listener);

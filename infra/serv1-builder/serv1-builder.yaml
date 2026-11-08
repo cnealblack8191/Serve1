@@ -159,6 +159,7 @@ Resources:
           - IAM writes only on amplify-* names, and a role is created or widened only with the
             serv1-permissions-boundary attached; PassRole only to amplify-* roles.
           - "Never any IAM action on cdk-* roles, serv1-builder, eci-ai-* roles or IAM users (Codex on cb75481 showed writable bootstrap identities would have undone every deny)."
+          - "CloudTrail only on trails named amplify-* (the ECI1 bridge's data-event trail, docs/ECI1-BRIDGE.md); never other trails."
     Properties:
       ManagedPolicyName: serv1-cdk-execution
       Description: CloudFormation execution policy for the Serv1 CDK bootstrap (us-east-1)
@@ -186,6 +187,10 @@ Resources:
               - secretsmanager:*
               - scheduler:*
             Resource: "*"
+          - Sid: Eci1BridgeTrailOnly
+            Effect: Allow
+            Action: cloudtrail:*
+            Resource: !Sub arn:${AWS::Partition}:cloudtrail:us-east-1:${AWS::AccountId}:trail/amplify-*
           - Sid: IamRolesOnlyAmplifyNamesWithBoundary
             Effect: Allow
             Action:

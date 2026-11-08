@@ -16,7 +16,7 @@ const mem = new Map<string, string>();
 } as Storage;
 
 const c = await import("../../amplify/functions/spectrum/contract.ts");
-const { signRequest } = await import("../../amplify/functions/spectrum/sigv4.ts");
+const { signRequest } = await import("../../amplify/functions/shared/sigv4.ts");
 const { callConnector } = await import("../../amplify/functions/spectrum/handler.ts");
 const { createLocalBackend } = await import("../../src/data/local/index.ts");
 const { FAKE_FAIL_KEY, FAKE_LIST_CAP } = await import("../../src/data/local/spectrum-fake.ts");

@@ -25,6 +25,7 @@ export * from "./opportunities";
 export * from "./importer";
 export * from "./jobflow";
 export * from "./spectrum";
+export * from "./techwork";
 export { backendKind, onDataChange } from "./hooks";
 
 /**

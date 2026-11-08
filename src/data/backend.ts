@@ -19,6 +19,10 @@ import type {
   Site,
   SpectrumCheck,
   TableName,
+  TechNote,
+  NewTechNote,
+  TechReceipt,
+  NewTechReceipt,
   User,
 } from "./types";
 import type {
@@ -87,6 +91,8 @@ export interface Backend {
   invoices: Repo<Invoice, NewInvoice>;
   opportunities: Repo<Opportunity, NewOpportunity>;
   spectrumChecks: Repo<SpectrumCheck, NewSpectrumCheck>;
+  techNotes: Repo<TechNote, NewTechNote>;
+  techReceipts: Repo<TechReceipt, NewTechReceipt>;
   spectrum: SpectrumApi;
   files: FilesApi;
   /** Fires when any table changes (own writes and, on Amplify, other users' writes). */
