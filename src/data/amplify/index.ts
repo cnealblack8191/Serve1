@@ -35,6 +35,11 @@ import type {
   Site,
   SpectrumCheck,
   TableName,
+  TechNote,
+  NewTechNote,
+  TechReceipt,
+  NewTechReceipt,
+  JobMaterial,
   User,
 } from "../types";
 import {
@@ -116,6 +121,15 @@ export function createAmplifyBackend(outputs: object): Backend {
   };
 
   const text = (v: string | null | undefined) => v ?? null;
+  /** a.json fields arrive as a JSON string or as the value itself. */
+  const jsonList = <T>(v: unknown): T[] | null => {
+    try {
+      const x = typeof v === "string" ? JSON.parse(v) : v;
+      return Array.isArray(x) ? (x as T[]) : null;
+    } catch {
+      return null;
+    }
+  };
   const num = (v: number | null | undefined) => (typeof v === "number" ? v : null);
 
   type M = Client["models"];
@@ -189,6 +203,47 @@ export function createAmplifyBackend(outputs: object): Backend {
     spectrumCompanyCode: text(r.spectrumCompanyCode),
     spectrumJobNumber: text(r.spectrumJobNumber),
     spectrumWorkOrderNumber: text(r.spectrumWorkOrderNumber),
+    holdNote: text(r.holdNote),
+    officeChangedAt: text(r.officeChangedAt),
+    officeNote: text(r.officeNote),
+    noSignatureReason: (r.noSignatureReason ?? null) as Job["noSignatureReason"],
+    noSignatureNote: text(r.noSignatureNote),
+    materials: jsonList<JobMaterial>(r.materials),
+    materialsAt: text(r.materialsAt),
+    techStatusAt: text(r.techStatusAt),
+  });
+  const mapTechNote = (r: Row<"TechNote">): TechNote => ({
+    id: r.id,
+    createdAt: r.createdAt,
+    updatedAt: r.updatedAt,
+    jobId: r.jobId,
+    assignedTechId: text(r.assignedTechId),
+    text: r.text,
+    by: text(r.by),
+    at: r.at,
+    actionId: text(r.actionId),
+  });
+  const mapTechReceipt = (r: Row<"TechReceipt">): TechReceipt => ({
+    id: r.id,
+    createdAt: r.createdAt,
+    updatedAt: r.updatedAt,
+    jobId: r.jobId,
+    assignedTechId: text(r.assignedTechId),
+    kind: r.kind === "materials" ? "materials" : "other",
+    vendor: text(r.vendor),
+    date: text(r.date),
+    amount: r.amount,
+    paidWith: r.paidWith === "personal" ? "personal" : "company_card",
+    note: text(r.note),
+    storagePath: text(r.storagePath),
+    at: r.at,
+    actionId: text(r.actionId),
+    reviewStatus: (["Approved", "Rejected"].includes(r.reviewStatus)
+      ? r.reviewStatus
+      : "Pending") as TechReceipt["reviewStatus"],
+    reviewNote: text(r.reviewNote),
+    reviewedBy: text(r.reviewedBy),
+    reviewedAt: text(r.reviewedAt),
   });
   const mapSpectrumCheck = (r: Row<"SpectrumCheck">): SpectrumCheck => ({
     id: r.id,
@@ -388,20 +443,64 @@ export function createAmplifyBackend(outputs: object): Backend {
    * known after their first sign-in: follow-up.
    */
   const retagFileRows = async (jobId: string, assignedTechId: string | null) => {
-    for (const name of ["Attachment", "Signature"] as const) {
+    // Tech notes and receipts too (Codex review of PR #18).
+    const TABLE_OF = {
+      Attachment: "attachments",
+      Signature: "signatures",
+      TechNote: "techNotes",
+      TechReceipt: "techReceipts",
+    } as const;
+    for (const name of ["Attachment", "Signature", "TechNote", "TechReceipt"] as const) {
       const m = client.models[name] as unknown as LooseModel<{
         id: string;
         assignedTechId?: string | null;
       }>;
-      const page = await m.list({ filter: { jobId: { eq: jobId } }, limit: 500 });
-      for (const row of page.data) {
-        if ((row.assignedTechId ?? null) !== assignedTechId)
-          await m.update({ id: row.id, assignedTechId });
-      }
-      notify(name === "Attachment" ? "attachments" : "signatures");
+      let nextToken: string | null | undefined;
+      do {
+        const page = await m.list({
+          filter: { jobId: { eq: jobId } },
+          limit: 500,
+          ...(nextToken ? { nextToken } : {}),
+        });
+        for (const row of page.data) {
+          if ((row.assignedTechId ?? null) !== assignedTechId)
+            await m.update({ id: row.id, assignedTechId });
+        }
+        nextToken = page.nextToken;
+      } while (nextToken);
+      notify(TABLE_OF[name]);
     }
   };
-  const jobsRepo = repo<"Job", Job, NewJob>("jobs", "Job", mapJob, "id", plain);
+  const jobEncode = (n: Partial<NewJob>) => ({
+    ...n,
+    ...(n.materials !== undefined
+      ? { materials: n.materials === null ? null : JSON.stringify(n.materials) }
+      : {}),
+  });
+  const jobsBase = repo<"Job", Job, NewJob>("jobs", "Job", mapJob, "id", jobEncode);
+  /** The office's own changes stamp officeChangedAt ("New to you / Changed" on the phone). */
+  /**
+   * Office edits stamp officeChangedAt; a tech's own status change in Serv1 advances
+   * techStatusAt, so an older change still queued on the ECI1 phone cannot undo it.
+   */
+  const changeStamps = async (
+    patch?: Partial<NewJob>,
+  ): Promise<{ officeChangedAt?: string; techStatusAt?: string }> => {
+    const me = await auth.currentUser();
+    const now = new Date().toISOString();
+    if (me?.role === "Admin" || me?.role === "Office") return { officeChangedAt: now };
+    if (me?.role === "Tech" && patch?.status !== undefined) return { techStatusAt: now };
+    return {};
+  };
+  const jobsRepo: Repo<Job, NewJob> = {
+    ...jobsBase,
+    async create(input, opts) {
+      return jobsBase.create({ ...input, ...(await changeStamps()) }, opts);
+    },
+    async update(id, patch) {
+      return jobsBase.update(id, { ...patch, ...(await changeStamps(patch)) });
+    },
+  };
   const jobs: Repo<Job, NewJob> = {
     ...jobsRepo,
     async update(id, patch) {
@@ -485,6 +584,20 @@ export function createAmplifyBackend(outputs: object): Backend {
       plain,
     ),
     spectrum,
+    techNotes: repo<"TechNote", TechNote, NewTechNote>(
+      "techNotes",
+      "TechNote",
+      mapTechNote,
+      "id",
+      plain,
+    ),
+    techReceipts: repo<"TechReceipt", TechReceipt, NewTechReceipt>(
+      "techReceipts",
+      "TechReceipt",
+      mapTechReceipt,
+      "id",
+      plain,
+    ),
     files: filesApi,
     onChange(listener) {
       listeners.add(listener);

@@ -19,6 +19,8 @@ import {
   SEED_JOBS,
   SEED_OPPORTUNITIES,
   SEED_SITES,
+  SEED_TECH_NOTES,
+  SEED_TECH_RECEIPTS,
   SEED_USERS,
 } from "./seed";
 import { LocalFileStore } from "./file-store";
@@ -58,6 +60,8 @@ function load(): Tables {
     invoices: [...SEED_INVOICES],
     opportunities: [...SEED_OPPORTUNITIES],
     spectrumChecks: [],
+    techNotes: [...SEED_TECH_NOTES],
+    techReceipts: [...SEED_TECH_RECEIPTS],
   };
 }
 
@@ -105,6 +109,8 @@ export function createLocalBackend(): Backend {
         listeners.forEach((l) => l("users"));
         listeners.forEach((l) => l("opportunities"));
         listeners.forEach((l) => l("spectrumChecks"));
+        listeners.forEach((l) => l("techNotes"));
+        listeners.forEach((l) => l("techReceipts"));
       }
     });
   }
@@ -285,6 +291,7 @@ export function createLocalBackend(): Backend {
     "notes",
     "laborHours",
     "holdReason",
+    "techStatusAt",
   ]);
   const jobRules: Rules<Job> = {
     read: (job, me) => isOffice(me) || me?.role === "Owner" || techOwns(me, job.assignedTechId),
@@ -317,7 +324,13 @@ export function createLocalBackend(): Backend {
     },
   });
 
-  /** When the office reassigns a job, its attachments and signatures follow it (Codex review of PR #1). */
+  const techRowRules = <T extends { assignedTechId: string | null }>(): Rules<T> => ({
+    read: (row, me) => isOffice(me) || me?.role === "Owner" || techOwns(me, row.assignedTechId),
+    write: (_r, me) => isOffice(me),
+  });
+
+  /** When the office reassigns a job, its attachments, signatures, tech notes and receipts follow
+   *  it (Codex reviews of PRs #1 and #18). */
   const retagFileRows = (jobId: string, assignedTechId: string | null) => {
     refresh();
     const retag = <T extends { jobId: string; assignedTechId: string | null }>(rows: T[]) =>
@@ -330,15 +343,28 @@ export function createLocalBackend(): Backend {
       ...tables,
       attachments: retag(tables.attachments as Attachment[]),
       signatures: retag(tables.signatures as Signature[]),
+      techNotes: retag(tables.techNotes as import("../types").TechNote[]),
+      techReceipts: retag(tables.techReceipts as import("../types").TechReceipt[]),
     };
     persist("attachments");
     persist("signatures");
+    persist("techNotes");
+    persist("techReceipts");
   };
   const jobsRepo = repo<Job, import("../types").NewJob>("jobs", jobRules);
   const jobsWithRetag: Repo<Job, import("../types").NewJob> = {
     ...jobsRepo,
+    // The office's own changes stamp officeChangedAt ("New to you / Changed" on the tech's phone).
+    async create(input, opts) {
+      const stamp = isOffice(session()) ? { officeChangedAt: nowIso() } : {};
+      return jobsRepo.create({ ...input, ...stamp }, opts);
+    },
     async update(id, patch) {
       const before = (tables.jobs as Job[]).find((j) => j.id === id);
+      if (isOffice(session())) patch = { ...patch, officeChangedAt: nowIso() };
+      // A tech's own status change advances techStatusAt (late ECI1 sends can't undo it).
+      else if (isTech(session()) && patch.status !== undefined)
+        patch = { ...patch, techStatusAt: nowIso() };
       const after = await jobsRepo.update(id, patch);
       if (before && before.assignedTechId !== after.assignedTechId)
         retagFileRows(id, after.assignedTechId);
@@ -412,6 +438,10 @@ export function createLocalBackend(): Backend {
       write: (_r, me, op) => me?.role === "Admin" && op !== "update",
     }),
     spectrum: createFakeSpectrum(session),
+    // Tech notes and receipts (ECI1 tech module): written by the bridge for the tech; office
+    // reviews; a tech reads only rows on their own jobs.
+    techNotes: repo("techNotes", techRowRules()),
+    techReceipts: repo("techReceipts", techRowRules()),
     files: filesApi,
     onChange(listener) {
       listeners.add(listener);

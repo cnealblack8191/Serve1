@@ -6,6 +6,15 @@ import { cn } from "@/lib/utils";
 
 function Thumb({ photo }: { photo: Attachment }) {
   const url = useFileUrl(photo.storagePath);
+  // A photo sent from the ECI1 phone app is stored where only the office (and the ECI1 app's
+  // own links) can open it; say so instead of showing a broken image.
+  const [unreadable, setUnreadable] = useState(false);
+  if (unreadable)
+    return (
+      <div className="flex aspect-square items-center justify-center rounded-md bg-muted p-2 text-center text-xs text-muted-foreground ring-1 ring-border">
+        Photo from the ECI1 app. Open it there.
+      </div>
+    );
   return (
     <a
       href={url.data || undefined}
@@ -19,6 +28,7 @@ function Thumb({ photo }: { photo: Attachment }) {
           alt={photo.caption ?? "Job photo"}
           className="size-full object-cover"
           data-testid="job-photo"
+          onError={() => setUnreadable(true)}
         />
       ) : null}
     </a>

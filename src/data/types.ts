@@ -176,6 +176,58 @@ export interface Job extends BaseRecord {
   spectrumCompanyCode?: string | null;
   spectrumJobNumber?: string | null;
   spectrumWorkOrderNumber?: string | null;
+  // ---- ECI1 tech module (docs/ECI1-BRIDGE.md). Optional: older records have none. ----
+  /** Extra words with an On hold reason. */
+  holdNote?: string | null;
+  /** Last time the office changed the job (never moved by the tech's own changes). */
+  officeChangedAt?: string | null;
+  /** Short note from dispatch shown to the tech. */
+  officeNote?: string | null;
+  /** Why the job was completed without a signature. */
+  noSignatureReason?: NoSignatureReason | null;
+  noSignatureNote?: string | null;
+  /** Materials used, as the tech last sent them (replaced whole). */
+  materials?: JobMaterial[] | null;
+  materialsAt?: string | null;
+  techStatusAt?: string | null;
+}
+
+export type NoSignatureReason = "not_on_site" | "unable_to_sign" | "other";
+export interface JobMaterial {
+  name: string;
+  qty: number;
+  unit: string;
+}
+
+/** A note a tech added from the ECI1 phone app. */
+export interface TechNote extends BaseRecord {
+  jobId: string;
+  assignedTechId: string | null;
+  text: string;
+  by: string | null;
+  at: string;
+  actionId: string | null;
+}
+
+export type ReceiptReview = "Pending" | "Approved" | "Rejected";
+/** A receipt a tech sent from the ECI1 phone app, for office review. */
+export interface TechReceipt extends BaseRecord {
+  jobId: string;
+  assignedTechId: string | null;
+  kind: "materials" | "other";
+  vendor: string | null;
+  date: string | null;
+  amount: number;
+  /** "personal" means the tech is owed the money back. */
+  paidWith: "company_card" | "personal";
+  note: string | null;
+  storagePath: string | null;
+  at: string;
+  actionId: string | null;
+  reviewStatus: ReceiptReview;
+  reviewNote: string | null;
+  reviewedBy: string | null;
+  reviewedAt: string | null;
 }
 
 /** Tracking defaults for a new job. */
@@ -296,6 +348,8 @@ export type NewSignature = Input<Signature>;
 export type NewInvoice = Input<Invoice>;
 export type NewOpportunity = Input<Opportunity>;
 export type NewSpectrumCheck = Input<SpectrumCheck>;
+export type NewTechNote = Input<TechNote>;
+export type NewTechReceipt = Input<TechReceipt>;
 
 export type TableName =
   | "users"
@@ -306,7 +360,9 @@ export type TableName =
   | "signatures"
   | "invoices"
   | "opportunities"
-  | "spectrumChecks";
+  | "spectrumChecks"
+  | "techNotes"
+  | "techReceipts";
 
 export const TABLES: TableName[] = [
   "users",
@@ -318,6 +374,8 @@ export const TABLES: TableName[] = [
   "invoices",
   "opportunities",
   "spectrumChecks",
+  "techNotes",
+  "techReceipts",
 ];
 
 /** The signed-in person, as every screen sees them. */

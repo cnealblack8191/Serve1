@@ -49,6 +49,7 @@ function JobScreen({ id }: { id: string }) {
   const [holding, setHolding] = useState(false);
   const signature = useJobSignature(id);
   const signatureUrl = useFileUrl(signature.data?.storagePath);
+  const [signatureUnreadable, setSignatureUnreadable] = useState(false);
   const [step, setStep] = useState<Step>("detail");
 
   if (job.isLoading) return <p className="text-base text-muted-foreground">Loading job…</p>;
@@ -176,11 +177,13 @@ function JobScreen({ id }: { id: string }) {
       {signature.data ? (
         <section className="space-y-2">
           <h2 className="text-lg font-semibold">Signature</h2>
-          {signatureUrl.data ? (
+          {signatureUrl.data && !signatureUnreadable ? (
             <img
               src={signatureUrl.data}
               alt={`Signature of ${signature.data.signerName}`}
               className="h-28 w-full rounded-md bg-white object-contain ring-1 ring-border"
+              // Signed in the ECI1 app: stored where this screen can't open it.
+              onError={() => setSignatureUnreadable(true)}
             />
           ) : null}
           <p className="text-sm text-muted-foreground">

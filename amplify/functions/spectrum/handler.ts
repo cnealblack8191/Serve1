@@ -7,7 +7,7 @@ import {
   type SpectrumErrorCode,
   type SpectrumReply,
 } from "./contract";
-import { signRequest } from "./sigv4";
+import { signRequest } from "../shared/sigv4";
 
 /**
  * Serv1's server-side caller for the Spectrum connector (API.md section 1). The browser never

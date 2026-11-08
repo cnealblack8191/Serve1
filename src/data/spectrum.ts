@@ -14,6 +14,8 @@ import {
   type Signature,
   type Site,
   type SpectrumCheck,
+  type TechNote,
+  type TechReceipt,
   type TableName,
 } from "./types";
 import {
@@ -458,6 +460,9 @@ export interface RemovalInput {
   attachments: Attachment[];
   signatures: Signature[];
   opportunities: Opportunity[];
+  /** Work sent from the ECI1 phone app (Codex review of PR #18). */
+  techNotes?: TechNote[];
+  techReceipts?: TechReceipt[];
 }
 
 /**
@@ -487,7 +492,11 @@ export function planRemoval(companyCode: string, t: RemovalInput): RemovalPlan {
           ? "it has a signature"
           : j.opportunityId || t.opportunities.some((o) => o.jobId === j.id)
             ? "it is linked to an opportunity"
-            : null;
+            : (t.techReceipts ?? []).some((r) => r.jobId === j.id)
+              ? "it has a tech receipt"
+              : (t.techNotes ?? []).some((n) => n.jobId === j.id)
+                ? "it has tech notes"
+                : null;
     if (why) kept.push({ label: jobLabel(j), reason: why });
     else jobs.push(j);
   }
@@ -524,16 +533,27 @@ export function planRemoval(companyCode: string, t: RemovalInput): RemovalPlan {
 /** Loads every table the removal plan needs (Admin reads all of them). */
 export async function loadRemovalPlan(companyCode: string): Promise<RemovalPlan> {
   const b = backend();
-  const [jobs, sites, customers, invoices, attachments, signatures, opportunities] =
-    await Promise.all([
-      b.jobs.list(),
-      b.sites.list(),
-      b.customers.list(),
-      b.invoices.list(),
-      b.attachments.list(),
-      b.signatures.list(),
-      b.opportunities.list(),
-    ]);
+  const [
+    jobs,
+    sites,
+    customers,
+    invoices,
+    attachments,
+    signatures,
+    opportunities,
+    techNotes,
+    techReceipts,
+  ] = await Promise.all([
+    b.jobs.list(),
+    b.sites.list(),
+    b.customers.list(),
+    b.invoices.list(),
+    b.attachments.list(),
+    b.signatures.list(),
+    b.opportunities.list(),
+    b.techNotes.list(),
+    b.techReceipts.list(),
+  ]);
   return planRemoval(companyCode, {
     jobs,
     sites,
@@ -542,6 +562,8 @@ export async function loadRemovalPlan(companyCode: string): Promise<RemovalPlan>
     attachments,
     signatures,
     opportunities,
+    techNotes,
+    techReceipts,
   });
 }
 

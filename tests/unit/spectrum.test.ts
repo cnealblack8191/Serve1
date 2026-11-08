@@ -16,7 +16,7 @@ const mem = new Map<string, string>();
 } as Storage;
 
 const c = await import("../../amplify/functions/spectrum/contract.ts");
-const { signRequest } = await import("../../amplify/functions/spectrum/sigv4.ts");
+const { signRequest } = await import("../../amplify/functions/shared/sigv4.ts");
 const { callConnector } = await import("../../amplify/functions/spectrum/handler.ts");
 const { createLocalBackend } = await import("../../src/data/local/index.ts");
 const { FAKE_FAIL_KEY, FAKE_LIST_CAP } = await import("../../src/data/local/spectrum-fake.ts");
@@ -364,6 +364,39 @@ describe("local fake connector, import and removal", () => {
     assert.equal(
       after.filter((j) => !j.spectrumCompanyCode).length,
       before.filter((j) => !j.spectrumCompanyCode).length,
+    );
+  });
+  it("removal keeps imported jobs that have tech receipts or notes", async () => {
+    await saveTst();
+    await sp.importFromSpectrum((await sp.listSpectrumJobs("A")).records.slice(0, 2));
+    const [j1, j2] = (await b.jobs.list()).filter((j) => j.spectrumCompanyCode === "TST");
+    await as("office");
+    const base = { assignedTechId: null, at: new Date().toISOString(), actionId: null };
+    await b.techReceipts.create({
+      ...base,
+      jobId: j1!.id,
+      kind: "materials",
+      vendor: "Synthetic",
+      date: null,
+      amount: 5,
+      paidWith: "personal",
+      note: null,
+      storagePath: null,
+      reviewStatus: "Pending",
+      reviewNote: null,
+      reviewedBy: null,
+      reviewedAt: null,
+    });
+    await b.techNotes.create({ ...base, jobId: j2!.id, text: "note", by: null });
+    await as("admin");
+    const plan = await sp.loadRemovalPlan("TST");
+    assert.equal(plan.jobs.length, 0);
+    assert.deepEqual(
+      plan.kept
+        .filter((k) => k.label.startsWith("Job"))
+        .map((k) => k.reason)
+        .sort(),
+      ["it has a tech receipt", "it has tech notes"],
     );
   });
   it("removal refuses when records changed since the count", async () => {
