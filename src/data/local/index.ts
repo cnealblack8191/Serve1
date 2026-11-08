@@ -291,6 +291,7 @@ export function createLocalBackend(): Backend {
     "notes",
     "laborHours",
     "holdReason",
+    "techStatusAt",
   ]);
   const jobRules: Rules<Job> = {
     read: (job, me) => isOffice(me) || me?.role === "Owner" || techOwns(me, job.assignedTechId),
@@ -361,6 +362,9 @@ export function createLocalBackend(): Backend {
     async update(id, patch) {
       const before = (tables.jobs as Job[]).find((j) => j.id === id);
       if (isOffice(session())) patch = { ...patch, officeChangedAt: nowIso() };
+      // A tech's own status change advances techStatusAt (late ECI1 sends can't undo it).
+      else if (isTech(session()) && patch.status !== undefined)
+        patch = { ...patch, techStatusAt: nowIso() };
       const after = await jobsRepo.update(id, patch);
       if (before && before.assignedTechId !== after.assignedTechId)
         retagFileRows(id, after.assignedTechId);

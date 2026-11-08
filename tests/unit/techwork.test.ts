@@ -52,4 +52,15 @@ describe("office changes and tech rows", () => {
     await b.auth.signIn("tech1@serv1.demo", "serv1demo");
     assert.equal((await b.techReceipts.list()).length, 1, "new tech gains it");
   });
+
+  it("a tech's own status change in Serv1 advances techStatusAt (late phone sends can't undo it)", async () => {
+    await b.auth.signIn("office@serv1.demo", "serv1demo");
+    const j = (await b.jobs.list()).find((x) => x.status === "Scheduled" && x.assignedTechId)!;
+    const tech = (await b.users.list()).find((u) => u.identityId === j.assignedTechId)!;
+    await b.auth.signIn(tech.email, "serv1demo");
+    const moved = await b.jobs.update(j.id, { status: "EnRoute" });
+    assert.ok(moved.techStatusAt);
+    const noted = await b.jobs.update(j.id, { notes: "on the way" });
+    assert.equal(noted.techStatusAt, moved.techStatusAt, "only status changes move it");
+  });
 });

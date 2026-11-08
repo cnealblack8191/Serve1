@@ -486,6 +486,11 @@ describe("Codex second review of PR #18", () => {
       "jobs/other-job/receipts/private.jpg",
       "tech-files/us-east-1:abc/other-job/p.jpg",
       "jobs/j1/../other/x.jpg",
+      "jobs/j1/%2e%2e/other-job/receipts/private.jpg",
+      "jobs/j1/%2E%2E/other-job/x.jpg",
+      "jobs/j1/./x.jpg",
+      "jobs/j1//x.jpg",
+      "jobs/j1/a\\..\\b.jpg",
       "invoices/inv-1/a.pdf",
       "jobs/j1",
     ])

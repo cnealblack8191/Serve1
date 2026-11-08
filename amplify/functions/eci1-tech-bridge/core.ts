@@ -267,8 +267,11 @@ const actionKey = (actionId: string) =>
  * trusted otherwise, since a tech can create attachment rows (Codex review of PR #18).
  */
 export function pathBelongsToJob(path: string, jobId: string): boolean {
-  if (!path || path.includes("..") || path.includes("\\") || path.startsWith("/")) return false;
+  if (!path) return false;
   const parts = path.split("/");
+  // Plain segments only: no "%" (encoded traversal such as %2e%2e), no "." or "..", no "\\",
+  // nothing empty. What is signed is then exactly this path.
+  if (!parts.every((p) => /^[A-Za-z0-9._:-]+$/.test(p) && p !== "." && p !== "..")) return false;
   if (parts[0] === "jobs") return parts[1] === keyPart(jobId) && parts.length > 2;
   if (parts[0] === "tech-files") return parts.length > 3 && parts[2] === jobId;
   return false;

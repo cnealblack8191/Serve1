@@ -479,19 +479,26 @@ export function createAmplifyBackend(outputs: object): Backend {
   });
   const jobsBase = repo<"Job", Job, NewJob>("jobs", "Job", mapJob, "id", jobEncode);
   /** The office's own changes stamp officeChangedAt ("New to you / Changed" on the phone). */
-  const officeStamp = async (): Promise<{ officeChangedAt?: string }> => {
+  /**
+   * Office edits stamp officeChangedAt; a tech's own status change in Serv1 advances
+   * techStatusAt, so an older change still queued on the ECI1 phone cannot undo it.
+   */
+  const changeStamps = async (
+    patch?: Partial<NewJob>,
+  ): Promise<{ officeChangedAt?: string; techStatusAt?: string }> => {
     const me = await auth.currentUser();
-    return me?.role === "Admin" || me?.role === "Office"
-      ? { officeChangedAt: new Date().toISOString() }
-      : {};
+    const now = new Date().toISOString();
+    if (me?.role === "Admin" || me?.role === "Office") return { officeChangedAt: now };
+    if (me?.role === "Tech" && patch?.status !== undefined) return { techStatusAt: now };
+    return {};
   };
   const jobsRepo: Repo<Job, NewJob> = {
     ...jobsBase,
     async create(input, opts) {
-      return jobsBase.create({ ...input, ...(await officeStamp()) }, opts);
+      return jobsBase.create({ ...input, ...(await changeStamps()) }, opts);
     },
     async update(id, patch) {
-      return jobsBase.update(id, { ...patch, ...(await officeStamp()) });
+      return jobsBase.update(id, { ...patch, ...(await changeStamps(patch)) });
     },
   };
   const jobs: Repo<Job, NewJob> = {
