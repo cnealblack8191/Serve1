@@ -443,17 +443,32 @@ export function createAmplifyBackend(outputs: object): Backend {
    * known after their first sign-in: follow-up.
    */
   const retagFileRows = async (jobId: string, assignedTechId: string | null) => {
-    for (const name of ["Attachment", "Signature"] as const) {
+    // Tech notes and receipts too (Codex review of PR #18).
+    const TABLE_OF = {
+      Attachment: "attachments",
+      Signature: "signatures",
+      TechNote: "techNotes",
+      TechReceipt: "techReceipts",
+    } as const;
+    for (const name of ["Attachment", "Signature", "TechNote", "TechReceipt"] as const) {
       const m = client.models[name] as unknown as LooseModel<{
         id: string;
         assignedTechId?: string | null;
       }>;
-      const page = await m.list({ filter: { jobId: { eq: jobId } }, limit: 500 });
-      for (const row of page.data) {
-        if ((row.assignedTechId ?? null) !== assignedTechId)
-          await m.update({ id: row.id, assignedTechId });
-      }
-      notify(name === "Attachment" ? "attachments" : "signatures");
+      let nextToken: string | null | undefined;
+      do {
+        const page = await m.list({
+          filter: { jobId: { eq: jobId } },
+          limit: 500,
+          ...(nextToken ? { nextToken } : {}),
+        });
+        for (const row of page.data) {
+          if ((row.assignedTechId ?? null) !== assignedTechId)
+            await m.update({ id: row.id, assignedTechId });
+        }
+        nextToken = page.nextToken;
+      } while (nextToken);
+      notify(TABLE_OF[name]);
     }
   };
   const jobEncode = (n: Partial<NewJob>) => ({

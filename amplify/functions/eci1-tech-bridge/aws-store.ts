@@ -1,5 +1,14 @@
 import { presignGet, signRequest, type AwsCredentials } from "../shared/sigv4";
-import type { BJob, BNote, BPhoto, BReceipt, BridgeStore, BSignature, BUser } from "./core";
+import {
+  JobChanged,
+  type BJob,
+  type BNote,
+  type BPhoto,
+  type BReceipt,
+  type BridgeStore,
+  type BSignature,
+  type BUser,
+} from "./core";
 
 /**
  * BridgeStore over Serv1's own DynamoDB tables and S3 bucket, signed with the function role's
@@ -184,6 +193,7 @@ export function createAwsStore(cfg: AwsStoreConfig): BridgeStore {
     startedAt: s(r.startedAt),
     completedAt: s(r.completedAt),
     notes: s(r.notes),
+    reviewNote: s(r.reviewNote),
     holdReason: s(r.holdReason),
     holdNote: s(r.holdNote),
     officeChangedAt: s(r.officeChangedAt),
@@ -288,7 +298,7 @@ export function createAwsStore(cfg: AwsStoreConfig): BridgeStore {
           } satisfies BSignature)
         : null;
     },
-    async updateJob(id, patch) {
+    async updateJob(id, patch, expect) {
       const fields = { ...patch, updatedAt: now().toISOString() } as Record<string, unknown>;
       delete fields.id;
       const names: Record<string, string> = {};
@@ -298,15 +308,33 @@ export function createAwsStore(cfg: AwsStoreConfig): BridgeStore {
         values[`:v${i}`] = toAV(v);
         return `#f${i} = :v${i}`;
       });
-      await ddb("UpdateItem", {
-        TableName: cfg.tables.Job,
-        Key: { id: { S: id } },
-        UpdateExpression: `SET ${sets.join(", ")}`,
-        ExpressionAttributeNames: names,
-        ExpressionAttributeValues: values,
-        ConditionExpression: "attribute_exists(id)",
+      // Only if the job is still as the rules saw it (atomic with the write).
+      const conds = ["attribute_exists(id)"];
+      Object.entries(expect).forEach(([k, v], i) => {
+        names[`#e${i}`] = k;
+        if (v === null || v === undefined) {
+          values[":nullType"] = { S: "NULL" };
+          conds.push(`(attribute_not_exists(#e${i}) OR attribute_type(#e${i}, :nullType))`);
+        } else {
+          values[`:e${i}`] = toAV(v);
+          conds.push(`#e${i} = :e${i}`);
+        }
       });
-      scans.delete(cfg.tables.Job);
+      try {
+        await ddb("UpdateItem", {
+          TableName: cfg.tables.Job,
+          Key: { id: { S: id } },
+          UpdateExpression: `SET ${sets.join(", ")}`,
+          ConditionExpression: conds.join(" AND "),
+          ExpressionAttributeNames: names,
+          ExpressionAttributeValues: values,
+        });
+      } catch (e) {
+        if (e instanceof ConditionFailed) throw new JobChanged();
+        throw e;
+      } finally {
+        scans.delete(cfg.tables.Job);
+      }
     },
     addNote: (r) => putOnce(cfg.tables.TechNote, "TechNote", { ...r }),
     addPhoto: (r) =>

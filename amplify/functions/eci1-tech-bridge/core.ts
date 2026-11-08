@@ -8,6 +8,8 @@
  * repeat check -> save -> audit row. Never creates or deletes jobs, never touches office data.
  */
 
+import { createHash } from "node:crypto";
+
 export const ROUTES = [
   "jobs",
   "status",
@@ -87,6 +89,8 @@ export interface BJob {
   startedAt: string | null;
   completedAt: string | null;
   notes: string | null;
+  /** The office's reason when it sent the job back. */
+  reviewNote: string | null;
   holdReason: string | null;
   holdNote: string | null;
   officeChangedAt: string | null;
@@ -137,6 +141,14 @@ export interface BSignature {
   signedAt: string;
 }
 
+/** Fields a job update is conditional on: the state the rules were checked against. */
+export type JobExpect = Partial<
+  Pick<BJob, "assignedTechId" | "status" | "techStatusAt" | "materialsAt">
+>;
+
+/** The job changed between the check and the save; nothing was saved. */
+export class JobChanged extends Error {}
+
 export interface BridgeStore {
   getUser(id: string): Promise<BUser | null>;
   getJob(id: string): Promise<BJob | null>;
@@ -149,8 +161,11 @@ export interface BridgeStore {
   photos(jobId: string): Promise<BPhoto[]>;
   receipts(jobId: string): Promise<BReceipt[]>;
   signature(jobId: string): Promise<BSignature | null>;
-  /** Saves fields on the job (never status-unrelated office fields). */
-  updateJob(id: string, patch: Partial<BJob>): Promise<void>;
+  /**
+   * Saves fields on the job only if it still matches `expect` (atomically), else throws
+   * JobChanged, so an office lock or a newer tech change made meanwhile is never overwritten.
+   */
+  updateJob(id: string, patch: Partial<BJob>, expect: JobExpect): Promise<void>;
   /** Creates a row with this id unless it exists (repeats then do nothing). */
   addNote(row: BNote & { assignedTechId: string; actionId: string }): Promise<void>;
   addPhoto(row: BPhoto & { assignedTechId: string; uploadedBy: string }): Promise<void>;
@@ -227,8 +242,14 @@ function decodeImage(v: unknown, kind: "jpeg" | "png"): Uint8Array | null {
   return (kind === "jpeg" ? jpeg : png) ? bytes : null;
 }
 
-/** Safe piece of an S3 key from a phone-made id. */
+/** Safe piece of an S3 key from a database id. */
 const keyPart = (s: string) => s.replace(/[^A-Za-z0-9._-]/g, "_");
+/** File name from a phone-made actionId: a hash, so distinct ids never share a file. */
+const actionKey = (actionId: string) =>
+  createHash("sha256").update(actionId, "utf8").digest("hex").slice(0, 40);
+/** Phone times compared as instants (whole and fractional seconds both allowed). */
+const ms = (iso: string) => Date.parse(iso);
+const olderThan = (sent: string, saved: string | null) => !!saved && ms(sent) < ms(saved);
 
 export interface BridgeRequest {
   serv1UserId?: unknown;
@@ -324,8 +345,15 @@ export async function handleBridge(
       result: outcome.stale ? "stale_ignored" : "applied",
     });
     return finish({ ok: true });
-  } catch {
-    return finish(fail("serv1_unavailable"));
+  } catch (e) {
+    // JobChanged: nothing saved and the action not recorded, so the phone's retry is checked
+    // again against the job as it is then (e.g. now locked by the office).
+    return finish(
+      fail(
+        "serv1_unavailable",
+        e instanceof JobChanged ? "The job just changed. Try again." : undefined,
+      ),
+    );
   }
 }
 
@@ -342,7 +370,13 @@ type WriteOutcome = { ok: true; stale?: boolean } | Extract<Reply, { ok: false }
 async function write(route: Route, b: Record<string, unknown>, c: WriteCtx): Promise<WriteOutcome> {
   const { store, job, user, actionId, sentAt } = c;
   const tech = user.identityId!;
-  const staleStatus = !!job.techStatusAt && sentAt < job.techStatusAt;
+  const staleStatus = olderThan(sentAt, job.techStatusAt);
+  // Every job update is conditional on the state checked here.
+  const expectStatus: JobExpect = {
+    assignedTechId: job.assignedTechId,
+    status: job.status,
+    techStatusAt: job.techStatusAt,
+  };
 
   switch (route) {
     case "status": {
@@ -365,7 +399,7 @@ async function write(route: Route, b: Record<string, unknown>, c: WriteCtx): Pro
         patch.holdReason = null;
         patch.holdNote = null;
       }
-      await store.updateJob(job.id, patch);
+      await store.updateJob(job.id, patch, expectStatus);
       return { ok: true };
     }
     case "note": {
@@ -388,7 +422,7 @@ async function write(route: Route, b: Record<string, unknown>, c: WriteCtx): Pro
       const bytes = decodeImage(list[0], "jpeg");
       const caption = (list[0] as { caption?: unknown }).caption;
       if (!bytes || !optStr(caption, 500)) return fail("invalid") as WriteOutcome;
-      const key = `jobs/${keyPart(job.id)}/tech-photos/${keyPart(actionId)}-${c.index}.jpg`;
+      const key = `jobs/${keyPart(job.id)}/tech-photos/${actionKey(actionId)}-${c.index}.jpg`;
       await store.putFile(key, bytes, "image/jpeg");
       await store.addPhoto({
         id: `eci1-${actionId}-${c.index}`,
@@ -412,8 +446,12 @@ async function write(route: Route, b: Record<string, unknown>, c: WriteCtx): Pro
           return fail("invalid") as WriteOutcome;
         materials.push({ name: x.name.trim(), qty: x.qty, unit: x.unit.trim() });
       }
-      if (job.materialsAt && sentAt < job.materialsAt) return { ok: true, stale: true };
-      await store.updateJob(job.id, { materials, materialsAt: sentAt });
+      if (olderThan(sentAt, job.materialsAt)) return { ok: true, stale: true };
+      await store.updateJob(
+        job.id,
+        { materials, materialsAt: sentAt },
+        { assignedTechId: job.assignedTechId, status: job.status, materialsAt: job.materialsAt },
+      );
       return { ok: true };
     }
     case "receipt": {
@@ -438,7 +476,7 @@ async function write(route: Route, b: Record<string, unknown>, c: WriteCtx): Pro
       if (!Array.isArray(list) || list.length !== 1) return fail("invalid") as WriteOutcome;
       const bytes = decodeImage(list[0], "jpeg");
       if (!bytes) return fail("invalid") as WriteOutcome;
-      const key = `jobs/${keyPart(job.id)}/receipts/${keyPart(actionId)}.jpg`;
+      const key = `jobs/${keyPart(job.id)}/receipts/${actionKey(actionId)}.jpg`;
       await store.putFile(key, bytes, "image/jpeg");
       await store.addReceipt({
         id: `eci1-${actionId}`,
@@ -478,7 +516,7 @@ async function write(route: Route, b: Record<string, unknown>, c: WriteCtx): Pro
       if (job.status !== "Complete" && !OPEN.includes(job.status))
         return fail("bad_transition") as WriteOutcome;
       if (png) {
-        const key = `jobs/${keyPart(job.id)}/signatures/${keyPart(actionId)}.png`;
+        const key = `jobs/${keyPart(job.id)}/signatures/${actionKey(actionId)}.png`;
         await store.putFile(key, png, "image/png");
         await store.addSignature({
           id: `eci1-${actionId}`,
@@ -490,18 +528,22 @@ async function write(route: Route, b: Record<string, unknown>, c: WriteCtx): Pro
         });
       }
       // minutesOnJob is information only: pay hours come from TimeX.
-      await store.updateJob(job.id, {
-        status: "Complete",
-        completedAt: sentAt,
-        techStatusAt: sentAt,
-        holdReason: null,
-        holdNote: null,
-        noSignatureReason: png ? null : (b.noSignatureReason as string),
-        noSignatureNote:
-          !png && typeof b.noSignatureNote === "string" && b.noSignatureNote.trim()
-            ? b.noSignatureNote.trim()
-            : null,
-      });
+      await store.updateJob(
+        job.id,
+        {
+          status: "Complete",
+          completedAt: sentAt,
+          techStatusAt: sentAt,
+          holdReason: null,
+          holdNote: null,
+          noSignatureReason: png ? null : (b.noSignatureReason as string),
+          noSignatureNote:
+            !png && typeof b.noSignatureNote === "string" && b.noSignatureNote.trim()
+              ? b.noSignatureNote.trim()
+              : null,
+        },
+        expectStatus,
+      );
       return { ok: true };
     }
     case "jobs":
@@ -543,6 +585,16 @@ async function listJobs(
       store.receipts(j.id),
       store.signature(j.id),
     ]);
+    const reviewNotes = j.reviewNote?.trim()
+      ? [
+          {
+            id: `review-${j.id}`,
+            text: `Sent back: ${j.reviewNote.trim()}`,
+            at: j.officeChangedAt ?? j.updatedAt,
+            by: "Office",
+          },
+        ]
+      : [];
     const officeNotes = j.notes?.trim()
       ? [
           {
@@ -573,11 +625,16 @@ async function listJobs(
       startedAt: j.startedAt,
       completedAt: j.completedAt,
       officeChangedAt: j.officeChangedAt ?? j.createdAt,
-      officeNote: j.officeNote,
+      // The office's send-back reason reaches the phone too (Codex review of PR #18).
+      officeNote:
+        [j.officeNote, j.reviewNote ? `Sent back: ${j.reviewNote}` : null]
+          .filter(Boolean)
+          .join(" · ") || null,
       holdReason: j.status === "OnHold" ? holdCode(j.holdReason) : null,
       holdNote: j.status === "OnHold" ? j.holdNote : null,
       notes: [
         ...officeNotes,
+        ...reviewNotes,
         ...notes
           .sort((a, b) => a.at.localeCompare(b.at))
           .map((n) => ({ id: n.id, text: n.text, at: n.at, by: n.by })),

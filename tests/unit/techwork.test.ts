@@ -41,4 +41,15 @@ describe("office changes and tech rows", () => {
     assert.equal(r.reviewStatus, "Approved");
     assert.equal((await b.techNotes.list()).length, 1);
   });
+
+  it("tech notes and receipts follow the job when the office reassigns it", async () => {
+    await b.auth.signIn("office@serv1.demo", "serv1demo");
+    await b.jobs.update("job-7", { assignedTechId: "local-tech-1" });
+    assert.ok((await b.techReceipts.list()).every((r) => r.assignedTechId === "local-tech-1"));
+    assert.ok((await b.techNotes.list()).every((n) => n.assignedTechId === "local-tech-1"));
+    await b.auth.signIn("tech3@serv1.demo", "serv1demo");
+    assert.equal((await b.techReceipts.list()).length, 0, "former tech loses access");
+    await b.auth.signIn("tech1@serv1.demo", "serv1demo");
+    assert.equal((await b.techReceipts.list()).length, 1, "new tech gains it");
+  });
 });

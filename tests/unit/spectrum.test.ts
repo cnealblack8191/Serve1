@@ -366,6 +366,39 @@ describe("local fake connector, import and removal", () => {
       before.filter((j) => !j.spectrumCompanyCode).length,
     );
   });
+  it("removal keeps imported jobs that have tech receipts or notes", async () => {
+    await saveTst();
+    await sp.importFromSpectrum((await sp.listSpectrumJobs("A")).records.slice(0, 2));
+    const [j1, j2] = (await b.jobs.list()).filter((j) => j.spectrumCompanyCode === "TST");
+    await as("office");
+    const base = { assignedTechId: null, at: new Date().toISOString(), actionId: null };
+    await b.techReceipts.create({
+      ...base,
+      jobId: j1!.id,
+      kind: "materials",
+      vendor: "Synthetic",
+      date: null,
+      amount: 5,
+      paidWith: "personal",
+      note: null,
+      storagePath: null,
+      reviewStatus: "Pending",
+      reviewNote: null,
+      reviewedBy: null,
+      reviewedAt: null,
+    });
+    await b.techNotes.create({ ...base, jobId: j2!.id, text: "note", by: null });
+    await as("admin");
+    const plan = await sp.loadRemovalPlan("TST");
+    assert.equal(plan.jobs.length, 0);
+    assert.deepEqual(
+      plan.kept
+        .filter((k) => k.label.startsWith("Job"))
+        .map((k) => k.reason)
+        .sort(),
+      ["it has a tech receipt", "it has tech notes"],
+    );
+  });
   it("removal refuses when records changed since the count", async () => {
     await saveTst();
     await sp.importFromSpectrum((await sp.listSpectrumJobs("A")).records.slice(0, 2));

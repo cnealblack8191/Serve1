@@ -113,6 +113,9 @@ backend.eci1TechBridge.addEnvironment("SERV1_BUCKET", bucket.bucketName);
 // Photos, receipts and signatures go under jobs/<jobId>/ (office reads them there).
 bucket.grantPut(bridge, "jobs/*");
 bucket.grantRead(bridge, "jobs/*");
+// Photos and signatures taken in Serv1's own tech screens live under tech-files/; the bridge
+// signs links to them only for rows on the tech's assigned job (Codex review of PR #18).
+bucket.grantRead(bridge, "tech-files/*");
 
 if (process.env.ECI1_BRIDGE_DEPLOY === "true") {
   const stack = backend.createStack("eci1-bridge");

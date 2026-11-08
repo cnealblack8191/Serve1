@@ -15,7 +15,7 @@ import {
   handleUrlEvent,
   techsForSession,
 } from "../../amplify/functions/eci1-tech-bridge/handler.ts";
-import type { BridgeStore } from "../../amplify/functions/eci1-tech-bridge/core.ts";
+import { JobChanged, type BridgeStore } from "../../amplify/functions/eci1-tech-bridge/core.ts";
 
 // AWS's documentation example keys: synthetic.
 const KEYS = {
@@ -206,14 +206,31 @@ describe("store requests", () => {
   });
   it("job updates touch only the given fields and require the job to exist", async () => {
     const { store, sent } = fake(() => ({ status: 200, json: {} }));
-    await store.updateJob("j1", { status: "EnRoute", techStatusAt: NOW.toISOString() });
+    await store.updateJob(
+      "j1",
+      { status: "EnRoute", techStatusAt: NOW.toISOString() },
+      { assignedTechId: "tech-a", status: "Scheduled", techStatusAt: null },
+    );
     const b = sent[0]!.body!;
-    assert.equal(b.ConditionExpression, "attribute_exists(id)");
-    assert.deepEqual(Object.values(b.ExpressionAttributeNames as object).sort(), [
-      "status",
-      "techStatusAt",
-      "updatedAt",
-    ]);
+    assert.equal(
+      b.ConditionExpression,
+      "attribute_exists(id) AND #e0 = :e0 AND #e1 = :e1 AND (attribute_not_exists(#e2) OR attribute_type(#e2, :nullType))",
+    );
+    const names = b.ExpressionAttributeNames as Record<string, string>;
+    assert.deepEqual(
+      [names["#e0"], names["#e1"], names["#e2"]],
+      ["assignedTechId", "status", "techStatusAt"],
+    );
+  });
+  it("a failed condition means the job changed (nothing saved)", async () => {
+    const { store } = fake(() => ({
+      status: 400,
+      json: { __type: "com.amazonaws.dynamodb.v20120810#ConditionalCheckFailedException" },
+    }));
+    await assert.rejects(
+      store.updateJob("j1", { status: "EnRoute" }, { status: "Scheduled" }),
+      JobChanged,
+    );
   });
   it("files go to the jobs/ prefix with a signed PUT", async () => {
     const { store, sent } = fake(() => ({ status: 200, json: {} }));

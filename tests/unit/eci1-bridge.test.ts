@@ -4,6 +4,7 @@ import { beforeEach, describe, it } from "node:test";
 
 import {
   handleBridge,
+  JobChanged,
   HOLD_REASONS,
   TECH_MOVES,
   type BJob,
@@ -35,6 +36,7 @@ function job(id: string, extra: Partial<BJob> = {}): BJob {
     startedAt: null,
     completedAt: null,
     notes: null,
+    reviewNote: null,
     holdReason: null,
     holdNote: null,
     officeChangedAt: null,
@@ -84,7 +86,12 @@ function memoryStore() {
     photos: async (j) => [...rows.photos.values()].filter((n) => n.jobId === j),
     receipts: async (j) => [...rows.receipts.values()].filter((n) => n.jobId === j),
     signature: async (j) => [...rows.signatures.values()].find((n) => n.jobId === j) ?? null,
-    updateJob: async (id, patch) => void jobs.set(id, { ...jobs.get(id)!, ...patch }),
+    updateJob: async (id, patch, expect) => {
+      const cur = jobs.get(id)!;
+      for (const [k, v] of Object.entries(expect))
+        if ((cur[k as keyof BJob] ?? null) !== (v ?? null)) throw new JobChanged();
+      jobs.set(id, { ...cur, ...patch });
+    },
     addNote: async (r) => void (rows.notes.has(r.id) || rows.notes.set(r.id, r)),
     addPhoto: async (r) => void (rows.photos.has(r.id) || rows.photos.set(r.id, r)),
     addReceipt: async (r) => void (rows.receipts.has(r.id) || rows.receipts.set(r.id, r)),
@@ -360,6 +367,79 @@ describe("photos, receipts and completing", () => {
     m.jobs.set("j4", job("j4", { status: "OnHold" }));
     assert.ok((await send("complete", { jobId: "j4", noSignatureReason: "not_on_site" })).ok);
     assert.equal(m.jobs.get("j4")!.noSignatureReason, "not_on_site");
+  });
+});
+
+describe("Codex review of PR #18", () => {
+  it("an office change between check and save is never overwritten", async () => {
+    const real = m.store.getJob;
+    m.store.getJob = async (id) => {
+      const j = await real(id);
+      // The office locks the job right after the bridge reads it.
+      m.jobs.set(id, { ...m.jobs.get(id)!, status: "Cancelled" });
+      return j;
+    };
+    const r = (await send("status", { jobId: "j1", status: "EnRoute", actionId: "race-1" })) as {
+      code: string;
+    };
+    assert.equal(r.code, "serv1_unavailable");
+    assert.equal(m.jobs.get("j1")!.status, "Cancelled");
+    assert.equal(
+      m.rows.actions.has("race-1"),
+      false,
+      "not recorded, so the retry is checked again",
+    );
+    m.store.getJob = real;
+    const again = (await send("status", {
+      jobId: "j1",
+      status: "EnRoute",
+      actionId: "race-1",
+    })) as { code: string };
+    assert.equal(again.code, "job_locked");
+  });
+  it("compares times as instants, not text", async () => {
+    m.jobs.set("j1", job("j1", { status: "EnRoute", techStatusAt: "2026-11-07T15:00:00Z" }));
+    assert.ok(
+      (await send("status", { jobId: "j1", status: "InProgress", at: "2026-11-07T15:00:00.100Z" }))
+        .ok,
+    );
+    assert.equal(m.jobs.get("j1")!.status, "InProgress");
+    m.jobs.set("j1", job("j1", { materialsAt: "2026-11-07T15:00:00.500Z" }));
+    assert.ok(
+      (
+        await send("materials", {
+          jobId: "j1",
+          materials: [{ name: "x", qty: 1, unit: "ea" }],
+          at: "2026-11-07T15:00:01Z",
+        })
+      ).ok,
+    );
+    assert.equal(m.jobs.get("j1")!.materials![0]!.name, "x");
+  });
+  it("the office's send-back reason reaches the phone", async () => {
+    m.jobs.set("j1", job("j1", { status: "InProgress", reviewNote: "Label the panel" }));
+    const r = (await send("jobs")) as unknown as {
+      jobs: { id: string; officeNote: string; notes: { text: string }[] }[];
+    };
+    const j = r.jobs.find((x) => x.id === "j1")!;
+    assert.match(j.officeNote, /Sent back: Label the panel/);
+    assert.ok(j.notes.some((n) => n.text === "Sent back: Label the panel"));
+  });
+  it("different action ids never share an image file", async () => {
+    for (const actionId of ["a:b", "a_b"])
+      assert.ok(
+        (
+          await send("receipt", {
+            jobId: "j1",
+            actionId,
+            kind: "other",
+            amount: 1,
+            paidWith: "company_card",
+            photos: [{ base64: JPEG }],
+          })
+        ).ok,
+      );
+    assert.equal(m.rows.files.size, 2);
   });
 });
 

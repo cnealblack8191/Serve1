@@ -328,7 +328,8 @@ export function createLocalBackend(): Backend {
     write: (_r, me) => isOffice(me),
   });
 
-  /** When the office reassigns a job, its attachments and signatures follow it (Codex review of PR #1). */
+  /** When the office reassigns a job, its attachments, signatures, tech notes and receipts follow
+   *  it (Codex reviews of PRs #1 and #18). */
   const retagFileRows = (jobId: string, assignedTechId: string | null) => {
     refresh();
     const retag = <T extends { jobId: string; assignedTechId: string | null }>(rows: T[]) =>
@@ -341,9 +342,13 @@ export function createLocalBackend(): Backend {
       ...tables,
       attachments: retag(tables.attachments as Attachment[]),
       signatures: retag(tables.signatures as Signature[]),
+      techNotes: retag(tables.techNotes as import("../types").TechNote[]),
+      techReceipts: retag(tables.techReceipts as import("../types").TechReceipt[]),
     };
     persist("attachments");
     persist("signatures");
+    persist("techNotes");
+    persist("techReceipts");
   };
   const jobsRepo = repo<Job, import("../types").NewJob>("jobs", jobRules);
   const jobsWithRetag: Repo<Job, import("../types").NewJob> = {
