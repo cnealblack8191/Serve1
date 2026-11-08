@@ -43,6 +43,7 @@
   --color-eci-navy-soft: var(--eci-navy-soft);
   --color-eci-amber: var(--eci-amber);
   --color-eci-copper: var(--eci-copper);
+  --color-eci-red: var(--eci-red);
   --color-surface: var(--surface);
   --color-surface-sunken: var(--surface-sunken);
 
@@ -69,6 +70,8 @@
   --eci-navy-soft: #16304d;
   --eci-amber: #f59e0b;
   --eci-copper: #b45309;
+  /* The logo's red (sign-in page). White text on it passes 4.5:1. */
+  --eci-red: #c8102e;
 
   --surface: #ffffff;
   --surface-sunken: #fafafa;

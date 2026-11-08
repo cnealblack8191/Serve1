@@ -49,43 +49,35 @@ function AuthPage() {
   };
 
   return (
-    <div className="grid min-h-screen lg:grid-cols-2">
-      <div className="hidden flex-col justify-between bg-eci-navy p-10 text-zinc-100 lg:flex">
-        <div className="flex items-center gap-3">
-          <img
-            src="/logo.png"
-            alt="Company logo"
-            width={40}
-            height={40}
-            className="size-10 rounded-full"
-          />
-          <span className="text-xl font-semibold tracking-tight">Serv1</span>
+    // Option B (owner's pick, 2026-11-08): one centered card on a light ground. In version 1 the
+    // live form becomes a single "Sign in with your ECI Microsoft account" button (Central);
+    // the demo keeps this form (docs: the Central sign-in proposal).
+    <div className="flex min-h-screen flex-col items-center justify-center gap-7 bg-zinc-100 px-5 py-12 dark:bg-zinc-950">
+      <div className="w-full max-w-[440px] overflow-hidden rounded-2xl border border-border bg-card shadow-[0_1px_2px_rgba(0,0,0,0.04),0_12px_32px_rgba(0,0,0,0.06)]">
+        <div className="flex h-1.5" aria-hidden="true">
+          <div className="flex-1 bg-zinc-950 dark:bg-zinc-700" />
+          <div className="flex-1 bg-eci-red" />
+          <div className="flex-1 bg-zinc-950 dark:bg-zinc-700" />
         </div>
-        <div>
-          <p className="text-[10px] uppercase tracking-widest text-zinc-500">
-            Field service platform
-          </p>
-          <h1 className="mt-2 max-w-md text-3xl font-semibold tracking-tight">
-            From the call to the invoice, office and field on one record.
-          </h1>
-          <p className="mt-4 max-w-md text-sm text-zinc-400">
-            Sign in with your company account. Your role decides what you see.
-          </p>
-        </div>
-        <p className="text-xs text-zinc-500">Internal pilot</p>
-      </div>
-
-      <div className="flex items-center justify-center bg-background p-6">
-        <div className="w-full max-w-sm">
-          <div className="mb-8 flex flex-col items-center text-center lg:hidden">
+        <div className="space-y-6 px-6 pb-8 pt-9 sm:px-10">
+          <div className="flex flex-col items-center gap-3 text-center">
             <img
               src="/logo.png"
-              alt="Company logo"
-              width={72}
-              height={72}
-              className="size-18 rounded-full"
+              alt="Electrical Contractor Inc. logo"
+              width={64}
+              height={64}
+              className="size-16 rounded-full"
             />
-            <span className="mt-3 text-xl font-semibold tracking-tight">Serv1</span>
+            <div className="space-y-1">
+              <h1 className="text-[28px] font-bold tracking-tight">
+                {step === "signIn" ? "Sign in to Serv1" : "Set a new password"}
+              </h1>
+              <p className="text-[15px] text-muted-foreground">
+                {step === "signIn"
+                  ? "Use your company email and password."
+                  : "Your account was created with a temporary password. Choose your own to continue."}
+              </p>
+            </div>
           </div>
 
           <form
@@ -95,17 +87,12 @@ function AuthPage() {
           >
             {step === "signIn" ? (
               <>
-                <div>
-                  <h2 className="text-xl font-semibold tracking-tight">Sign in</h2>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    Use your company email and password.
-                  </p>
-                </div>
                 <div className="space-y-1.5">
                   <Label htmlFor="email">Email</Label>
                   <Input
                     id="email"
                     type="email"
+                    className="h-12 text-[15px]"
                     autoComplete="username"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
@@ -117,6 +104,7 @@ function AuthPage() {
                   <Input
                     id="password"
                     type="password"
+                    className="h-12 text-[15px]"
                     autoComplete="current-password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
@@ -126,17 +114,12 @@ function AuthPage() {
               </>
             ) : (
               <>
-                <div>
-                  <h2 className="text-xl font-semibold tracking-tight">Set a new password</h2>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    Your account was created with a temporary password. Choose your own to continue.
-                  </p>
-                </div>
                 <div className="space-y-1.5">
                   <Label htmlFor="new-password">New password</Label>
                   <Input
                     id="new-password"
                     type="password"
+                    className="h-12 text-[15px]"
                     autoComplete="new-password"
                     value={newPassword}
                     onChange={(e) => setNewPassword(e.target.value)}
@@ -146,11 +129,15 @@ function AuthPage() {
                 </div>
               </>
             )}
-            <Button type="submit" className="h-12 w-full text-base" disabled={busy}>
+            <Button
+              type="submit"
+              className="h-12 w-full bg-zinc-950 text-base text-white hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-950 dark:hover:bg-white"
+              disabled={busy}
+            >
               {busy ? "Please wait…" : step === "signIn" ? "Sign in" : "Save password"}
             </Button>
             <p className="text-center text-sm text-muted-foreground">
-              Need an account? Ask your administrator to create one.
+              Your role decides what you see. Need an account? Ask your administrator.
             </p>
             {local ? (
               <p
@@ -165,6 +152,11 @@ function AuthPage() {
           </form>
         </div>
       </div>
+      <p className="text-center text-xs uppercase leading-relaxed tracking-[0.06em] text-muted-foreground">
+        Electrical Contractor Inc. · Est. 1984
+        <br />
+        Internal pilot
+      </p>
     </div>
   );
 }
