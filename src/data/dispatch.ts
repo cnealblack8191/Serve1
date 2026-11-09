@@ -122,17 +122,20 @@ export function fromDateInput(s: string): Date | null {
 
 /**
  * Other jobs the tech already has that overlap [start, end): a double booking. Cancelled jobs
- * free their time; the job being moved is ignored. Used to warn, never to block.
+ * free their time; the appointment being moved is ignored. `movingId` is that card's id: a
+ * job's id, or a visit entry's `entryId`, so a job's other visits still count (multi-visit
+ * jobs; Codex review of PR #21). Used to warn, never to block.
  */
 export function findOverlaps(
   jobs: Job[],
-  jobId: string,
+  movingId: string,
   techIdentityId: string,
   start: Date,
   end: Date,
 ): Job[] {
   return jobs.filter((j) => {
-    if (j.id === jobId || j.assignedTechId !== techIdentityId || j.status === "Cancelled")
+    const key = (j as Job & { entryId?: string }).entryId ?? j.id;
+    if (key === movingId || j.assignedTechId !== techIdentityId || j.status === "Cancelled")
       return false;
     if (!j.scheduledStart) return false;
     const s = new Date(j.scheduledStart).getTime();

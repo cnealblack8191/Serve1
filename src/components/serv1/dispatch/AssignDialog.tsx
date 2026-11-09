@@ -26,7 +26,7 @@ import {
   type VisitEntry,
 } from "@/data";
 
-import { jobLabel } from "./board";
+import { cardId, jobLabel } from "./board";
 
 const SELECT_CLASS =
   "h-9 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-ring";
@@ -93,7 +93,13 @@ export function AssignDialog({
   const start = parsedDay ? atMinutes(parsedDay, slot) : null;
   const clashes =
     valid && start
-      ? findOverlaps(jobs, job.id, techId, start, new Date(start.getTime() + hours * 3_600_000))
+      ? findOverlaps(
+          jobs,
+          cardId(job),
+          techId,
+          start,
+          new Date(start.getTime() + hours * 3_600_000),
+        )
       : [];
   const lengths = LENGTHS.includes(hours) ? LENGTHS : [...LENGTHS, hours].sort((a, b) => a - b);
   const realVisit = (job as Partial<VisitEntry> | null)?.implied === false;

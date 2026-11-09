@@ -27,6 +27,7 @@ import {
   useSites,
   useTechNames,
   currentVisit,
+  scheduleMode,
   useVisitActions,
   useVisits,
   visitEntries,
@@ -151,10 +152,16 @@ export function JobActions({ job }: { job: Job }) {
                 { visit: cur, plan: { assignedTechId: techId, start, minutes } },
                 { onSuccess: () => setAssigning(false), onError: visitError },
               )
-            : update.mutate(
-                { id: j.id, patch: schedulePatch(j, techId, start, minutes) },
-                { onSuccess: () => setAssigning(false) },
-              )
+            : scheduleMode(job, visits.data ?? []) === "add"
+              ? // Visits, but none open (reopened after a cancel): plan a new one (Codex review of PR #21).
+                visitActions.add.mutate(
+                  { job, plan: { assignedTechId: techId, start, minutes } },
+                  { onSuccess: () => setAssigning(false), onError: visitError },
+                )
+              : update.mutate(
+                  { id: j.id, patch: schedulePatch(j, techId, start, minutes) },
+                  { onSuccess: () => setAssigning(false) },
+                )
         }
         onUnschedule={(j) =>
           cur

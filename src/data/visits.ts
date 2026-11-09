@@ -92,6 +92,16 @@ export function visitsOf(job: Job, visits: Visit[]): { visits: Visit[]; implied:
 /** The visit work is on now: the first one still open, or null when all are done. */
 export const currentVisit = (visits: Visit[]): Visit | null => visits.find(isOpenVisit) ?? null;
 
+/**
+ * How the office schedules a job from its page: move its open visit, add a visit (it has visits
+ * but none open, e.g. reopened after a cancel), or patch the job as before (no visits).
+ */
+export function scheduleMode(job: Job, visits: Visit[]): "reschedule" | "add" | "job" {
+  const rows = liveVisitRows(job.id, visits);
+  if (!rows.length) return "job";
+  return currentVisit(rows) ? "reschedule" : "add";
+}
+
 /** True when no other visit of the job is still open: finishing this one can complete the job. */
 export const isLastOpenVisit = (visits: Visit[], visit: Visit) =>
   visits.filter(isOpenVisit).every((v) => v.id === visit.id);

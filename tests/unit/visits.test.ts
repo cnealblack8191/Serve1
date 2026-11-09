@@ -20,6 +20,7 @@ const { createLocalBackend } = await import("../../src/data/local/index.ts");
 const { setBackend } = await import("../../src/data/backend.ts");
 const v = await import("../../src/data/visits.ts");
 const { movePatch, techMayMove } = await import("../../src/data/jobflow.ts");
+const { findOverlaps } = await import("../../src/data/dispatch.ts");
 
 type B = ReturnType<typeof createLocalBackend>;
 const as = async (b: B, email: string) => {
@@ -228,5 +229,44 @@ describe("multi-visit jobs", () => {
     await v.removeVisit((await b.visits.list()).find((x) => x.id === "visit-20-2")!);
     assert.equal((await b.jobs.get("job-20"))!.assignedTechId, "local-tech-1");
     assert.equal((await b.techReceipts.get(r.id))!.assignedTechId, "local-tech-2");
+  });
+
+  it("a reopened multi-visit job is scheduled with a new visit (Codex review of PR #21)", async () => {
+    await as(b, OFFICE);
+    let job = (await b.jobs.get("job-20"))!;
+    assert.equal(v.scheduleMode(job, await b.visits.list()), "reschedule");
+    job = await v.updateJobWithVisit(job, movePatch(job, "cancel", "Postponed"));
+    job = await v.updateJobWithVisit(job, movePatch(job, "reopen"));
+    assert.equal(v.scheduleMode(job, await b.visits.list()), "add");
+    const legacy = (await b.jobs.list()).find((j) => j.id !== "job-20" && !j.visitTechIds)!;
+    assert.equal(v.scheduleMode(legacy, await b.visits.list()), "job");
+    await v.addVisit(job, {
+      assignedTechId: "local-tech-3",
+      start: new Date(Date.now() + 86_400_000),
+      minutes: 60,
+    });
+    const rows = v.liveVisitRows("job-20", await b.visits.list());
+    assert.equal(v.currentVisit(rows)!.assignedTechId, "local-tech-3");
+    assert.equal((await b.jobs.get("job-20"))!.status, "Scheduled");
+  });
+
+  it("a job's other visit with the same tech still counts as a double booking", async () => {
+    await as(b, OFFICE);
+    const entries = v.visitEntries(await b.jobs.list(), await b.visits.list());
+    const v3 = entries.find((e) => e.visit.id === "visit-20-3")!;
+    const v1 = entries.find((e) => e.visit.id === "visit-20-1")!;
+    // Move visit 3 (Tara) onto visit 1's time (also Tara): visit 1 is the clash.
+    const start = new Date(v1.scheduledStart!);
+    const clashes = findOverlaps(
+      entries.map((e) => ({ ...e, status: e.status === "Complete" ? "Scheduled" : e.status })),
+      v3.entryId,
+      "local-tech-1",
+      start,
+      new Date(start.getTime() + 3_600_000),
+    );
+    assert.deepEqual(
+      clashes.map((c) => (c as typeof v1).entryId),
+      [v1.entryId],
+    );
   });
 });

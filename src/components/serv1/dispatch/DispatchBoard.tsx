@@ -135,7 +135,7 @@ export function DispatchBoard() {
     const end = new Date(patch.scheduledEnd!);
     const when = `${dayText(start)}, ${formatSlot(start.getHours() * 60 + start.getMinutes())} – ${formatSlot(end.getHours() * 60 + end.getMinutes())}`;
     const verb = job.assignedTechId ? "Move" : "Schedule";
-    const clashes = findOverlaps(entries, job.id, tech.identityId!, start, end);
+    const clashes = findOverlaps(entries, cardId(job), tech.identityId!, start, end);
     const plan = {
       assignedTechId: tech.identityId!,
       start,
