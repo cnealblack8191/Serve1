@@ -7,12 +7,16 @@ import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 
 import {
+  bucketEmpty,
+  bucketReimportTemplate,
+  checkBucketRemoveOnly,
   checkImportOnly,
   checkRemoveOnly,
   hostingMatches,
   importTemplate,
   liveMatches,
   reimportTemplate,
+  stripBucket,
   stripHosting,
   type Template,
 } from "../../scripts/hosting-move/plan.ts";
@@ -201,5 +205,73 @@ describe("the branch's live Environment tag (snapshot, 2026-11-09)", () => {
       },
     };
     assert.match(liveMatches(app, branch, hosting()).join(), /branch tags differ/);
+  });
+});
+
+describe("step 3b: the staging bucket the stock bootstrap cannot update", () => {
+  // CDKToolkit as step 1 left it (and as the failed bootstrap rolled back to).
+  const afterStep1 = () => stripHosting(live());
+
+  it("removes the bucket and its policy and their outputs; the version parameter stays", () => {
+    const before = afterStep1();
+    const after = stripBucket(before);
+    assert.deepEqual(Object.keys(after.Resources), ["CdkBootstrapVersion"]);
+    assert.deepEqual(after.Resources.CdkBootstrapVersion, before.Resources.CdkBootstrapVersion);
+    assert.deepEqual(Object.keys(after.Outputs ?? {}), ["BootstrapVersion"]);
+  });
+
+  it("refuses when the bucket would be deleted, is missing, or is still referenced", () => {
+    const noRetain = afterStep1();
+    delete noRetain.Resources.StagingBucket!.DeletionPolicy;
+    assert.throws(() => stripBucket(noRetain), /would delete it/);
+    const missing = afterStep1();
+    delete missing.Resources.StagingBucketPolicy;
+    assert.throws(() => stripBucket(missing), /no StagingBucketPolicy/);
+    const referenced = afterStep1();
+    (
+      referenced.Resources.CdkBootstrapVersion as { Properties: Record<string, unknown> }
+    ).Properties.X = { "Fn::GetAtt": ["StagingBucket", "Arn"] };
+    assert.throws(() => stripBucket(referenced), /still refers to StagingBucket/);
+  });
+
+  it("the change set may retain the bucket and delete only its policy", () => {
+    const row = (id: string, action: string, policy?: string) => ({
+      Type: "Resource",
+      ResourceChange: { Action: action, LogicalResourceId: id, PolicyAction: policy },
+    });
+    const ok = [
+      row("StagingBucket", "Remove", "Retain"),
+      row("StagingBucketPolicy", "Remove", "Delete"),
+    ];
+    assert.deepEqual(checkBucketRemoveOnly(ok), []);
+    assert.match(
+      checkBucketRemoveOnly([row("StagingBucket", "Remove", "Delete"), ok[1]!]).join(),
+      /StagingBucket: PolicyAction Delete, not Retain/,
+    );
+    assert.match(
+      checkBucketRemoveOnly([row("StagingBucket", "Remove"), ok[1]!]).join(),
+      /PolicyAction none, not Retain/,
+    );
+    assert.match(checkBucketRemoveOnly([ok[0]!]).join(), /StagingBucketPolicy: missing/);
+    assert.match(
+      checkBucketRemoveOnly([...ok, row("CdkBootstrapVersion", "Modify")]).join(),
+      /CdkBootstrapVersion: Modify, not Remove.*not the staging bucket/,
+    );
+  });
+
+  it("the bucket is deleted only when it holds no versions, delete markers or uploads", () => {
+    assert.deepEqual(bucketEmpty({ versions: 0, deleteMarkers: 0, uploads: 0 }), []);
+    assert.match(bucketEmpty({ versions: 1, deleteMarkers: 0, uploads: 0 }).join(), /1 object/);
+    assert.match(bucketEmpty({ versions: 0, deleteMarkers: 2, uploads: 0 }).join(), /2 delete/);
+    assert.match(bucketEmpty({ versions: 0, deleteMarkers: 0, uploads: 1 }).join(), /1 unfinished/);
+  });
+
+  it("undo re-imports the bucket alone with the current outputs", () => {
+    const before = afterStep1();
+    const current = stripBucket(before);
+    const t = bucketReimportTemplate(before, current);
+    assert.deepEqual(Object.keys(t.Resources).sort(), ["CdkBootstrapVersion", "StagingBucket"]);
+    assert.deepEqual(t.Resources.StagingBucket, before.Resources.StagingBucket);
+    assert.deepEqual(t.Outputs, current.Outputs);
   });
 });

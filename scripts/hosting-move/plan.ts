@@ -6,6 +6,7 @@
  *    update removes them from the stack and deletes nothing.
  *  - checkRemoveOnly / checkImportOnly: a change set does only that, or the run stops.
  *  - hostingMatches: the import template's App and Branch match what CDKToolkit declared.
+ *  - stripBucket / checkBucketRemoveOnly / bucketEmpty: step 3b, the empty staging bucket.
  */
 
 export type Template = {
@@ -261,4 +262,91 @@ export function reimportTemplate(before: Template, current: Template): Template 
 export function importTemplate(full: Template): Template {
   const { Outputs: _outputs, ...rest } = full;
   return rest as Template;
+}
+
+/**
+ * Step 3b: the staging bucket. CDKToolkit's bucket has ACLs disabled (BucketOwnerEnforced), and
+ * the stock bootstrap template sets `AccessControl: Private` on it, so updating the bucket in
+ * place fails ("The bucket does not allow ACLs"). The empty bucket leaves the stack (Retain), is
+ * deleted, and the bootstrap creates a stock one. Its bucket policy has no Retain, so the same
+ * update deletes it; the bootstrap creates that too.
+ */
+export const BUCKET_PARTS = ["StagingBucket", "StagingBucketPolicy"] as const;
+
+export function stripBucket(t: Template): Template {
+  const bucket = t.Resources.StagingBucket;
+  const policy = t.Resources.StagingBucketPolicy;
+  if (!bucket) throw new Error("CDKToolkit has no StagingBucket; stop and re-read the template.");
+  if (bucket.Type !== "AWS::S3::Bucket") throw new Error(`StagingBucket is ${bucket.Type}.`);
+  if (bucket.DeletionPolicy !== "Retain")
+    throw new Error("StagingBucket is not DeletionPolicy Retain; removing it would delete it.");
+  if (!policy) throw new Error("CDKToolkit has no StagingBucketPolicy; stop and re-read.");
+  if (policy.Type !== "AWS::S3::BucketPolicy")
+    throw new Error(`StagingBucketPolicy is ${policy.Type}.`);
+  const gone = new Set<string>(BUCKET_PARTS);
+  const resources = Object.fromEntries(Object.entries(t.Resources).filter(([id]) => !gone.has(id)));
+  if (!Object.keys(resources).length)
+    throw new Error("Nothing would be left in CDKToolkit; a stack needs one resource.");
+  for (const [id, r] of Object.entries(resources)) {
+    const hit = [...referencedIds(r)].filter((x) => gone.has(x));
+    if (hit.length) throw new Error(`${id} still refers to ${hit.join(", ")}.`);
+  }
+  const outputs = Object.fromEntries(
+    Object.entries(t.Outputs ?? {}).filter(
+      ([, o]) => ![...referencedIds(o)].some((x) => gone.has(x)),
+    ),
+  );
+  const out: Template = { ...t, Resources: resources };
+  if (Object.keys(outputs).length) out.Outputs = outputs;
+  else delete out.Outputs;
+  return out;
+}
+
+/**
+ * Step 3b's change set: exactly two removes. StagingBucket must be retained; StagingBucketPolicy
+ * (no Retain) is deleted, and that is the only deletion this change set may make.
+ */
+export function checkBucketRemoveOnly(changes: ChangeRow[]): string[] {
+  const problems: string[] = [];
+  const seen = new Set<string>();
+  for (const c of changes) {
+    const rc = c.ResourceChange ?? {};
+    const id = rc.LogicalResourceId ?? "?";
+    seen.add(id);
+    if (rc.Action !== "Remove") problems.push(`${id}: ${rc.Action}, not Remove`);
+    if (id === "StagingBucket") {
+      if (rc.PolicyAction !== "Retain")
+        problems.push(`StagingBucket: PolicyAction ${rc.PolicyAction ?? "none"}, not Retain`);
+    } else if (id === "StagingBucketPolicy") {
+      if (rc.PolicyAction !== undefined && rc.PolicyAction !== "Delete")
+        problems.push(`StagingBucketPolicy: PolicyAction ${rc.PolicyAction}, not Delete`);
+    } else problems.push(`${id}: not the staging bucket or its policy`);
+  }
+  for (const id of BUCKET_PARTS)
+    if (!seen.has(id)) problems.push(`${id}: missing from the change set`);
+  return problems;
+}
+
+/**
+ * Undo of step 3b: the template that imports the re-created bucket back into CDKToolkit. An IMPORT
+ * may add only the imported resource, so the policy (a new resource) and the outputs come back in
+ * a separate update with the saved template afterwards (move.sh undo-bucket).
+ */
+export function bucketReimportTemplate(before: Template, current: Template): Template {
+  const { StagingBucketPolicy: _policy, ...resources } = before.Resources;
+  return reimportTemplate({ ...before, Resources: resources }, current);
+}
+
+/** The staging bucket may be deleted only when it holds nothing at all. */
+export interface BucketContents {
+  versions: number;
+  deleteMarkers: number;
+  uploads: number;
+}
+export function bucketEmpty(c: BucketContents): string[] {
+  const problems: string[] = [];
+  if (c.versions !== 0) problems.push(`${c.versions} object versions`);
+  if (c.deleteMarkers !== 0) problems.push(`${c.deleteMarkers} delete markers`);
+  if (c.uploads !== 0) problems.push(`${c.uploads} unfinished uploads`);
+  return problems;
 }
