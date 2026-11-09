@@ -163,8 +163,10 @@ case "$STEP" in
   {"ResourceType":"AWS::Amplify::Branch","LogicalResourceId":"HostingBranch","ResourceIdentifier":{"Arn":"$BRANCH_ARN"}}
 ]
 JSON
+    # An import may not add outputs: import without them, add them by update afterwards.
+    "${CLI[@]}" import-template "$HOSTING_TEMPLATE" "$WORK/serv1-hosting-import.json"
     make_change_set serv1-hosting serv1-hosting-import cs-import \
-      --change-set-type IMPORT --template-body "file://$HOSTING_TEMPLATE" \
+      --change-set-type IMPORT --template-body "file://$WORK/serv1-hosting-import.json" \
       --resources-to-import "file://$WORK/import.json" \
       --parameters "ParameterKey=AppId,ParameterValue=$APP_ID"
     "${CLI[@]}" import-only "$WORK/cs-import.json" || drop_change_set serv1-hosting serv1-hosting-import
@@ -172,6 +174,10 @@ JSON
     confirm "IMPORT SERV1 HOSTING"
     aws cloudformation execute-change-set --stack-name serv1-hosting --change-set-name serv1-hosting-import
     aws cloudformation wait stack-import-complete --stack-name serv1-hosting
+    echo "Adding serv1-hosting's outputs (the full template; resources unchanged)."
+    aws cloudformation update-stack --stack-name serv1-hosting --template-body "file://$HOSTING_TEMPLATE" \
+      --parameters "ParameterKey=AppId,ParameterValue=$APP_ID"
+    aws cloudformation wait stack-update-complete --stack-name serv1-hosting
     DRIFT="$(aws cloudformation detect-stack-drift --stack-name serv1-hosting --query StackDriftDetectionId --output text)"
     for _ in $(seq 1 30); do
       S="$(aws cloudformation describe-stack-drift-detection-status --stack-drift-detection-id "$DRIFT" \

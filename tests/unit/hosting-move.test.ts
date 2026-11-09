@@ -10,6 +10,7 @@ import {
   checkImportOnly,
   checkRemoveOnly,
   hostingMatches,
+  importTemplate,
   liveMatches,
   reimportTemplate,
   stripHosting,
@@ -148,5 +149,16 @@ describe("undo of step 1", () => {
     const current = structuredClone(stripHosting(before));
     (current.Resources.CdkBootstrapVersion!.Properties as Record<string, unknown>).Value = "28";
     assert.throws(() => reimportTemplate(before, current), /CdkBootstrapVersion differs/);
+  });
+});
+
+describe("step 2 import template", () => {
+  it("has the same resources and parameters but no outputs (added by update afterwards)", () => {
+    const full = hosting();
+    const t = importTemplate(full);
+    assert.equal(t.Outputs, undefined);
+    assert.deepEqual(t.Resources, full.Resources);
+    assert.deepEqual(t.Parameters, full.Parameters);
+    assert.ok(full.Outputs && Object.keys(full.Outputs).length === 3);
   });
 });

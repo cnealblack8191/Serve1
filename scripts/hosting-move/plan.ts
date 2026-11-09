@@ -223,3 +223,13 @@ export function reimportTemplate(before: Template, current: Template): Template 
       throw new Error(`${id} differs between the saved and the current template; stop.`);
   return out;
 }
+
+/**
+ * Step 2: the template the IMPORT change set uses. An import may add only the imported resources,
+ * so outputs are left out here and added by a separate update once the import completes (Codex
+ * review of PR #22; the CDK importer does the same for new-stack imports).
+ */
+export function importTemplate(full: Template): Template {
+  const { Outputs: _outputs, ...rest } = full;
+  return rest as Template;
+}
