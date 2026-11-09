@@ -9,3 +9,8 @@ test("a tech signs in on a phone and lands on Today with bottom tabs", async ({ 
   await expect(tabs.getByRole("link", { name: "Today" })).toBeVisible();
   await expect(tabs.getByRole("link", { name: "Dispatch" })).toHaveCount(0);
 });
+
+test("the demo-only notice shows on a phone", async ({ page }) => {
+  await page.goto("/auth");
+  await expect(page.getByTestId("demo-only-notice")).toBeInViewport();
+});

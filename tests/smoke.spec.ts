@@ -28,3 +28,11 @@ test("a signed-out visitor is sent to the login page", async ({ page }) => {
   await page.goto("/jobs");
   await expect(page).toHaveURL(/\/auth/);
 });
+
+test("the sign-in page says it is a demo, on any screen size", async ({ page }) => {
+  await page.goto("/auth");
+  await expect(page.getByTestId("demo-only-notice")).toHaveText(
+    "Demo only. Do not enter real customer, employee or pricing information.",
+  );
+  await expect(page.getByTestId("demo-only-notice")).toBeVisible();
+});
