@@ -232,7 +232,12 @@ describe("store requests", () => {
       "mv",
       { status: "InProgress" },
       { assignedTechId: "tech-a", status: "Scheduled" },
-      { id: "v1", patch: { status: "InProgress" }, expectStatus: "Scheduled" },
+      {
+        id: "v1",
+        patch: { status: "InProgress" },
+        expectStatus: "Scheduled",
+        expectAssignedTechId: "tech-a",
+      },
     );
     assert.equal(sent[0]!.target, "DynamoDB_20120810.TransactWriteItems");
     const [job, visit] = sent[0]!.body!.TransactItems as Record<string, Record<string, unknown>>[];
@@ -242,9 +247,14 @@ describe("store requests", () => {
       "attribute_exists(id) AND #e0 = :e0 AND #e1 = :e1",
     );
     assert.equal(visit!.Update!.TableName, "Visit-t");
+    // Still the status and the tech the rules saw (Codex review of PR #21).
     assert.equal(
       visit!.Update!.ConditionExpression,
-      "attribute_exists(id) AND #wstatus = :wstatus",
+      "attribute_exists(id) AND #wstatus = :wstatus AND #wtech = :wtech",
+    );
+    assert.deepEqual(
+      (visit!.Update!.ExpressionAttributeValues as Record<string, unknown>)[":wtech"],
+      { S: "tech-a" },
     );
     assert.deepEqual(
       (visit!.Update!.ExpressionAttributeValues as Record<string, unknown>)[":wstatus"],
@@ -256,7 +266,12 @@ describe("store requests", () => {
         "mv",
         { status: "InProgress" },
         { status: "Scheduled" },
-        { id: "v1", patch: { status: "InProgress" }, expectStatus: "Scheduled" },
+        {
+          id: "v1",
+          patch: { status: "InProgress" },
+          expectStatus: "Scheduled",
+          expectAssignedTechId: "tech-a",
+        },
       ),
       JobChanged,
     );

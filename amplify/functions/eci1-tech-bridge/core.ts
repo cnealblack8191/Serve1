@@ -124,11 +124,15 @@ export interface BVisit {
   holdReason: string | null;
   note: string | null;
 }
-/** A visit change saved with a job change: only if the visit's status is still `expectStatus`. */
+/**
+ * A visit change saved with a job change: only if the visit's status and tech are still what the
+ * rules saw (the office may reassign it meanwhile; Codex review of PR #21).
+ */
 export interface VisitWrite {
   id: string;
   patch: Partial<BVisit>;
   expectStatus: VisitStatus;
+  expectAssignedTechId: string | null;
 }
 
 export interface Material {
@@ -162,6 +166,8 @@ export interface BReceipt {
   note: string | null;
   storagePath: string | null;
   at: string;
+  /** The tech who sent it: receipts stay theirs alone, even on a shared job. */
+  assignedTechId?: string | null;
 }
 export interface BSignature {
   id: string;
@@ -485,7 +491,14 @@ async function write(route: Route, b: Record<string, unknown>, c: WriteCtx): Pro
   const jobTechIds = job.visitTechIds ?? null;
   /** The current visit's change, saved atomically with the job's. */
   const visitWrite = (patch: Partial<BVisit>): VisitWrite | undefined =>
-    visit ? { id: visit.id, patch, expectStatus: visit.status } : undefined;
+    visit
+      ? {
+          id: visit.id,
+          patch,
+          expectStatus: visit.status,
+          expectAssignedTechId: visit.assignedTechId,
+        }
+      : undefined;
   const staleStatus = olderThan(sentAt, job.techStatusAt);
   // Every job write (and every row added to it) is conditional on the state checked here.
   const expectJob: JobExpect = { assignedTechId: job.assignedTechId, status: job.status };
@@ -878,20 +891,24 @@ async function listJobs(
       ),
       materials: j.materials ?? [],
       receipts: await Promise.all(
-        receipts.map(async (r) => ({
-          id: r.id,
-          kind: r.kind,
-          vendor: r.vendor,
-          date: r.date,
-          amount: r.amount,
-          paidWith: r.paidWith,
-          note: r.note,
-          url:
-            r.storagePath && pathBelongsToJob(r.storagePath, j.id)
-              ? await store.fileUrl(r.storagePath)
-              : null,
-          at: r.at,
-        })),
+        // Only this tech's own receipts: amounts and personal payments are never shared
+        // with the other techs on the job (Codex review of PR #21).
+        receipts
+          .filter((r) => r.assignedTechId === identityId)
+          .map(async (r) => ({
+            id: r.id,
+            kind: r.kind,
+            vendor: r.vendor,
+            date: r.date,
+            amount: r.amount,
+            paidWith: r.paidWith,
+            note: r.note,
+            url:
+              r.storagePath && pathBelongsToJob(r.storagePath, j.id)
+                ? await store.fileUrl(r.storagePath)
+                : null,
+            at: r.at,
+          })),
       ),
       signature: signature ? { signerName: signature.signerName, at: signature.signedAt } : null,
       noSignatureReason: j.noSignatureReason,

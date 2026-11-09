@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 
-import { type Job, useAddJobSignature, useJobMutations } from "@/data";
+import { type Job, useAddJobSignature, useVisitActions } from "@/data";
 import { Field } from "@/components/eci/primitives";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -30,7 +30,8 @@ export function SignatureStep({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const addSignature = useAddJobSignature();
-  const jobs = useJobMutations();
+  // Complete also closes the job's last visit (docs/VISITS.md; Codex review of PR #21).
+  const { updateJob } = useVisitActions();
 
   const canSave = hasInk && name.trim().length > 0 && !busy;
 
@@ -46,8 +47,8 @@ export function SignatureStep({
       const png = await pad.current?.toBlob();
       if (!png) throw new Error("Could not read the signature. Try again.");
       const signature = await addSignature.mutateAsync({ job, png, signerName: name.trim() });
-      await jobs.update.mutateAsync({
-        id: job.id,
+      await updateJob.mutateAsync({
+        job,
         patch: { status: "Complete", completedAt: signature.signedAt },
       });
       onDone();

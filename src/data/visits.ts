@@ -379,5 +379,10 @@ export function useVisitActions() {
     mutationFn: (v: { job: Job; note: string | null }) => finishVisit(v.job, v.note),
     onSettled: refresh,
   });
-  return { add, reschedule, remove, finish };
+  /** A job update that also moves its current visit (status changes, Complete after signing). */
+  const updateJob = useMutation({
+    mutationFn: (v: { job: Job; patch: Partial<NewJob> }) => updateJobWithVisit(v.job, v.patch),
+    onSettled: refresh,
+  });
+  return { add, reschedule, remove, finish, updateJob };
 }

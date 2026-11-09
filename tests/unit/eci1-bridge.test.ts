@@ -100,7 +100,13 @@ function memoryStore() {
     signature: async (j) => [...rows.signatures.values()].find((n) => n.jobId === j) ?? null,
     updateJob: async (id, patch, expect, visit) => {
       check(id, expect);
-      if (visit && visits.get(visit.id)?.status !== visit.expectStatus) throw new JobChanged();
+      const v = visit ? visits.get(visit.id) : undefined;
+      if (
+        visit &&
+        (v?.status !== visit.expectStatus ||
+          (v?.assignedTechId ?? null) !== visit.expectAssignedTechId)
+      )
+        throw new JobChanged();
       jobs.set(id, { ...jobs.get(id)!, ...patch });
       if (visit) visits.set(visit.id, { ...visits.get(visit.id)!, ...visit.patch });
     },
@@ -660,5 +666,32 @@ describe("multi-visit jobs (docs/VISITS.md)", () => {
       jobTechIds: string[];
     };
     assert.deepEqual(note.jobTechIds, ["tech-a", "tech-b"]);
+  });
+
+  it("receipts stay the sending tech's own on a shared job (Codex review of PR #21)", async () => {
+    await send("receipt", {
+      jobId: "mv",
+      kind: "materials",
+      paidWith: "personal",
+      amount: 42.5,
+      photos: [{ base64: JPEG }],
+    });
+    const a = (await jobsFor("u-a")).find((j) => j.id === "mv")!;
+    const b = (await jobsFor("u-b")).find((j) => j.id === "mv")!;
+    assert.equal((a.receipts as unknown[]).length, 1);
+    assert.equal((b.receipts as unknown[]).length, 0);
+  });
+
+  it("a visit reassigned by the office meanwhile refuses the old tech's change", async () => {
+    // The bridge read the visit as Tara's; the office then gives it to Tom before the save.
+    const real = m.store.updateJob;
+    m.store.updateJob = async (id, patch, expect, v) => {
+      m.visits.set("v1", { ...m.visits.get("v1")!, assignedTechId: "tech-b" });
+      return real(id, patch, expect, v);
+    };
+    const r = (await send("status", { jobId: "mv", status: "EnRoute" })) as { code: string };
+    assert.equal(r.code, "serv1_unavailable");
+    assert.equal(m.jobs.get("mv")!.status, "Scheduled");
+    assert.equal(m.visits.get("v1")!.status, "Scheduled");
   });
 });

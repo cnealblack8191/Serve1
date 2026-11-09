@@ -46,3 +46,20 @@ test("office: the board shows a visit as its own card", async ({ page }) => {
       .getByText(`${jobNo(20)} · Visit 2 of 3`),
   ).toBeVisible();
 });
+
+test("office: Reschedule on the job page moves the current visit, not the job's old time", async ({
+  page,
+}) => {
+  await signIn(page, "office");
+  await page.goto("/jobs/job-20");
+  await page.getByRole("button", { name: "Reschedule or reassign" }).click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog.getByRole("button", { name: "Remove this visit" })).toBeVisible();
+  await dialog.getByRole("combobox").first().selectOption({ label: "Tess Tech" });
+  await dialog.getByRole("button", { name: /^Schedule/ }).click();
+  const panel = page.getByRole("region", { name: "Job visits" });
+  // Visit 2 (the current one) is now Tess's; visits 1 and 3 are as they were.
+  await expect(panel.getByTestId("visit-row").nth(1)).toContainText("Tess Tech");
+  await expect(panel.getByTestId("visit-row").nth(0)).toContainText("Tara Tech");
+  await expect(panel.getByTestId("visit-row").nth(2)).toContainText("Tara Tech");
+});

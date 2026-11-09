@@ -247,7 +247,12 @@ export function createAwsStore(cfg: AwsStoreConfig): BridgeStore {
     id: string,
     patch: Partial<BJob>,
     expect: Record<string, unknown>,
-    visit: { id: string; patch: Partial<BVisit>; expectStatus: string },
+    visit: {
+      id: string;
+      patch: Partial<BVisit>;
+      expectStatus: string;
+      expectAssignedTechId: string | null;
+    },
   ) {
     const t = now().toISOString();
     const jobFields = { ...patch, updatedAt: t } as Record<string, unknown>;
@@ -275,9 +280,22 @@ export function createAwsStore(cfg: AwsStoreConfig): BridgeStore {
               TableName: cfg.tables.Visit,
               Key: { id: { S: visit.id } },
               UpdateExpression: vs.expression,
-              ConditionExpression: "attribute_exists(id) AND #wstatus = :wstatus",
-              ExpressionAttributeNames: { ...vs.names, "#wstatus": "status" },
-              ExpressionAttributeValues: { ...vs.values, ":wstatus": { S: visit.expectStatus } },
+              // Still the status and the tech the rules saw (the office may reassign the visit).
+              ConditionExpression: visit.expectAssignedTechId
+                ? "attribute_exists(id) AND #wstatus = :wstatus AND #wtech = :wtech"
+                : "attribute_exists(id) AND #wstatus = :wstatus AND (attribute_not_exists(#wtech) OR attribute_type(#wtech, :wnull))",
+              ExpressionAttributeNames: {
+                ...vs.names,
+                "#wstatus": "status",
+                "#wtech": "assignedTechId",
+              },
+              ExpressionAttributeValues: {
+                ...vs.values,
+                ":wstatus": { S: visit.expectStatus },
+                ...(visit.expectAssignedTechId
+                  ? { ":wtech": { S: visit.expectAssignedTechId } }
+                  : { ":wnull": { S: "NULL" } }),
+              },
             },
           },
         ],
@@ -444,6 +462,7 @@ export function createAwsStore(cfg: AwsStoreConfig): BridgeStore {
               paidWith: s(r.paidWith) ?? "company_card",
               note: s(r.note),
               storagePath: s(r.storagePath),
+              assignedTechId: s(r.assignedTechId),
               at: s(r.at) ?? "",
             }) satisfies BReceipt,
         );
