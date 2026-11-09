@@ -63,3 +63,17 @@ test("office: Reschedule on the job page moves the current visit, not the job's 
   await expect(panel.getByTestId("visit-row").nth(0)).toContainText("Tara Tech");
   await expect(panel.getByTestId("visit-row").nth(2)).toContainText("Tara Tech");
 });
+
+test("office: adding a visit over the job's own visit warns of double booking", async ({
+  page,
+}) => {
+  await signIn(page, "office");
+  await page.goto("/jobs/job-20");
+  await page.getByRole("button", { name: "Reschedule or reassign" }).click();
+  const dialog = page.getByRole("dialog");
+  // The defaults are the current visit's own tech and time: rescheduling to them is no clash,
+  // but adding a visit there would book the tech twice (Codex review of PR #21).
+  await expect(dialog.getByRole("alert")).toContainText("it would overlap this job's own visit");
+  await expect(dialog.getByRole("button", { name: "Add as another visit anyway" })).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "Schedule", exact: true })).toBeVisible();
+});
