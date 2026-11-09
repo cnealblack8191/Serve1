@@ -195,7 +195,7 @@ export interface BSignature {
 
 /** Fields a job update is conditional on: the state the rules were checked against. */
 export type JobExpect = Partial<
-  Pick<BJob, "assignedTechId" | "status" | "techStatusAt" | "materialsAt">
+  Pick<BJob, "assignedTechId" | "status" | "techStatusAt" | "materialsAt" | "updatedAt">
 >;
 
 /** The job changed between the check and the save; nothing was saved. */
@@ -736,6 +736,18 @@ async function write(route: Route, b: Record<string, unknown>, c: WriteCtx): Pro
           expectJob,
         );
       }
+      // The office may have changed the visit plan during the upload (Codex review of PR #21).
+      // Read the visits again, and save only if the job is untouched since it was read: every
+      // office change to a job's visits also writes the job (syncJobWithVisits), so a visit
+      // added after this read cancels the save (JobChanged) and the phone's retry is refused.
+      if (visit) {
+        const again = liveVisits(await store.visits(job.id));
+        if (again.some((v) => v.id !== visit.id && OPEN_VISIT.includes(v.status)))
+          return fail(
+            "bad_transition",
+            "Other visits of this job are still planned. Use visit_done to end this visit.",
+          ) as WriteOutcome;
+      }
       // minutesOnJob is information only: pay hours come from TimeX.
       await store.updateJob(
         job.id,
@@ -751,7 +763,7 @@ async function write(route: Route, b: Record<string, unknown>, c: WriteCtx): Pro
               ? b.noSignatureNote.trim()
               : null,
         },
-        expectStatus,
+        visit ? { ...expectStatus, updatedAt: job.updatedAt } : expectStatus,
         visitWrite({ status: "Done", completedAt: sentAt }),
       );
       return { ok: true };

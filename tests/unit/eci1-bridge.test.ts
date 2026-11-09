@@ -704,6 +704,50 @@ describe("multi-visit jobs (docs/VISITS.md)", () => {
     assert.equal(m.visits.get("v1")!.status, "Scheduled");
   });
 
+  it("complete is refused if the office adds a visit during the signature upload", async () => {
+    m.visits.set("v2", { ...m.visits.get("v2")!, status: "Cancelled" });
+    await send("status", { jobId: "mv", status: "InProgress" });
+    const realPut = m.store.putFile;
+    // The office adds visit 3 for the same tech while the image uploads; the job is written too.
+    m.store.putFile = async (k, b, t) => {
+      m.visits.set("v3", visit("v3", 3, "tech-a", "Scheduled"));
+      m.jobs.set("mv", { ...m.jobs.get("mv")!, updatedAt: T(500) });
+      return realPut(k, b, t);
+    };
+    const body = {
+      jobId: "mv",
+      signerName: "Pat Synthetic",
+      signaturePng: [{ base64: PNG }],
+      at: T(1),
+    };
+    assert.equal(((await send("complete", body)) as { code: string }).code, "bad_transition");
+    m.store.putFile = realPut;
+    assert.equal(m.jobs.get("mv")!.status, "InProgress");
+    assert.equal(m.visits.get("v1")!.status, "InProgress");
+  });
+
+  it("complete is cancelled if the job is written after the visits were read again", async () => {
+    m.visits.set("v2", { ...m.visits.get("v2")!, status: "Cancelled" });
+    await send("status", { jobId: "mv", status: "InProgress" });
+    const realVisits = m.store.visits;
+    let reads = 0;
+    // The second visits read (after the upload) races an office change that writes the job.
+    m.store.visits = async (j) => {
+      const rows = await realVisits(j);
+      if (++reads === 2) m.jobs.set("mv", { ...m.jobs.get("mv")!, updatedAt: T(600) });
+      return rows;
+    };
+    const body = {
+      jobId: "mv",
+      signerName: "Pat Synthetic",
+      signaturePng: [{ base64: PNG }],
+      at: T(1),
+    };
+    assert.equal(((await send("complete", body)) as { code: string }).code, "serv1_unavailable");
+    m.store.visits = realVisits;
+    assert.equal(m.jobs.get("mv")!.status, "InProgress");
+  });
+
   it("a visit change is recognised on retry even if saving the action afterwards failed", async () => {
     await send("status", { jobId: "mv", status: "InProgress" });
     const real = m.store.saveAction;

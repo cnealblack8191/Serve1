@@ -164,6 +164,25 @@ describe("multi-visit jobs", () => {
     assert.equal((await b.visits.get("visit-20-3"))!.status, "Scheduled");
   });
 
+  it("every office visit change writes the job, so a completion in flight notices it", async () => {
+    await as(b, OFFICE);
+    const job = (await b.jobs.get("job-20"))!;
+    const realUpdate = b.jobs.update;
+    const writes: string[] = [];
+    b.jobs.update = async (id, patch) => {
+      writes.push(id);
+      return realUpdate(id, patch);
+    };
+    // Visit 4 for Tara, who already has visits: the job's tech list does not change.
+    await v.addVisit(job, {
+      assignedTechId: "local-tech-1",
+      start: new Date(Date.now() + 9 * 86_400_000),
+      minutes: 60,
+    });
+    b.jobs.update = realUpdate;
+    assert.ok(writes.includes("job-20"));
+  });
+
   it("Job complete is refused while another visit is planned, even if the screen said last", async () => {
     await as(b, TOM);
     let job = (await b.jobs.get("job-20"))!;

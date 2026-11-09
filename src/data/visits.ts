@@ -223,7 +223,10 @@ export async function syncJobWithVisits(jobId: string): Promise<void> {
     patch.status = "Scheduled";
     patch.holdReason = null;
   }
-  if (Object.keys(patch).length) await b.jobs.update(jobId, patch);
+  // The job is always written, even when nothing on it changes: a completion the ECI1 bridge has
+  // in flight is conditional on the job being untouched, so it notices the new visit plan
+  // (Codex review of PR #21).
+  await b.jobs.update(jobId, Object.keys(patch).length ? patch : { visitTechIds: techs });
   for (const v of all)
     if (!sameIds(v.jobTechIds, techs)) await b.visits.update(v.id, { jobTechIds: techs });
   const tag = async <R extends { id: string; jobId: string; jobTechIds?: string[] | null }>(repo: {

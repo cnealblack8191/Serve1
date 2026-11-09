@@ -50,7 +50,10 @@ recommendations, as approved:
   step stays open and its retry completes the job.
 - **ECI1 bridge retries.** The bridge saves each status, Visit done and Complete together with its
   repeat marker in one DynamoDB transaction, so a retry is recognised even when the change moved
-  the job to another tech's visit.
+  the job to another tech's visit. Before saving Complete it reads the visits again (after the
+  signature upload), and the save is conditional on the job being unchanged since it was read.
+  Every office change to a job's visits writes the job, so a visit added meanwhile cancels the
+  completion.
 - **Double booking.** Adding a visit, from the Assign dialog or the job page's Visits panel, warns
   when it overlaps any of the tech's appointments, this job's own visits included.
 - **First extra visit.** When the office adds a visit to a job that has none, visit 1 is first
