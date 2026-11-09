@@ -9,6 +9,7 @@ import {
   type BSignature,
   type BUser,
   type BVisit,
+  type VisitWrite,
 } from "./core";
 
 /**
@@ -247,12 +248,7 @@ export function createAwsStore(cfg: AwsStoreConfig): BridgeStore {
     id: string,
     patch: Partial<BJob>,
     expect: Record<string, unknown>,
-    visit: {
-      id: string;
-      patch: Partial<BVisit>;
-      expectStatus: string;
-      expectAssignedTechId: string | null;
-    },
+    visit: VisitWrite,
   ) {
     const t = now().toISOString();
     const jobFields = { ...patch, updatedAt: t } as Record<string, unknown>;
@@ -298,14 +294,40 @@ export function createAwsStore(cfg: AwsStoreConfig): BridgeStore {
               },
             },
           },
+          // The action's repeat marker, in the same write (Codex review of PR #21).
+          ...(visit.action
+            ? [
+                {
+                  Put: {
+                    TableName: cfg.tables.TechAction,
+                    Item: toItem({
+                      __typename: "TechAction",
+                      createdAt: t,
+                      updatedAt: t,
+                      ...visit.action,
+                    }),
+                    ConditionExpression: "attribute_not_exists(id)",
+                  },
+                },
+              ]
+            : []),
         ],
       });
     } catch (e) {
-      if (e instanceof TransactionCanceled) throw new JobChanged();
-      throw e;
+      if (!(e instanceof TransactionCanceled)) throw e;
+      const [jobReason, visitReason, actionReason] = e.reasons;
+      // Only the marker exists: this exact action was already applied. Nothing more to do.
+      if (
+        actionReason === "ConditionalCheckFailed" &&
+        jobReason !== "ConditionalCheckFailed" &&
+        visitReason !== "ConditionalCheckFailed"
+      )
+        return;
+      throw new JobChanged();
     } finally {
       scans.delete(cfg.tables.Job);
       scans.delete(cfg.tables.Visit);
+      scans.delete(cfg.tables.TechAction);
     }
   }
 

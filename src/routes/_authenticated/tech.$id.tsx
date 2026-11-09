@@ -17,7 +17,7 @@ import { JOB_STATUS_CLASS, JOB_STATUS_LABEL } from "@/lib/status";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
-  currentVisit,
+  actingVisit,
   isFinished,
   isLastOpenVisit,
   isOpenVisit,
@@ -88,7 +88,8 @@ function JobScreen({ id }: { id: string }) {
   // Multi-visit jobs (docs/VISITS.md): the tech acts on the job only while its current visit is
   // theirs; a job with no visits is its own one visit.
   const { visits: vs, implied } = visitsOf(j, visits.data ?? []);
-  const cur = currentVisit(vs);
+  // The current visit, or a finished last visit whose job save failed (so it can be retried).
+  const cur = actingVisit(j, vs);
   const myId = me.data?.identityId ?? null;
   const myTurn = implied || (!!cur && cur.assignedTechId === myId);
   // The job passes to the next visit's tech when the office hands it over (only the office

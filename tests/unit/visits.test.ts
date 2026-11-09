@@ -164,6 +164,44 @@ describe("multi-visit jobs", () => {
     assert.equal((await b.visits.get("visit-20-3"))!.status, "Scheduled");
   });
 
+  it("Job complete is refused while another visit is planned, even if the screen said last", async () => {
+    await as(b, TOM);
+    let job = (await b.jobs.get("job-20"))!;
+    job = await v.updateJobWithVisit(job, movePatch(job, "start"));
+    // Visit 3 is still planned (the office may have added it after the screen loaded).
+    await assert.rejects(
+      v.updateJobWithVisit(job, { status: "Complete", completedAt: new Date().toISOString() }),
+      /Another visit of this job is planned/,
+    );
+    assert.equal((await b.visits.get("visit-20-2"))!.status, "InProgress");
+    assert.equal((await b.jobs.get("job-20"))!.status, "InProgress");
+  });
+
+  it("a completion whose job save failed stays on the tech's screen and can be retried", async () => {
+    await as(b, OFFICE);
+    await v.removeVisit((await b.visits.get("visit-20-3"))!);
+    await as(b, TOM);
+    let job = (await b.jobs.get("job-20"))!;
+    job = await v.updateJobWithVisit(job, movePatch(job, "start"));
+    const realUpdate = b.jobs.update;
+    b.jobs.update = async () => {
+      throw new Error("network");
+    };
+    const done = { status: "Complete" as const, completedAt: new Date().toISOString() };
+    await assert.rejects(v.updateJobWithVisit(job, done));
+    b.jobs.update = realUpdate;
+    job = (await b.jobs.get("job-20"))!;
+    const rows = v.liveVisitRows("job-20", await b.visits.list());
+    // Every visit is finished, but the job is still In Progress: the screen keeps visit 2.
+    assert.equal(v.currentVisit(rows) ?? null, null);
+    assert.equal(v.actingVisit(job, rows)?.id, "visit-20-2");
+    assert.equal(v.isLastOpenVisit(rows, v.actingVisit(job, rows)!), true);
+    job = await v.updateJobWithVisit(job, done);
+    assert.equal(job.status, "Complete");
+    // Once complete, nothing is left to act on.
+    assert.equal(v.actingVisit(job, v.liveVisitRows("job-20", await b.visits.list())), null);
+  });
+
   it("a lost Visit done is repaired, not repeated, when the screen has moved on", async () => {
     await as(b, OFFICE);
     const v3 = (await b.visits.get("visit-20-3"))!;

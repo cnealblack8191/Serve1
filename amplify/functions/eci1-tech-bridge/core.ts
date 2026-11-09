@@ -133,6 +133,23 @@ export interface VisitWrite {
   patch: Partial<BVisit>;
   expectStatus: VisitStatus;
   expectAssignedTechId: string | null;
+  /**
+   * The action's repeat marker, saved in the same atomic write. A visit change can move the job to
+   * another visit, so a retry after a lost marker would be refused; with the marker saved together,
+   * the retry is always recognised (Codex review of PR #21). A marker that already exists means
+   * this exact action was already applied: the write then changes nothing and succeeds.
+   */
+  action?: ActionRow;
+}
+
+/** The repeat marker of one tech action (saveAction). */
+export interface ActionRow {
+  id: string;
+  jobId: string;
+  route: Route;
+  serv1UserId: string;
+  at: string;
+  result: "applied" | "stale_ignored";
 }
 
 export interface Material {
@@ -231,14 +248,7 @@ export interface BridgeStore {
   getAction(
     actionId: string,
   ): Promise<{ result: string; jobId?: string | null; serv1UserId?: string | null } | null>;
-  saveAction(row: {
-    id: string;
-    jobId: string;
-    route: Route;
-    serv1UserId: string;
-    at: string;
-    result: "applied" | "stale_ignored";
-  }): Promise<void>;
+  saveAction(row: ActionRow): Promise<void>;
   audit(row: {
     eciUserId: string | null;
     serv1UserId: string | null;
@@ -451,6 +461,7 @@ export async function handleBridge(
       job,
       user,
       actionId,
+      route,
       sentAt,
       index,
       visit,
@@ -483,6 +494,7 @@ type WriteCtx = {
   job: BJob;
   user: BUser;
   actionId: string;
+  route: Route;
   sentAt: string;
   index: number;
   /** The current visit of a multi-visit job (null for a job with no visits). */
@@ -504,6 +516,14 @@ async function write(route: Route, b: Record<string, unknown>, c: WriteCtx): Pro
           patch,
           expectStatus: visit.status,
           expectAssignedTechId: visit.assignedTechId,
+          action: {
+            id: actionId,
+            jobId: job.id,
+            route: c.route,
+            serv1UserId: user.id,
+            at: sentAt,
+            result: "applied",
+          },
         }
       : undefined;
   const staleStatus = olderThan(sentAt, job.techStatusAt);

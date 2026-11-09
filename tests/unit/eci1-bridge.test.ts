@@ -107,8 +107,16 @@ function memoryStore() {
           (v?.assignedTechId ?? null) !== visit.expectAssignedTechId)
       )
         throw new JobChanged();
+      // The action marker is saved in the same write; an existing one means already applied.
+      if (visit?.action && rows.actions.has(visit.action.id)) return;
       jobs.set(id, { ...jobs.get(id)!, ...patch });
       if (visit) visits.set(visit.id, { ...visits.get(visit.id)!, ...visit.patch });
+      if (visit?.action)
+        rows.actions.set(visit.action.id, {
+          result: visit.action.result,
+          jobId: visit.action.jobId,
+          serv1UserId: visit.action.serv1UserId,
+        });
     },
     addNote: async (r, expect) => {
       check(r.jobId, expect);
@@ -694,6 +702,22 @@ describe("multi-visit jobs (docs/VISITS.md)", () => {
     assert.equal(r.code, "serv1_unavailable");
     assert.equal(m.jobs.get("mv")!.status, "Scheduled");
     assert.equal(m.visits.get("v1")!.status, "Scheduled");
+  });
+
+  it("a visit change is recognised on retry even if saving the action afterwards failed", async () => {
+    await send("status", { jobId: "mv", status: "InProgress" });
+    const real = m.store.saveAction;
+    m.store.saveAction = async () => {
+      throw new Error("network");
+    };
+    const body = { jobId: "mv", note: null, at: T(1), actionId: "vd-1" };
+    // The job and visit are saved with the marker; the separate save afterwards fails.
+    assert.equal(((await send("visit_done", body)) as { code: string }).code, "serv1_unavailable");
+    m.store.saveAction = real;
+    assert.equal(m.visits.get("v1")!.status, "Done");
+    // The job now waits for Tom's visit, but the identical retry is still answered ok.
+    assert.equal((await send("visit_done", body)).ok, true);
+    assert.equal(m.visits.get("v2")!.status, "Scheduled");
   });
 
   it("a retry of a saved action is ok even after the job moved on (Codex review of PR #21)", async () => {

@@ -363,6 +363,12 @@ export async function updateJobWithVisit(job: Job, patch: Partial<NewJob>): Prom
           throw new Error(
             "This job's last visit was already ended. Refresh the job and try again.",
           );
+        // Re-checked here, not only on the screen: the office may have added a visit meanwhile
+        // (Codex review of PR #21; the ECI1 bridge refuses the same).
+        if (live.some((v) => v.id !== cur?.id && isOpenVisit(v)))
+          throw new Error(
+            "Another visit of this job is planned. End this visit with Visit done, return needed.",
+          );
         if (cur)
           await b.visits.update(cur.id, {
             status: "Done",
@@ -420,15 +426,30 @@ export async function finishVisit(
 }
 
 /**
+ * The visit the tech acts on: the current one, or, when every visit is finished but the job is
+ * still under way, the last finished one. That is a completion whose job save failed after the
+ * visit was saved; the tech's screen keeps it so the save can be retried (Codex review of PR #21).
+ */
+export function actingVisit(job: Job, visits: Visit[]): Visit | null {
+  const cur = currentVisit(visits);
+  if (cur || !visits.length) return cur;
+  return underWay(job) ? (lastDone(visits) ?? null) : null;
+}
+
+function underWay(job: Job): boolean {
+  return (
+    job.status === "EnRoute" ||
+    job.status === "InProgress" ||
+    (job.status === "OnHold" && !isReturnHold(job))
+  );
+}
+
+/**
  * The job is under way (en route, in progress, or on an ordinary hold) but its current visit has
  * not started: a visit was finished and the job's own update was lost.
  */
 function lostFinish(job: Job, cur: Visit): boolean {
-  const active =
-    job.status === "EnRoute" ||
-    job.status === "InProgress" ||
-    (job.status === "OnHold" && !isReturnHold(job));
-  return active && cur.status === "Scheduled";
+  return underWay(job) && cur.status === "Scheduled";
 }
 
 function lastDone(live: Visit[]): Visit | undefined {

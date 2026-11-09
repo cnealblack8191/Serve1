@@ -276,6 +276,47 @@ describe("store requests", () => {
       JobChanged,
     );
   });
+  it("the action marker is saved in the same transaction; an existing marker means already applied", async () => {
+    const action = {
+      id: "act-1",
+      jobId: "mv",
+      route: "visit_done" as const,
+      serv1UserId: "u-a",
+      at: NOW.toISOString(),
+      result: "applied" as const,
+    };
+    const vw = {
+      id: "v1",
+      patch: { status: "Done" as const },
+      expectStatus: "InProgress" as const,
+      expectAssignedTechId: "tech-a",
+      action,
+    };
+    const { store, sent } = fake(() => ({ status: 200, json: {} }));
+    await store.updateJob("mv", { status: "Scheduled" }, { status: "InProgress" }, vw);
+    const items = sent[0]!.body!.TransactItems as Record<string, Record<string, unknown>>[];
+    assert.equal(items.length, 3);
+    assert.equal(items[2]!.Put!.TableName, "TechAction-t");
+    assert.equal(items[2]!.Put!.ConditionExpression, "attribute_not_exists(id)");
+    assert.deepEqual((items[2]!.Put!.Item as Record<string, unknown>).id, { S: "act-1" });
+    // Only the marker exists: a repeat of this exact action, nothing more to do.
+    await fake(cancelled(["None", "None", "ConditionalCheckFailed"])).store.updateJob(
+      "mv",
+      { status: "Scheduled" },
+      { status: "InProgress" },
+      vw,
+    );
+    // The job or visit changed: JobChanged, whatever the marker.
+    await assert.rejects(
+      fake(cancelled(["ConditionalCheckFailed", "None", "ConditionalCheckFailed"])).store.updateJob(
+        "mv",
+        { status: "Scheduled" },
+        { status: "InProgress" },
+        vw,
+      ),
+      JobChanged,
+    );
+  });
   it("job updates touch only the given fields and require the job to exist", async () => {
     const { store, sent } = fake(() => ({ status: 200, json: {} }));
     await store.updateJob(

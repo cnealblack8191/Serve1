@@ -44,6 +44,13 @@ recommendations, as approved:
     only finishes the job; it never ends the next visit. A job that is under way while its current
     visit has not started is treated as that half-saved state: Visit done and the office handover
     put the job back to Scheduled, and Job complete is refused.
+- **Job complete** is refused while another visit of the job is open, checked when saving and
+  not only on the screen (the office may add a visit meanwhile). If the last visit is saved Done
+  but the job's save fails, the tech's screen keeps that visit (`actingVisit`), so the signature
+  step stays open and its retry completes the job.
+- **ECI1 bridge retries.** The bridge saves each status, Visit done and Complete together with its
+  repeat marker in one DynamoDB transaction, so a retry is recognised even when the change moved
+  the job to another tech's visit.
 - **Double booking.** Adding a visit, from the Assign dialog or the job page's Visits panel, warns
   when it overlaps any of the tech's appointments, this job's own visits included.
 - **First extra visit.** When the office adds a visit to a job that has none, visit 1 is first
@@ -96,6 +103,9 @@ to anyone. When a tech ends a visit and the next visit is another tech's:
 - Until then, the next tech sees "Your visit is next" and cannot change the job.
 
 The ECI1 bridge does not need this step. It checks the current visit itself, on the server.
+
+Owner's choice, 2026-11-09: "A". The pilot keeps this manual office **Hand over**, with no new
+function; a server-side handover was offered and not taken.
 
 ## Known limits (pilot)
 
