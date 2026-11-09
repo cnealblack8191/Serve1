@@ -194,4 +194,39 @@ describe("multi-visit jobs", () => {
     assert.equal(techMayMove("Complete", "Scheduled"), false);
     assert.equal(techMayMove("Cancelled", "Scheduled"), false);
   });
+
+  it("removing the last open visit holds the job for a return visit (Codex review of PR #21)", async () => {
+    await as(b, OFFICE);
+    const visits = await b.visits.list();
+    await v.removeVisit(visits.find((x) => x.id === "visit-20-3")!);
+    await v.removeVisit((await b.visits.list()).find((x) => x.id === "visit-20-2")!);
+    const job = (await b.jobs.get("job-20"))!;
+    assert.equal(job.status, "OnHold");
+    assert.equal(job.holdReason, v.RETURN_NEEDED);
+  });
+
+  it("moving a multi-visit job to the next tech keeps each receipt with its own tech", async () => {
+    await as(b, OFFICE);
+    const r = await b.techReceipts.create({
+      jobId: "job-20",
+      assignedTechId: "local-tech-2",
+      kind: "materials",
+      vendor: null,
+      date: null,
+      amount: 12,
+      paidWith: "personal",
+      note: null,
+      storagePath: null,
+      at: new Date().toISOString(),
+      actionId: null,
+      reviewStatus: "Pending",
+      reviewNote: null,
+      reviewedBy: null,
+      reviewedAt: null,
+    });
+    // Tom's visit 2 goes: the job's current visit becomes Tara's visit 3.
+    await v.removeVisit((await b.visits.list()).find((x) => x.id === "visit-20-2")!);
+    assert.equal((await b.jobs.get("job-20"))!.assignedTechId, "local-tech-1");
+    assert.equal((await b.techReceipts.get(r.id))!.assignedTechId, "local-tech-2");
+  });
 });

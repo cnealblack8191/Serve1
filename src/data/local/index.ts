@@ -407,7 +407,13 @@ export function createLocalBackend(): Backend {
       else if (isTech(session()) && patch.status !== undefined)
         patch = { ...patch, techStatusAt: nowIso() };
       const after = await jobsRepo.update(id, patch);
-      if (before && before.assignedTechId !== after.assignedTechId)
+      // A multi-visit job's rows keep their own tech (the others read them through jobTechIds);
+      // re-tagging would hand one tech's receipts to the next (Codex review of PR #21).
+      if (
+        before &&
+        before.assignedTechId !== after.assignedTechId &&
+        !(after.visitTechIds ?? []).length
+      )
         retagFileRows(id, after.assignedTechId);
       return after;
     },

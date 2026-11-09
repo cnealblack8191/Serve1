@@ -228,7 +228,9 @@ export interface BridgeStore {
   putFile(key: string, bytes: Uint8Array, contentType: string): Promise<void>;
   fileUrl(key: string): Promise<string>;
   /** The saved action for this id, if any (the repeat check). */
-  getAction(actionId: string): Promise<{ result: string } | null>;
+  getAction(
+    actionId: string,
+  ): Promise<{ result: string; jobId?: string | null; serv1UserId?: string | null } | null>;
   saveAction(row: {
     id: string;
     jobId: string;
@@ -411,6 +413,14 @@ export async function handleBridge(
     if (!sentAt) return finish(fail("invalid"));
     const job = await store.getJob(jobId);
     if (!job) return finish(fail("job_not_found"));
+    const index = route === "photos" ? Number(body.index ?? 0) : 0;
+    if (!Number.isInteger(index) || index < 0 || index > 9) return finish(fail("invalid"));
+    const repeatKey = route === "photos" ? `${actionId}#${index}` : actionId;
+    // A retry of an action this tech already saved on this job is answered first: the save may
+    // have moved the job to another tech's visit (Codex review of PR #21).
+    const saved = await store.getAction(repeatKey);
+    if (saved && saved.jobId === job.id && saved.serv1UserId === user.id)
+      return finish({ ok: true });
     // A multi-visit job is the current visit's tech's to change; others only read it.
     const visits = liveVisits(await store.visits(job.id));
     const visit = visits.find((v) => OPEN_VISIT.includes(v.status)) ?? null;
@@ -431,9 +441,6 @@ export async function handleBridge(
     const moreVisits = visits.some((v) => v.id !== visit?.id && OPEN_VISIT.includes(v.status));
 
     // 3. Repeat check: a saved actionId changes nothing (photos repeat per position).
-    const index = route === "photos" ? Number(body.index ?? 0) : 0;
-    if (!Number.isInteger(index) || index < 0 || index > 9) return finish(fail("invalid"));
-    const repeatKey = route === "photos" ? `${actionId}#${index}` : actionId;
     if (await store.getAction(repeatKey)) return finish({ ok: true });
 
     // 4. Office statuses win.

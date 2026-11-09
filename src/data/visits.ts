@@ -291,6 +291,17 @@ export async function removeVisit(visit: Visit): Promise<void> {
     throw new Error("A job keeps at least one visit. Unschedule the job instead.");
   await backend().visits.update(visit.id, { status: "Cancelled" });
   await syncJobWithVisits(visit.jobId);
+  // Only finished visits left on unfinished work: hold it for a return visit, so the office sees
+  // it needs planning (Codex review of PR #21).
+  if (!live.some((v) => v.id !== visit.id && isOpenVisit(v))) {
+    const job = await backend().jobs.get(visit.jobId);
+    if (job && ["New", "Scheduled", "EnRoute"].includes(job.status))
+      await backend().jobs.update(job.id, {
+        status: "OnHold",
+        holdReason: RETURN_NEEDED,
+        holdNote: null,
+      });
+  }
 }
 
 /**

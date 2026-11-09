@@ -574,7 +574,9 @@ export function createAwsStore(cfg: AwsStoreConfig): BridgeStore {
     },
     async getAction(actionId) {
       const r = await get(cfg.tables.TechAction, actionId);
-      return r ? { result: s(r.result) ?? "applied" } : null;
+      return r
+        ? { result: s(r.result) ?? "applied", jobId: s(r.jobId), serv1UserId: s(r.serv1UserId) }
+        : null;
     },
     saveAction: (r) => putOnce(cfg.tables.TechAction, "TechAction", { ...r }),
     async audit(r) {

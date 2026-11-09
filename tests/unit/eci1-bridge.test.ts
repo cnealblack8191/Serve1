@@ -76,7 +76,7 @@ function memoryStore() {
     receipts: new Map<string, Parameters<BridgeStore["addReceipt"]>[0]>(),
     signatures: new Map<string, Parameters<BridgeStore["addSignature"]>[0]>(),
     files: new Map<string, number>(),
-    actions: new Map<string, string>(),
+    actions: new Map<string, { result: string; jobId: string; serv1UserId: string }>(),
     audit: [] as { route: string; result: string; serv1UserId: string | null }[],
   };
   const check = (id: string, expect: Record<string, unknown>) => {
@@ -128,8 +128,9 @@ function memoryStore() {
     },
     putFile: async (k, b) => void rows.files.set(k, b.length),
     fileUrl: async (k) => `https://signed.example/${k}?short`,
-    getAction: async (id) => (rows.actions.has(id) ? { result: rows.actions.get(id)! } : null),
-    saveAction: async (r) => void rows.actions.set(r.id, r.result),
+    getAction: async (id) => rows.actions.get(id) ?? null,
+    saveAction: async (r) =>
+      void rows.actions.set(r.id, { result: r.result, jobId: r.jobId, serv1UserId: r.serv1UserId }),
     audit: async (r) => void rows.audit.push(r),
   };
   return { store, jobs, rows, users, visits };
@@ -286,7 +287,7 @@ describe("repeats, late and out-of-order sends", () => {
       (await send("status", { jobId: "j1", status: "EnRoute", at: T(5), actionId: "late-1" })).ok,
     );
     assert.equal(m.jobs.get("j1")!.status, "InProgress");
-    assert.equal(m.rows.actions.get("late-1"), "stale_ignored");
+    assert.equal(m.rows.actions.get("late-1")?.result, "stale_ignored");
 
     const list = (name: string) => [{ name, qty: 2, unit: "ea" }];
     assert.ok(
@@ -693,5 +694,16 @@ describe("multi-visit jobs (docs/VISITS.md)", () => {
     assert.equal(r.code, "serv1_unavailable");
     assert.equal(m.jobs.get("mv")!.status, "Scheduled");
     assert.equal(m.visits.get("v1")!.status, "Scheduled");
+  });
+
+  it("a retry of a saved action is ok even after the job moved on (Codex review of PR #21)", async () => {
+    m.visits.set("v2", { ...m.visits.get("v2")!, status: "Cancelled" });
+    await send("status", { jobId: "mv", status: "InProgress" });
+    const body = { jobId: "mv", noSignatureReason: "not_on_site", at: T(1), actionId: "done-1" };
+    assert.equal((await send("complete", body)).ok, true);
+    // The reply was lost; the phone sends the same action again.
+    assert.equal((await send("complete", body)).ok, true);
+    // Another tech reusing that action id is not answered from it.
+    assert.equal(((await send("complete", body, "u-b")) as { code: string }).code, "not_assigned");
   });
 });
