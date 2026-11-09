@@ -4,7 +4,8 @@
     "src/**/*.tsx",
     "vite.config.ts",
     "playwright.config.ts",
-    "tests/**/*.ts"
+    "tests/**/*.ts",
+    "scripts/**/*.ts"
   ],
   "exclude": ["amplify", "node_modules", "dist"],
   "compilerOptions": {

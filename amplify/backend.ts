@@ -28,6 +28,17 @@ const backend = defineBackend({
 });
 
 /**
+ * Pilot sign-in by plain username (owner, 2026-11-09: "just have them be simple like admin, user,
+ * tech"), set only when scripts/pilot/deploy-backend.sh exports SERV1_USERNAME_SIGNIN=true.
+ * Amplify's defineAuth signs in by email; removing UsernameAttributes makes Cognito sign in by
+ * username instead (email stays a required attribute). Cognito fixes this when a pool is created
+ * and it cannot be changed later, so every other deploy keeps email sign-in.
+ */
+if (process.env.SERV1_USERNAME_SIGNIN === "true") {
+  backend.auth.resources.cfnResources.cfnUserPool.addPropertyDeletionOverride("UsernameAttributes");
+}
+
+/**
  * Permissions boundary (infra/serv1-builder/serv1-builder.yaml, policy
  * serv1-permissions-boundary). Every role this backend creates carries it, and
  * the CloudFormation execution role refuses to create a role without it, so no

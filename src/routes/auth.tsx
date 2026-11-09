@@ -74,7 +74,7 @@ function AuthPage() {
               </h1>
               <p className="text-[15px] text-muted-foreground">
                 {step === "signIn"
-                  ? "Use your company email and password."
+                  ? "Use your username (or company email) and password."
                   : "Your account was created with a temporary password. Choose your own to continue."}
               </p>
             </div>
@@ -97,10 +97,12 @@ function AuthPage() {
             {step === "signIn" ? (
               <>
                 <div className="space-y-1.5">
-                  <Label htmlFor="email">Email</Label>
+                  <Label htmlFor="email">Username or email</Label>
                   <Input
                     id="email"
-                    type="email"
+                    type="text"
+                    autoCapitalize="none"
+                    spellCheck={false}
                     className="h-12 text-[15px]"
                     autoComplete="username"
                     value={email}
