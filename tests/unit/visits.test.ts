@@ -206,6 +206,38 @@ describe("multi-visit jobs", () => {
     assert.equal(added.status, "Cancelled");
   });
 
+  it("a tech named only by a rejected visit loses the access it was given", async () => {
+    await as(b, OFFICE);
+    const job = (await b.jobs.get("job-20"))!;
+    const realCreate = b.visits.create;
+    b.visits.create = async (input) => {
+      const row = await realCreate(input);
+      await b.jobs.update("job-20", { status: "Complete" });
+      return row;
+    };
+    // Tess is on no visit of job-20; her new visit is rejected by the completion race.
+    await assert.rejects(
+      v.addVisit(job, {
+        assignedTechId: "local-tech-3",
+        start: new Date(Date.now() + 9 * 86_400_000),
+        minutes: 60,
+      }),
+      /just marked Complete/,
+    );
+    b.visits.create = realCreate;
+    const after = (await b.jobs.get("job-20"))!;
+    assert.ok(!(after.visitTechIds ?? []).includes("local-tech-3"));
+    for (const x of (await b.visits.list()).filter((r) => r.jobId === "job-20"))
+      assert.ok(!(x.jobTechIds ?? []).includes("local-tech-3"), x.id);
+    await as(b, TESS);
+    assert.equal(await b.jobs.get("job-20"), null);
+    assert.equal(
+      (await b.visits.list()).filter((x) => x.jobId === "job-20" && x.status !== "Cancelled")
+        .length,
+      0,
+    );
+  });
+
   it("Job complete is refused while another visit is planned, even if the screen said last", async () => {
     await as(b, TOM);
     let job = (await b.jobs.get("job-20"))!;

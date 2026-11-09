@@ -307,6 +307,9 @@ export async function addVisit(job: Job, plan: VisitPlan): Promise<Visit> {
   const after = await backend().jobs.get(job.id);
   if (after && FINISHED.includes(after.status)) {
     await backend().visits.update(v.id, { status: "Cancelled" });
+    // Rebuild the job's tech list and every shared row's from the visits left, so a tech named
+    // only by the rejected visit loses the access it was just given (Codex review of PR #21).
+    await syncJobWithVisits(job.id);
     throw new Error(`This job was just marked ${after.status}. The new visit was not added.`);
   }
   return v;
