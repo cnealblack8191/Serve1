@@ -2,7 +2,7 @@
 # Creates the four pilot sign-ins in the deployed Cognito user pool (docs/PILOT-DEPLOY.md, step 3).
 # Run by the owner in CloudShell (or as serv1-builder), from the repository root:
 #
-#   bash scripts/pilot/create-users.sh amplify_outputs.json [domain] [--reset-passwords]
+#   AWS_PROFILE=serv1-builder bash scripts/pilot/create-users.sh amplify_outputs.json [domain] [--reset-passwords]
 #
 # Four plain-username sign-ins (owner, 2026-11-09): admin (Admin), user (Office), tech (Tech) and
 # viewer (Owner, read-only). The pool signs in by username (deploy-backend.sh sets
@@ -60,7 +60,7 @@ ask_password() {
   done
 }
 
-echo "User pool $POOL ($REGION)"
+echo "User pool $POOL ($REGION), as: $(aws sts get-caller-identity --query Arn --output text)"
 
 # Ask only when a password will be set: a new user, or --reset-passwords.
 NEED_PW="$RESET"

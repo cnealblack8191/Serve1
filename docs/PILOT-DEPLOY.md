@@ -73,7 +73,7 @@ touches the ECI Prod server, `cnb-eci-webapp`, the live ECI API, TimeX or Centra
    `https://demo.d2yxtjpp0ljka2.amplifyapp.com` straight away.
 3. **Sign-ins:**
    ```bash
-   bash scripts/pilot/create-users.sh amplify_outputs.json
+   AWS_PROFILE=serv1-builder bash scripts/pilot/create-users.sh amplify_outputs.json
    ```
    It asks for the pilot password (hidden, typed twice), then creates `admin`, `user`, `tech` and
    `viewer` with it and puts each in its group. It writes `scripts/pilot/pilot-users.json` with
@@ -83,7 +83,8 @@ touches the ECI Prod server, `cnb-eci-webapp`, the live ECI API, TimeX or Centra
    ```bash
    npx tsx scripts/pilot/seed-demo.ts amplify_outputs.json scripts/pilot/pilot-users.json
    ```
-   It asks for the pilot password at a hidden prompt and signs in as `admin`. It then writes the
+   It uses no AWS credentials: it asks for the pilot password at a hidden prompt and signs in to
+   Serv1 as `admin`. It then writes the
    demo customers, sites, jobs, opportunities, invoices, tech notes and receipts through Serv1's
    normal data API, so every access rule applies. Demo times are set in the company's time zone
    (America/New_York), even though CloudShell runs in UTC. Tara Tech's jobs go to `tech`. Re-running
