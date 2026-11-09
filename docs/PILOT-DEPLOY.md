@@ -50,8 +50,9 @@ touches the ECI Prod server, `cnb-eci-webapp`, the live ECI API, TimeX or Centra
 
 ## Steps (CloudShell, us-east-1, repository root)
 
-0. **Prerequisites.** The `serv1-builder` stack and CDK bootstrap are in place
-   (`infra/serv1-builder/RUNBOOK.md`). Clone the repository at the commit the owner approves, then
+0. **Prerequisites.** The `serv1-builder` stack is in place (`infra/serv1-builder/RUNBOOK.md`),
+   with `Serv1HostingDeploy`. The hosting app has been moved out of `CDKToolkit` and CDK bootstrapped
+   the standard way (`infra/hosting-move/RUNBOOK.md`). Clone the repository at the commit the owner approves, then
    check the account:
    ```bash
    git clone https://github.com/cnealblack8191/Serve1.git && cd Serve1
@@ -155,12 +156,18 @@ Bluehost (same DNS page as above).
 
 ## Open questions
 
-- **Which AWS role runs steps 1, 2 and teardown (with the owner).** No step runs as an
-  administrator. As written, `infra/serv1-builder` cannot be applied: it trusts the IAM user
-  `eci-ai-session`, which does not exist in the account. CDKToolkit is already in us-east-1, but
-  without the restricted execution policy. The backend also expects the
-  `serv1-permissions-boundary` policy from that stack. The role, and any Amplify Hosting permissions
-  it needs for step 2, wait for the owner's decision.
+State on 2026-11-09, from the planning session's read-only checks:
+
+- **Done.** The IAM user `eci-ai-session` exists (stack `eci-ai-access`, us-east-2). Role
+  `serv1-builder` exists, made from `infra/serv1-builder` at e0113aa, and `eci-ai-session` can
+  assume it.
+- **Blocked, with a fix ready.** The standard CDK bootstrap that step 1 needs failed. `CDKToolkit`
+  in us-east-1 is a custom stack that also holds the hosting app.
+  - The owner chose to move the app out of it and then bootstrap normally ("go with A").
+  - The pack is `infra/hosting-move/RUNBOOK.md`. It runs on the owner's word, before step 1.
+- **Hosting rights for step 2.** `serv1-builder` gains `Serv1HostingDeploy`: publish to app
+  `d2yxtjpp0ljka2` only, never delete or re-shape it. The owner re-applies the `serv1-builder`
+  stack to add it.
 
 ## Cost
 

@@ -1,0 +1,61 @@
+/**
+ * Command-line front of plan.ts for move.sh (infra/hosting-move/RUNBOOK.md). No AWS calls.
+ *
+ *   npx tsx scripts/hosting-move/cli.ts strip <cdktoolkit.json> <out.json>
+ *   npx tsx scripts/hosting-move/cli.ts match <cdktoolkit.json> <serv1-hosting.json>
+ *   npx tsx scripts/hosting-move/cli.ts remove-only <changeset.json>
+ *   npx tsx scripts/hosting-move/cli.ts import-only <changeset.json>
+ *   npx tsx scripts/hosting-move/cli.ts live <get-app.json> <get-branch.json> <serv1-hosting.json>
+ *
+ * Exits 1 with the reasons when a check fails, so move.sh stops before executing anything.
+ */
+import { readFileSync, writeFileSync } from "node:fs";
+
+import {
+  checkImportOnly,
+  checkRemoveOnly,
+  hostingMatches,
+  liveMatches,
+  stripHosting,
+  type LiveApp,
+  type LiveBranch,
+  type ChangeRow,
+  type Template,
+} from "./plan";
+
+const read = (p: string) => JSON.parse(readFileSync(p, "utf8")) as unknown;
+/** describe-stacks/get-template give the body as an object or as a JSON string. */
+const template = (p: string): Template => {
+  const v = read(p) as { TemplateBody?: unknown } & Template;
+  const body = v.TemplateBody ?? v;
+  return (typeof body === "string" ? JSON.parse(body) : body) as Template;
+};
+const stop = (problems: string[]) => {
+  if (!problems.length) return;
+  for (const p of problems) console.error(`  - ${p}`);
+  process.exit(1);
+};
+
+const [cmd, a, b] = process.argv.slice(2);
+try {
+  if (cmd === "strip" && a && b) {
+    writeFileSync(b, JSON.stringify(stripHosting(template(a)), null, 2) + "\n");
+    console.log(`Wrote ${b}`);
+  } else if (cmd === "match" && a && b) {
+    stop(hostingMatches(template(a), template(b)));
+    console.log("serv1-hosting matches what CDKToolkit declared.");
+  } else if (cmd === "live" && a && b && process.argv[5]) {
+    stop(liveMatches(read(a) as LiveApp, read(b) as LiveBranch, template(process.argv[5])));
+    console.log("The live app and branch match serv1-hosting.");
+  } else if ((cmd === "remove-only" || cmd === "import-only") && a) {
+    const changes = ((read(a) as { Changes?: ChangeRow[] }).Changes ?? []) as ChangeRow[];
+    stop(cmd === "remove-only" ? checkRemoveOnly(changes) : checkImportOnly(changes));
+    console.log(`Change set checked: ${cmd}.`);
+  } else {
+    console.error("usage: cli.ts strip|match|live|remove-only|import-only ...");
+    process.exit(2);
+  }
+} catch (e) {
+  console.error(`Stopped: ${e instanceof Error ? e.message : String(e)}`);
+  process.exit(1);
+}

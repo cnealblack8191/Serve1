@@ -1,0 +1,45 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "Serv1 hosting: the existing Amplify Hosting app serv1-demo and its demo branch, imported from CDKToolkit unchanged (infra/hosting-move/RUNBOOK.md). Retained if this stack is deleted. The serv1.ecinc.us domain association stays outside CloudFormation (made by CLI).",
+  "Parameters": {
+    "AppId": {
+      "Type": "String",
+      "Default": "d2yxtjpp0ljka2",
+      "AllowedPattern": "^d[a-z0-9]{12,14}$",
+      "Description": "The existing app's id; the branch is imported under it."
+    }
+  },
+  "Resources": {
+    "HostingApp": {
+      "Type": "AWS::Amplify::App",
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain",
+      "Properties": {
+        "Name": "serv1-demo",
+        "Platform": "WEB",
+        "CustomRules": [{ "Source": "/<*>", "Target": "/index.html", "Status": "404-200" }],
+        "Tags": [
+          { "Key": "Project", "Value": "serv1-demo" },
+          { "Key": "Environment", "Value": "demo" }
+        ]
+      }
+    },
+    "HostingBranch": {
+      "Type": "AWS::Amplify::Branch",
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain",
+      "Properties": {
+        "AppId": { "Ref": "AppId" },
+        "BranchName": "demo",
+        "EnableAutoBuild": false,
+        "Stage": "DEVELOPMENT",
+        "Tags": [{ "Key": "Project", "Value": "serv1-demo" }]
+      }
+    }
+  },
+  "Outputs": {
+    "HostingAppId": { "Value": { "Fn::GetAtt": ["HostingApp", "AppId"] } },
+    "HostingDomain": { "Value": { "Fn::GetAtt": ["HostingApp", "DefaultDomain"] } },
+    "HostingBranch": { "Value": "demo" }
+  }
+}

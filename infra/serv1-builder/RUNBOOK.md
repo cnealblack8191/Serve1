@@ -56,7 +56,9 @@ re-runs step 3; nothing is widened silently.
      --capabilities CAPABILITY_NAMED_IAM --tags Project=serv1
    ```
 4. Bootstrap CDK once for this account and region, with the restricted execution policy (required;
-   the same command also updates an existing default bootstrap):
+   the same command also updates an existing default bootstrap). **In this account (2026-11-09) the
+   existing `CDKToolkit` is a custom stack that also holds the hosting app, so the plain command
+   below fails. Use `infra/hosting-move/RUNBOOK.md` instead, which ends with this same bootstrap.**
    ```bash
    ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
    EXEC_POLICY=$(aws cloudformation describe-stacks --stack-name serv1-builder \
