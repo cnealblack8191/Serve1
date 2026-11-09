@@ -33,7 +33,10 @@
         "BranchName": "demo",
         "EnableAutoBuild": false,
         "Stage": "DEVELOPMENT",
-        "Tags": [{ "Key": "Project", "Value": "serv1-demo" }]
+        "Tags": [
+          { "Key": "Project", "Value": "serv1-demo" },
+          { "Key": "Environment", "Value": "demo" }
+        ]
       }
     }
   },

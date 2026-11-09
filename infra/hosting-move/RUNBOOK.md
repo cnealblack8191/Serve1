@@ -52,6 +52,13 @@ unit-tested in `tests/unit/hosting-move.test.ts`), and waits for the step's word
 | 4   | `… move.sh bootstrap`                        | Stock `npx aws-cdk@2 bootstrap aws://<account>/us-east-1 --cloudformation-execution-policies <serv1-cdk-execution>`, then `verify`                                                                                                                            | The app is out of CDKToolkit, the repository is gone, and the policy exists                                                                                                                                            |
 | -   | `… move.sh verify`                           | Nothing                                                                                                                                                                                                                                                       | Bootstrap version above 6; `cdk-hnb659fds-cfn-exec-role-…` carries **only** `serv1-cdk-execution`, with no inline policy; `serv1-hosting` holds the app and branch; app, branch and domain link unchanged since step 0 |
 
+**One known difference.** The read-only snapshot on 2026-11-09 found the live `demo` branch tagged
+`Project=serv1-demo` **and** `Environment=demo`, while CDKToolkit declared only the first.
+`serv1-hosting.json` declares both, so the import and the update that follows leave the live
+branch as it is. The check against CDKToolkit's declaration (`match`) accepts exactly this
+difference (`KNOWN_DRIFT` in `scripts/hosting-move/plan.ts`) and no other. The check against
+the live branch (`live`) still requires an exact match.
+
 After each step, the script compares the app (name, rewrite rules, default domain), the branch
 (stage, auto build, active job) and the domain link (status, sub-domains) with the step 0 snapshot.
 If anything differs, it stops.

@@ -140,14 +140,43 @@ export function hostingProps(t: Template): HostingProps {
     },
   };
 }
+/**
+ * Differences between what CDKToolkit declared and the live resources, found by the read-only
+ * snapshot on 2026-11-09 (planning session). serv1-hosting declares the live value, so importing
+ * changes nothing, and the CDKToolkit comparison accepts exactly this difference and no other.
+ * The live check (liveMatches) still requires the template to equal the live resources.
+ */
+export const KNOWN_DRIFT: {
+  part: "app" | "branch";
+  key: string;
+  declared: unknown;
+  live: unknown;
+}[] = [
+  {
+    part: "branch",
+    key: "Tags",
+    declared: [{ Key: "Project", Value: "serv1-demo" }],
+    live: [
+      { Key: "Project", Value: "serv1-demo" },
+      { Key: "Environment", Value: "demo" },
+    ],
+  },
+];
+
 export function hostingMatches(cdkToolkit: Template, hosting: Template): string[] {
   const a = hostingProps(cdkToolkit);
   const b = hostingProps(hosting);
   const out: string[] = [];
+  const same = (x: unknown, y: unknown) => JSON.stringify(x) === JSON.stringify(y);
   for (const part of ["app", "branch"] as const)
-    for (const [k, v] of Object.entries(a[part]))
-      if (JSON.stringify(v) !== JSON.stringify((b[part] as Record<string, unknown>)[k]))
-        out.push(`${part}.${k} differs`);
+    for (const [k, v] of Object.entries(a[part])) {
+      const mine = (b[part] as Record<string, unknown>)[k];
+      if (same(v, mine)) continue;
+      const known = KNOWN_DRIFT.some(
+        (d) => d.part === part && d.key === k && same(d.declared, v) && same(d.live, mine),
+      );
+      if (!known) out.push(`${part}.${k} differs`);
+    }
   for (const id of ["HostingApp", "HostingBranch"])
     if (hosting.Resources[id]?.DeletionPolicy !== "Retain")
       out.push(`${id} must be DeletionPolicy Retain in serv1-hosting`);

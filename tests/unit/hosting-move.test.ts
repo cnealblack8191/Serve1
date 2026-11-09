@@ -115,7 +115,7 @@ describe("serv1-hosting imports the app as it is", () => {
         branchName: "demo",
         enableAutoBuild: false,
         stage: "DEVELOPMENT",
-        tags: { Project: "serv1-demo" },
+        tags: { Project: "serv1-demo", Environment: "demo" },
       },
     };
     assert.deepEqual(liveMatches(app, branch, hosting()), []);
@@ -160,5 +160,46 @@ describe("step 2 import template", () => {
     assert.deepEqual(t.Resources, full.Resources);
     assert.deepEqual(t.Parameters, full.Parameters);
     assert.ok(full.Outputs && Object.keys(full.Outputs).length === 3);
+  });
+});
+
+describe("the branch's live Environment tag (snapshot, 2026-11-09)", () => {
+  it("serv1-hosting declares it, so the import and the update leave it in place", () => {
+    const tags = (hosting().Resources.HostingBranch!.Properties as { Tags: unknown }).Tags;
+    assert.deepEqual(tags, [
+      { Key: "Project", Value: "serv1-demo" },
+      { Key: "Environment", Value: "demo" },
+    ]);
+  });
+  it("the CDKToolkit comparison accepts exactly that known difference and no other", () => {
+    assert.deepEqual(hostingMatches(live(), hosting()), []);
+    const other = hosting();
+    (other.Resources.HostingBranch!.Properties as { Tags: unknown }).Tags = [
+      { Key: "Project", Value: "serv1-demo" },
+      { Key: "Environment", Value: "prod" },
+    ];
+    assert.match(hostingMatches(live(), other).join(), /branch.Tags differs/);
+    const declaredChanged = live();
+    (declaredChanged.Resources.HostingBranch!.Properties as { Tags: unknown }).Tags = [];
+    assert.match(hostingMatches(declaredChanged, hosting()).join(), /branch.Tags differs/);
+  });
+  it("the live check still needs the branch exactly as it is", () => {
+    const app = {
+      app: {
+        name: "serv1-demo",
+        platform: "WEB",
+        customRules: [{ source: "/<*>", target: "/index.html", status: "404-200" }],
+        tags: { Project: "serv1-demo", Environment: "demo" },
+      },
+    };
+    const branch = {
+      branch: {
+        branchName: "demo",
+        enableAutoBuild: false,
+        stage: "DEVELOPMENT",
+        tags: { Project: "serv1-demo" },
+      },
+    };
+    assert.match(liveMatches(app, branch, hosting()).join(), /branch tags differ/);
   });
 });
