@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Creates the four pilot sign-ins in the deployed Cognito user pool (docs/PILOT-DEPLOY.md, step 3).
-# Run by the owner in CloudShell (or as serv1-builder), from the repository root:
+# Run with the serv1-builder profile (or the role the owner approves), from the repository root:
 #
 #   AWS_PROFILE=serv1-builder bash scripts/pilot/create-users.sh amplify_outputs.json [domain] [--reset-passwords]
 #
