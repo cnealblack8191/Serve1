@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 
+import { SEED_VISITS } from "../src/data/local/seed";
 import { jobNo, signIn } from "./helpers";
 
 // job-20 is the seeded three-visit job (docs/VISITS.md).
@@ -76,4 +77,27 @@ test("office: adding a visit over the job's own visit warns of double booking", 
   await expect(dialog.getByRole("alert")).toContainText("it would overlap this job's own visit");
   await expect(dialog.getByRole("button", { name: "Add as another visit anyway" })).toBeVisible();
   await expect(dialog.getByRole("button", { name: "Schedule", exact: true })).toBeVisible();
+});
+
+test("office: the Visits panel warns before adding a visit over the tech's own appointment", async ({
+  page,
+}) => {
+  await signIn(page, "office");
+  await page.goto("/jobs/job-20");
+  const panel = page.getByRole("region", { name: "Job visits" });
+  const rows = panel.getByTestId("visit-row");
+  await expect(rows).toHaveCount(3);
+  // Visit 3 is Tara's; put a new visit for Tara on the same day and start time.
+  const start = new Date(SEED_VISITS.find((x) => x.id === "visit-20-3")!.scheduledStart!);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  await panel.getByRole("button", { name: "Add visit" }).click();
+  await panel.getByLabel("Visit tech").selectOption({ label: "Tara Tech" });
+  await panel
+    .getByLabel("Visit date")
+    .fill(`${start.getFullYear()}-${pad(start.getMonth() + 1)}-${pad(start.getDate())}`);
+  await panel
+    .getByLabel("Visit start")
+    .selectOption(String(start.getHours() * 60 + start.getMinutes()));
+  await expect(panel.getByRole("alert")).toContainText("Double booking");
+  await expect(panel.getByRole("button", { name: "Save visit anyway" })).toBeVisible();
 });

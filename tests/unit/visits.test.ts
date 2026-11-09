@@ -134,6 +134,69 @@ describe("multi-visit jobs", () => {
     assert.equal((await b.visits.get("visit-20-3"))!.status, "Done");
   });
 
+  it("a Visit done whose job update failed is finished on retry, never the next visit", async () => {
+    // Visits 2 and 3 both Tom's, back to back (Codex review of PR #21).
+    await as(b, OFFICE);
+    const v3 = (await b.visits.get("visit-20-3"))!;
+    await v.rescheduleVisit(v3, {
+      assignedTechId: "local-tech-2",
+      start: new Date(v3.scheduledStart!),
+      minutes: 60,
+    });
+    await as(b, TOM);
+    let job = (await b.jobs.get("job-20"))!;
+    job = await v.updateJobWithVisit(job, movePatch(job, "start"));
+
+    // The visit is saved, then the job update fails.
+    const realUpdate = b.jobs.update;
+    b.jobs.update = async () => {
+      throw new Error("network");
+    };
+    await assert.rejects(v.finishVisit(job, "Poles 1 to 4", "visit-20-2"));
+    b.jobs.update = realUpdate;
+    assert.equal((await b.visits.get("visit-20-2"))!.status, "Done");
+    job = (await b.jobs.get("job-20"))!;
+    assert.equal(job.status, "InProgress");
+
+    // Retry naming the same visit: only the job is finished; visit 3 is untouched.
+    job = await v.finishVisit(job, "Poles 1 to 4", "visit-20-2");
+    assert.equal(job.status, "Scheduled");
+    assert.equal((await b.visits.get("visit-20-3"))!.status, "Scheduled");
+  });
+
+  it("a lost Visit done is repaired, not repeated, when the screen has moved on", async () => {
+    await as(b, OFFICE);
+    const v3 = (await b.visits.get("visit-20-3"))!;
+    await v.rescheduleVisit(v3, {
+      assignedTechId: "local-tech-2",
+      start: new Date(v3.scheduledStart!),
+      minutes: 60,
+    });
+    await as(b, TOM);
+    let job = (await b.jobs.get("job-20"))!;
+    job = await v.updateJobWithVisit(job, movePatch(job, "start"));
+    const realUpdate = b.jobs.update;
+    b.jobs.update = async () => {
+      throw new Error("network");
+    };
+    await assert.rejects(v.finishVisit(job, null, "visit-20-2"));
+    b.jobs.update = realUpdate;
+    job = (await b.jobs.get("job-20"))!;
+
+    // Reloaded, the screen's current visit is visit 3, not started, while the job is In Progress.
+    await assert.rejects(
+      v.updateJobWithVisit(job, { status: "Complete", completedAt: new Date().toISOString() }),
+    );
+    job = await v.finishVisit(job, null, "visit-20-3");
+    assert.equal(job.status, "Scheduled");
+    assert.equal((await b.visits.get("visit-20-3"))!.status, "Scheduled");
+    // The office handover repairs it the same way.
+    await as(b, OFFICE);
+    await b.jobs.update("job-20", { status: "InProgress" });
+    await v.syncJobWithVisits("job-20");
+    assert.equal((await b.jobs.get("job-20"))!.status, "Scheduled");
+  });
+
   it("ending the last visit with a return needed holds the job; a new visit reschedules it", async () => {
     await as(b, OFFICE);
     const legacy = (await b.jobs.list()).find(

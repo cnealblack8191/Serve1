@@ -66,7 +66,8 @@ function JobScreen({ id }: { id: string }) {
   const me = useCurrentUser();
   const techs = useTechNames();
   const visitActions = useVisitActions();
-  const [finishing, setFinishing] = useState(false);
+  // The visit being ended, kept while the dialog is open so a retry ends the same visit.
+  const [finishingId, setFinishingId] = useState<string | null>(null);
   const [nextText, setNextText] = useState("");
 
   if (job.isLoading || visits.isLoading)
@@ -97,7 +98,8 @@ function JobScreen({ id }: { id: string }) {
   const myNext = vs.find((v) => isOpenVisit(v) && v.assignedTechId === myId) ?? null;
   const shown = (mine ? cur : myNext) ?? cur ?? vs[vs.length - 1]!;
   const lastVisit = !cur || isLastOpenVisit(vs, cur);
-  const nextPlanned = cur ? vs.find((v) => v.id !== cur.id && isOpenVisit(v)) : undefined;
+  const endingId = finishingId ?? cur?.id ?? null;
+  const nextPlanned = endingId ? vs.find((v) => v.id !== endingId && isOpenVisit(v)) : undefined;
   const techName = (id: string | null) =>
     techs.data?.find((t) => t.identityId === id)?.name ?? "another tech";
 
@@ -297,15 +299,15 @@ function JobScreen({ id }: { id: string }) {
         <Button
           variant="outline"
           className="h-12 w-full text-base"
-          onClick={() => setFinishing(true)}
+          onClick={() => setFinishingId(cur?.id ?? "")}
           disabled={visitActions.finish.isPending}
         >
           Visit done, return needed
         </Button>
       ) : null}
       <HoldDialog
-        open={finishing}
-        onOpenChange={setFinishing}
+        open={finishingId !== null}
+        onOpenChange={(open) => !open && setFinishingId(null)}
         busy={visitActions.finish.isPending}
         optional={!!nextPlanned}
         title="Visit done, return needed"
@@ -318,10 +320,10 @@ function JobScreen({ id }: { id: string }) {
         saveLabel="Visit done"
         onSave={(note) =>
           visitActions.finish.mutate(
-            { job: j, note: note || null },
+            { job: j, note: note || null, visitId: finishingId || null },
             {
               onSuccess: () => {
-                setFinishing(false);
+                setFinishingId(null);
                 setNextText(
                   nextPlanned
                     ? `Next: visit ${nextPlanned.number}, ${visitWhen(nextPlanned)}.`
@@ -368,7 +370,7 @@ function JobScreen({ id }: { id: string }) {
         <BottomAction>
           <Button
             className={PRIMARY_BUTTON}
-            onClick={() => setFinishing(true)}
+            onClick={() => setFinishingId(cur?.id ?? "")}
             disabled={visitActions.finish.isPending}
           >
             Visit done, return needed

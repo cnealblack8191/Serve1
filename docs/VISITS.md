@@ -40,6 +40,12 @@ recommendations, as approved:
   - If none is planned, the job goes **On hold**, "Needs a return visit", with the note in
     `holdNote`. This is the same hold the ECI1 phone's `return_visit` uses. When the office then
     adds a visit, the job is Scheduled again.
+  - The visit is saved before the job. If the job save fails, a retry names the same visit and
+    only finishes the job; it never ends the next visit. A job that is under way while its current
+    visit has not started is treated as that half-saved state: Visit done and the office handover
+    put the job back to Scheduled, and Job complete is refused.
+- **Double booking.** Adding a visit, from the Assign dialog or the job page's Visits panel, warns
+  when it overlaps any of the tech's appointments, this job's own visits included.
 - **First extra visit.** When the office adds a visit to a job that has none, visit 1 is first
   written from the job's own schedule.
 

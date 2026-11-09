@@ -2,6 +2,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 
 import { Field, SectionHeading } from "@/components/eci/primitives";
+import { jobLabel } from "@/components/serv1/dispatch/board";
 import { VisitList } from "@/components/serv1/visits/VisitList";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,12 +11,15 @@ import {
   atMinutes,
   currentVisit,
   dispatchSlots,
+  findOverlaps,
   formatSlot,
   fromDateInput,
   toDateInput,
+  useJobs,
   useTechNames,
   useVisitActions,
   useVisits,
+  visitEntries,
   visitsOf,
   type Job,
   type User,
@@ -54,6 +58,19 @@ export function JobVisits({
   const [hours, setHours] = useState(DISPATCH_DEFAULT_HOURS);
   const day = fromDateInput(date);
   const tech = techId || linked[0]?.identityId || "";
+  const allJobs = useJobs();
+  // A new visit keeps every existing appointment, this job's own included (Codex review of #21).
+  const start = day ? atMinutes(day, slot) : null;
+  const clashes =
+    open && start && tech
+      ? findOverlaps(
+          visitEntries(allJobs.data ?? [], visits.data ?? []),
+          "",
+          tech,
+          start,
+          new Date(start.getTime() + hours * 3_600_000),
+        )
+      : [];
 
   const add = () => {
     if (!day || !tech) return;
@@ -156,9 +173,22 @@ export function JobVisits({
                 </select>
               </Field>
             </div>
+            {clashes.length ? (
+              <p
+                role="alert"
+                className="rounded-md border border-orange-600 bg-orange-50 p-3 text-sm text-orange-950 dark:bg-orange-950 dark:text-orange-50"
+              >
+                Double booking: {linked.find((t) => t.identityId === tech)?.name ?? "this tech"}{" "}
+                already has {clashes.map((c) => jobLabel(c)).join(", ")} at that time.
+              </p>
+            ) : null}
             <div className="flex gap-2">
               <Button onClick={add} disabled={!day || !tech || actions.add.isPending}>
-                {actions.add.isPending ? "Saving…" : "Save visit"}
+                {actions.add.isPending
+                  ? "Saving…"
+                  : clashes.length
+                    ? "Save visit anyway"
+                    : "Save visit"}
               </Button>
               <Button variant="outline" onClick={() => setOpen(false)}>
                 Cancel

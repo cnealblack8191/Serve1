@@ -218,6 +218,11 @@ export async function syncJobWithVisits(jobId: string): Promise<void> {
     patch.holdReason = null;
     patch.holdNote = null;
   }
+  // A Visit done whose job update was lost (see finishVisit): the job waits for its next visit.
+  if (lostFinish(job, cur)) {
+    patch.status = "Scheduled";
+    patch.holdReason = null;
+  }
   if (Object.keys(patch).length) await b.jobs.update(jobId, patch);
   for (const v of all)
     if (!sameIds(v.jobTechIds, techs)) await b.visits.update(v.id, { jobTechIds: techs });
@@ -353,6 +358,11 @@ export async function updateJobWithVisit(job: Job, patch: Partial<NewJob>): Prom
         for (const v of live.filter(isOpenVisit))
           await b.visits.update(v.id, { status: "Cancelled" });
       } else if (to === "Complete") {
+        // Never complete a visit that has not started (a lost Visit done write; see finishVisit).
+        if (cur && lostFinish(job, cur))
+          throw new Error(
+            "This job's last visit was already ended. Refresh the job and try again.",
+          );
         if (cur)
           await b.visits.update(cur.id, {
             status: "Done",
@@ -378,19 +388,51 @@ export async function updateJobWithVisit(job: Job, patch: Partial<NewJob>): Prom
  * job goes back to Scheduled for it; with none, the job goes On hold ("Return visit needed") for
  * the office to plan one. Never completes the job (that is Job complete, with the signature).
  */
-export async function finishVisit(job: Job, note: string | null): Promise<Job> {
+export async function finishVisit(
+  job: Job,
+  note: string | null,
+  visitId?: string | null,
+): Promise<Job> {
   const b = backend();
   const words = note?.trim() || null;
   const live = liveVisitRows(job.id, await rowsOf(job.id));
   const cur = currentVisit(live);
   const hold: Partial<NewJob> = { status: "OnHold", holdReason: RETURN_NEEDED, holdNote: words };
-  if (!live.length || !cur) return b.jobs.update(job.id, hold);
-  await b.visits.update(cur.id, { status: "Done", completedAt: nowIso(), note: words });
-  const more = live.some((v) => v.id !== cur.id && isOpenVisit(v));
-  return b.jobs.update(
-    job.id,
-    more ? { status: "Scheduled", holdReason: null, holdNote: null } : hold,
-  );
+  const jobPatch = (finished: Visit) =>
+    live.some((v) => v.id !== finished.id && isOpenVisit(v))
+      ? { status: "Scheduled" as const, holdReason: null, holdNote: null }
+      : hold;
+  if (!live.length) return b.jobs.update(job.id, hold);
+
+  // The visit is written before the job, so a failed job write can leave the visit Done and the
+  // job still under way. A retry must finish that job write, never the next visit (Codex review
+  // of PR #21). The screen names the visit it is ending; without a name, an unstarted current
+  // visit on a job that is under way is the sign of that lost write.
+  const target = visitId ? live.find((v) => v.id === visitId) : cur;
+  if (visitId && !target) throw new Error("That visit is no longer on this job.");
+  if (target && target.status === "Done") return b.jobs.update(job.id, jobPatch(target));
+  if (!target) return b.jobs.update(job.id, hold);
+  if (target.id !== cur?.id) throw new Error("That visit is not the job's current visit.");
+  if (lostFinish(job, target)) return b.jobs.update(job.id, jobPatch(lastDone(live) ?? target));
+
+  await b.visits.update(target.id, { status: "Done", completedAt: nowIso(), note: words });
+  return b.jobs.update(job.id, jobPatch(target));
+}
+
+/**
+ * The job is under way (en route, in progress, or on an ordinary hold) but its current visit has
+ * not started: a visit was finished and the job's own update was lost.
+ */
+function lostFinish(job: Job, cur: Visit): boolean {
+  const active =
+    job.status === "EnRoute" ||
+    job.status === "InProgress" ||
+    (job.status === "OnHold" && !isReturnHold(job));
+  return active && cur.status === "Scheduled";
+}
+
+function lastDone(live: Visit[]): Visit | undefined {
+  return [...live].reverse().find((v) => v.status === "Done");
 }
 
 // ---------------------------------------------------------------- hooks
@@ -426,7 +468,8 @@ export function useVisitActions() {
     onSettled: refresh,
   });
   const finish = useMutation({
-    mutationFn: (v: { job: Job; note: string | null }) => finishVisit(v.job, v.note),
+    mutationFn: (v: { job: Job; note: string | null; visitId?: string | null }) =>
+      finishVisit(v.job, v.note, v.visitId),
     onSettled: refresh,
   });
   /** A job update that also moves its current visit (status changes, Complete after signing). */
