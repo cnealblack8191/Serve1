@@ -15,6 +15,7 @@ import {
   SEED_TECH_NOTES,
   SEED_TECH_RECEIPTS,
   SEED_USERS,
+  SEED_VISITS,
 } from "../../src/data/local/seed";
 
 /** A pilot sign-in as create-users.sh records it (no password, ever). */
@@ -66,6 +67,8 @@ export function buildSeedPlan(pilotUsers: PilotUser[]) {
     const u = byDemo.get(local);
     return u ? cognitoIdentity(u) : noSignInIdentity(local);
   };
+  const identities = (ids: string[]) =>
+    ids.map((x) => identity(x)).filter((x): x is string => x !== null);
   // Demo people without a sign-in keep a name-only email on the pilot domain (no mailbox, no login).
   const domain = pilotUsers[0]!.email.split("@")[1]!;
 
@@ -77,7 +80,17 @@ export function buildSeedPlan(pilotUsers: PilotUser[]) {
     })),
     customers: SEED_CUSTOMERS.map(strip),
     sites: SEED_SITES.map(strip),
-    jobs: SEED_JOBS.map((j) => ({ ...strip(j), assignedTechId: identity(j.assignedTechId) })),
+    jobs: SEED_JOBS.map((j) => ({
+      ...strip(j),
+      assignedTechId: identity(j.assignedTechId),
+      ...(j.visitTechIds ? { visitTechIds: identities(j.visitTechIds) } : {}),
+    })),
+    // Multi-visit demo job (docs/VISITS.md): each visit's tech and the job's tech list.
+    visits: SEED_VISITS.map((v) => ({
+      ...strip(v),
+      assignedTechId: identity(v.assignedTechId),
+      jobTechIds: v.jobTechIds ? identities(v.jobTechIds) : null,
+    })),
     opportunities: SEED_OPPORTUNITIES.map(strip),
     // Invoice rows are keyed by jobId (amplify/data/resource.ts); `id` is not a field.
     invoices: SEED_INVOICES.map((i) => {
