@@ -1,7 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import { Clock, MapPin, Navigation } from "lucide-react";
 
-import type { Customer, Job, Site } from "@/data";
+import { visitLabel, type Customer, type Job, type Site, type VisitEntry } from "@/data";
 import { JOB_STATUS_HEX } from "@/lib/status";
 
 import { directionsUrl, dayLabel, timeRange } from "./format";
@@ -20,6 +20,8 @@ export function TechJobCard({
   showDay?: boolean;
 }) {
   const name = customer?.name ?? "Customer";
+  const e = job as Partial<VisitEntry>;
+  const visit = e.visit && e.visitCount !== undefined ? visitLabel(e as VisitEntry) : null;
   return (
     <article
       className="eci-card overflow-hidden border-l-8"
@@ -47,6 +49,7 @@ export function TechJobCard({
             {site.address}
           </p>
         ) : null}
+        {visit ? <p className="text-sm font-medium text-muted-foreground">{visit}</p> : null}
         <p className="text-base">{job.description}</p>
         <PriorityTag priority={job.priority} />
       </Link>

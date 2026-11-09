@@ -24,6 +24,8 @@ import type {
   TechReceipt,
   NewTechReceipt,
   User,
+  Visit,
+  NewVisit,
 } from "./types";
 import type {
   SpectrumOperation,
@@ -93,6 +95,7 @@ export interface Backend {
   spectrumChecks: Repo<SpectrumCheck, NewSpectrumCheck>;
   techNotes: Repo<TechNote, NewTechNote>;
   techReceipts: Repo<TechReceipt, NewTechReceipt>;
+  visits: Repo<Visit, NewVisit>;
   spectrum: SpectrumApi;
   files: FilesApi;
   /** Fires when any table changes (own writes and, on Amplify, other users' writes). */

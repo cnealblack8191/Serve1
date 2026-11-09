@@ -9,6 +9,7 @@ import {
   type Role,
   type Site,
   type User,
+  type Visit,
 } from "../types";
 
 /**
@@ -618,6 +619,28 @@ const SEED_JOB_LIST: SeedJob[] = [
     laborHours: 1.5,
     ...stamp,
   },
+
+  // ---- A multi-visit job (docs/VISITS.md): its visits are in SEED_VISITS below ----
+  {
+    id: "job-20",
+    jobNumber: null, // set below from the created date
+    customerId: "cust-6",
+    siteId: "site-9",
+    description: "Replace parking lot pole lights (three visits)",
+    jobType: "Lighting",
+    priority: "Normal",
+    status: "Scheduled",
+    // The next open visit (visit 2), kept in step by src/data/visits.ts.
+    assignedTechId: "local-tech-2",
+    scheduledStart: at(workday(1), 13),
+    scheduledEnd: at(workday(1), 16),
+    startedAt: at(workday(-1), 8),
+    completedAt: null,
+    notes: "Visit 1: took down the old heads on poles 1 to 4 and checked the feeds.",
+    laborHours: null,
+    visitTechIds: ["local-tech-1", "local-tech-2"],
+    ...stamp,
+  },
 ];
 
 /** Business Services tracking on a few jobs (two came from won opportunities). */
@@ -928,5 +951,56 @@ export const SEED_TECH_RECEIPTS: import("../types").TechReceipt[] = [
     reviewNote: null,
     reviewedBy: null,
     reviewedAt: null,
+  },
+];
+
+/** Visits of the multi-visit demo job (job-20): one done, two still to come, two techs. */
+const visitStamp = { createdAt: at(-7, 9), updatedAt: at(-1, 9) };
+const job20Techs = ["local-tech-1", "local-tech-2"];
+export const SEED_VISITS: Visit[] = [
+  {
+    id: "visit-20-1",
+    jobId: "job-20",
+    number: 1,
+    scheduledStart: at(workday(-1), 8),
+    scheduledEnd: at(workday(-1), 12),
+    assignedTechId: "local-tech-1",
+    jobTechIds: job20Techs,
+    status: "Done",
+    startedAt: at(workday(-1), 8),
+    completedAt: at(workday(-1), 11.5),
+    holdReason: null,
+    note: "Old heads off poles 1 to 4. New LED heads arrive this week.",
+    ...visitStamp,
+  },
+  {
+    id: "visit-20-2",
+    jobId: "job-20",
+    number: 2,
+    scheduledStart: at(workday(1), 13),
+    scheduledEnd: at(workday(1), 16),
+    assignedTechId: "local-tech-2",
+    jobTechIds: job20Techs,
+    status: "Scheduled",
+    startedAt: null,
+    completedAt: null,
+    holdReason: null,
+    note: null,
+    ...visitStamp,
+  },
+  {
+    id: "visit-20-3",
+    jobId: "job-20",
+    number: 3,
+    scheduledStart: at(workday(3), 8),
+    scheduledEnd: at(workday(3), 12),
+    assignedTechId: "local-tech-1",
+    jobTechIds: job20Techs,
+    status: "Scheduled",
+    startedAt: null,
+    completedAt: null,
+    holdReason: null,
+    note: null,
+    ...visitStamp,
   },
 ];

@@ -8,6 +8,8 @@ import {
   type BridgeStore,
   type BSignature,
   type BUser,
+  type BVisit,
+  type VisitWrite,
 } from "./core";
 
 /**
@@ -38,6 +40,8 @@ export interface AwsStoreConfig {
     TechReceipt: string;
     TechAction: string;
     BridgeAudit: string;
+    /** Multi-visit jobs (docs/VISITS.md). */
+    Visit: string;
   };
   credentials: AwsCredentials;
   fetch: (url: string, init: RequestInit) => Promise<Response>;
@@ -236,6 +240,97 @@ export function createAwsStore(cfg: AwsStoreConfig): BridgeStore {
     }
   }
 
+  /**
+   * A job change and its current visit's change in one transaction: both only if the job still
+   * matches `expect` and the visit's status is still what the rules saw (else JobChanged).
+   */
+  async function updateJobAndVisit(
+    id: string,
+    patch: Partial<BJob>,
+    expect: Record<string, unknown>,
+    visit: VisitWrite,
+  ) {
+    const t = now().toISOString();
+    const jobFields = { ...patch, updatedAt: t } as Record<string, unknown>;
+    delete jobFields.id;
+    const visitFields = { ...visit.patch, updatedAt: t } as Record<string, unknown>;
+    delete visitFields.id;
+    const js = setParts(jobFields, "j");
+    const jc = expectCondition(expect);
+    const vs = setParts(visitFields, "w");
+    try {
+      await ddb("TransactWriteItems", {
+        TransactItems: [
+          {
+            Update: {
+              TableName: cfg.tables.Job,
+              Key: { id: { S: id } },
+              UpdateExpression: js.expression,
+              ConditionExpression: jc.expression,
+              ExpressionAttributeNames: { ...js.names, ...jc.names },
+              ExpressionAttributeValues: { ...js.values, ...jc.values },
+            },
+          },
+          {
+            Update: {
+              TableName: cfg.tables.Visit,
+              Key: { id: { S: visit.id } },
+              UpdateExpression: vs.expression,
+              // Still the status and the tech the rules saw (the office may reassign the visit).
+              ConditionExpression: visit.expectAssignedTechId
+                ? "attribute_exists(id) AND #wstatus = :wstatus AND #wtech = :wtech"
+                : "attribute_exists(id) AND #wstatus = :wstatus AND (attribute_not_exists(#wtech) OR attribute_type(#wtech, :wnull))",
+              ExpressionAttributeNames: {
+                ...vs.names,
+                "#wstatus": "status",
+                "#wtech": "assignedTechId",
+              },
+              ExpressionAttributeValues: {
+                ...vs.values,
+                ":wstatus": { S: visit.expectStatus },
+                ...(visit.expectAssignedTechId
+                  ? { ":wtech": { S: visit.expectAssignedTechId } }
+                  : { ":wnull": { S: "NULL" } }),
+              },
+            },
+          },
+          // The action's repeat marker, in the same write (Codex review of PR #21).
+          ...(visit.action
+            ? [
+                {
+                  Put: {
+                    TableName: cfg.tables.TechAction,
+                    Item: toItem({
+                      __typename: "TechAction",
+                      createdAt: t,
+                      updatedAt: t,
+                      ...visit.action,
+                    }),
+                    ConditionExpression: "attribute_not_exists(id)",
+                  },
+                },
+              ]
+            : []),
+        ],
+      });
+    } catch (e) {
+      if (!(e instanceof TransactionCanceled)) throw e;
+      const [jobReason, visitReason, actionReason] = e.reasons;
+      // Only the marker exists: this exact action was already applied. Nothing more to do.
+      if (
+        actionReason === "ConditionalCheckFailed" &&
+        jobReason !== "ConditionalCheckFailed" &&
+        visitReason !== "ConditionalCheckFailed"
+      )
+        return;
+      throw new JobChanged();
+    } finally {
+      scans.delete(cfg.tables.Job);
+      scans.delete(cfg.tables.Visit);
+      scans.delete(cfg.tables.TechAction);
+    }
+  }
+
   /** Creates the row unless one with this id exists (then does nothing). */
   async function putOnce(table: string, typename: string, row: Record<string, unknown>) {
     const t = now().toISOString();
@@ -278,7 +373,33 @@ export function createAwsStore(cfg: AwsStoreConfig): BridgeStore {
     materials: list(r.materials),
     materialsAt: s(r.materialsAt),
     techStatusAt: s(r.techStatusAt),
+    visitTechIds: list<string>(r.visitTechIds),
   });
+  const toVisit = (r: Record<string, unknown>): BVisit => ({
+    id: String(r.id),
+    jobId: String(r.jobId ?? ""),
+    number: typeof r.number === "number" ? r.number : 0,
+    scheduledStart: s(r.scheduledStart),
+    scheduledEnd: s(r.scheduledEnd),
+    assignedTechId: s(r.assignedTechId),
+    status: (s(r.status) ?? "Scheduled") as BVisit["status"],
+    startedAt: s(r.startedAt),
+    completedAt: s(r.completedAt),
+    holdReason: s(r.holdReason),
+    note: s(r.note),
+  });
+
+  /** SET expression parts for an update (names and values prefixed so two can share a call). */
+  function setParts(fields: Record<string, unknown>, p: string) {
+    const names: Record<string, string> = {};
+    const values: Record<string, AV> = {};
+    const sets = Object.entries(fields).map(([k, v], i) => {
+      names[`#${p}f${i}`] = k;
+      values[`:${p}v${i}`] = toAV(v);
+      return `#${p}f${i} = :${p}v${i}`;
+    });
+    return { names, values, expression: `SET ${sets.join(", ")}` };
+  }
 
   const s3Url = (key: string) =>
     new URL(`https://${cfg.bucket}.s3.${cfg.region}.amazonaws.com/${key}`);
@@ -301,7 +422,16 @@ export function createAwsStore(cfg: AwsStoreConfig): BridgeStore {
       return r ? toJob(r) : null;
     },
     async jobsAssignedTo(identityId) {
-      return (await scan(cfg.tables.Job)).filter((r) => r.assignedTechId === identityId).map(toJob);
+      return (await scan(cfg.tables.Job))
+        .map(toJob)
+        .filter(
+          (j) => j.assignedTechId === identityId || (j.visitTechIds ?? []).includes(identityId),
+        );
+    },
+    async visits(jobId, opts) {
+      // The completion re-check must see visits added during this request (Codex review of #21).
+      if (opts?.fresh) scans.delete(cfg.tables.Visit);
+      return (await scan(cfg.tables.Visit)).filter((r) => r.jobId === jobId).map(toVisit);
     },
     async getCustomer(id) {
       const r = await get(cfg.tables.Customer, id);
@@ -356,6 +486,7 @@ export function createAwsStore(cfg: AwsStoreConfig): BridgeStore {
               paidWith: s(r.paidWith) ?? "company_card",
               note: s(r.note),
               storagePath: s(r.storagePath),
+              assignedTechId: s(r.assignedTechId),
               at: s(r.at) ?? "",
             }) satisfies BReceipt,
         );
@@ -373,7 +504,8 @@ export function createAwsStore(cfg: AwsStoreConfig): BridgeStore {
           } satisfies BSignature)
         : null;
     },
-    async updateJob(id, patch, expect) {
+    async updateJob(id, patch, expect, visit) {
+      if (visit) return updateJobAndVisit(id, patch, expect, visit);
       const fields = { ...patch, updatedAt: now().toISOString() } as Record<string, unknown>;
       delete fields.id;
       const names: Record<string, string> = {};
@@ -424,6 +556,7 @@ export function createAwsStore(cfg: AwsStoreConfig): BridgeStore {
           type: "Photo",
           caption: r.caption,
           uploadedBy: r.uploadedBy,
+          jobTechIds: r.jobTechIds ?? null,
         },
         expect,
       ),
@@ -465,7 +598,9 @@ export function createAwsStore(cfg: AwsStoreConfig): BridgeStore {
     },
     async getAction(actionId) {
       const r = await get(cfg.tables.TechAction, actionId);
-      return r ? { result: s(r.result) ?? "applied" } : null;
+      return r
+        ? { result: s(r.result) ?? "applied", jobId: s(r.jobId), serv1UserId: s(r.serv1UserId) }
+        : null;
     },
     saveAction: (r) => putOnce(cfg.tables.TechAction, "TechAction", { ...r }),
     async audit(r) {

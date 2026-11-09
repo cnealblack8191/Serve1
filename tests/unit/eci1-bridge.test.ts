@@ -11,6 +11,7 @@ import {
   type BJob,
   type BridgeStore,
   type BUser,
+  type BVisit,
 } from "../../amplify/functions/eci1-tech-bridge/core.ts";
 import { techMayMove } from "../../src/data/jobflow.ts";
 
@@ -62,6 +63,7 @@ function memoryStore() {
     ],
   ]);
   const jobs = new Map<string, BJob>();
+  const visits = new Map<string, BVisit>();
   const rows = {
     notes: new Map<
       string,
@@ -74,7 +76,7 @@ function memoryStore() {
     receipts: new Map<string, Parameters<BridgeStore["addReceipt"]>[0]>(),
     signatures: new Map<string, Parameters<BridgeStore["addSignature"]>[0]>(),
     files: new Map<string, number>(),
-    actions: new Map<string, string>(),
+    actions: new Map<string, { result: string; jobId: string; serv1UserId: string }>(),
     audit: [] as { route: string; result: string; serv1UserId: string | null }[],
   };
   const check = (id: string, expect: Record<string, unknown>) => {
@@ -85,16 +87,36 @@ function memoryStore() {
   const store: BridgeStore = {
     getUser: async (id) => users.get(id) ?? null,
     getJob: async (id) => jobs.get(id) ?? null,
-    jobsAssignedTo: async (t) => [...jobs.values()].filter((j) => j.assignedTechId === t),
+    jobsAssignedTo: async (t) =>
+      [...jobs.values()].filter(
+        (j) => j.assignedTechId === t || (j.visitTechIds ?? []).includes(t),
+      ),
+    visits: async (j) => [...visits.values()].filter((v) => v.jobId === j),
     getCustomer: async () => ({ name: "Synthetic Customer", phone: "555-0100" }),
     getSite: async () => ({ name: "Main", address: "1 Test Way", accessNotes: null }),
     notes: async (j) => [...rows.notes.values()].filter((n) => n.jobId === j),
     photos: async (j) => [...rows.photos.values()].filter((n) => n.jobId === j),
     receipts: async (j) => [...rows.receipts.values()].filter((n) => n.jobId === j),
     signature: async (j) => [...rows.signatures.values()].find((n) => n.jobId === j) ?? null,
-    updateJob: async (id, patch, expect) => {
+    updateJob: async (id, patch, expect, visit) => {
       check(id, expect);
+      const v = visit ? visits.get(visit.id) : undefined;
+      if (
+        visit &&
+        (v?.status !== visit.expectStatus ||
+          (v?.assignedTechId ?? null) !== visit.expectAssignedTechId)
+      )
+        throw new JobChanged();
+      // The action marker is saved in the same write; an existing one means already applied.
+      if (visit?.action && rows.actions.has(visit.action.id)) return;
       jobs.set(id, { ...jobs.get(id)!, ...patch });
+      if (visit) visits.set(visit.id, { ...visits.get(visit.id)!, ...visit.patch });
+      if (visit?.action)
+        rows.actions.set(visit.action.id, {
+          result: visit.action.result,
+          jobId: visit.action.jobId,
+          serv1UserId: visit.action.serv1UserId,
+        });
     },
     addNote: async (r, expect) => {
       check(r.jobId, expect);
@@ -114,11 +136,12 @@ function memoryStore() {
     },
     putFile: async (k, b) => void rows.files.set(k, b.length),
     fileUrl: async (k) => `https://signed.example/${k}?short`,
-    getAction: async (id) => (rows.actions.has(id) ? { result: rows.actions.get(id)! } : null),
-    saveAction: async (r) => void rows.actions.set(r.id, r.result),
+    getAction: async (id) => rows.actions.get(id) ?? null,
+    saveAction: async (r) =>
+      void rows.actions.set(r.id, { result: r.result, jobId: r.jobId, serv1UserId: r.serv1UserId }),
     audit: async (r) => void rows.audit.push(r),
   };
-  return { store, jobs, rows, users };
+  return { store, jobs, rows, users, visits };
 }
 
 const opts = { enabled: true, now: NOW, timeZone: "America/New_York" };
@@ -272,7 +295,7 @@ describe("repeats, late and out-of-order sends", () => {
       (await send("status", { jobId: "j1", status: "EnRoute", at: T(5), actionId: "late-1" })).ok,
     );
     assert.equal(m.jobs.get("j1")!.status, "InProgress");
-    assert.equal(m.rows.actions.get("late-1"), "stale_ignored");
+    assert.equal(m.rows.actions.get("late-1")?.result, "stale_ignored");
 
     const list = (name: string) => [{ name, qty: 2, unit: "ea" }];
     assert.ok(
@@ -518,5 +541,237 @@ describe("failures", () => {
       ((await send("note", { jobId: "j1", text: "x" })) as { code: string }).code,
       "serv1_unavailable",
     );
+  });
+});
+
+describe("multi-visit jobs (docs/VISITS.md)", () => {
+  const visit = (id: string, number: number, tech: string, status: BVisit["status"]): BVisit => ({
+    id,
+    jobId: "mv",
+    number,
+    scheduledStart: T(number * 1440),
+    scheduledEnd: T(number * 1440 + 120),
+    assignedTechId: tech,
+    status,
+    startedAt: null,
+    completedAt: null,
+    holdReason: null,
+    note: null,
+  });
+  beforeEach(() => {
+    m.jobs.set("mv", job("mv", { assignedTechId: "tech-a", visitTechIds: ["tech-a", "tech-b"] }));
+    m.visits.set("v1", visit("v1", 1, "tech-a", "Scheduled"));
+    m.visits.set("v2", visit("v2", 2, "tech-b", "Scheduled"));
+  });
+  const jobsFor = async (u: string) =>
+    ((await send("jobs", {}, u)) as unknown as { jobs: Record<string, unknown>[] }).jobs;
+
+  it("lists the job for both techs, at each tech's own visit, with who may act", async () => {
+    const a = (await jobsFor("u-a")).find((j) => j.id === "mv")!;
+    const b = (await jobsFor("u-b")).find((j) => j.id === "mv")!;
+    assert.equal(a.canAct, true);
+    assert.equal(b.canAct, false);
+    assert.equal(a.lastVisit, false);
+    assert.equal(a.scheduledStart, T(1440));
+    assert.equal(b.scheduledStart, T(2880));
+    assert.equal(a.currentVisitId, "v1");
+    assert.equal(b.myVisitId, "v2");
+    assert.deepEqual(
+      (b.visits as { id: string; mine: boolean }[]).map((v) => [v.id, v.mine]),
+      [
+        ["v1", false],
+        ["v2", true],
+      ],
+    );
+    // A job with no visits lists its one implied visit.
+    const plain = (await jobsFor("u-a")).find((j) => j.id === "j1")!;
+    assert.equal((plain.visits as unknown[]).length, 1);
+    assert.equal(plain.currentVisitId, "j1#1");
+  });
+
+  it("only the current visit's tech may change the job", async () => {
+    const r = (await send("status", { jobId: "mv", status: "EnRoute" }, "u-b")) as {
+      code: string;
+      message: string;
+    };
+    assert.equal(r.code, "not_assigned");
+    assert.match(r.message, /another tech's/);
+    assert.equal(
+      ((await send("note", { jobId: "mv", text: "hi" }, "u-b")) as { code: string }).code,
+      "not_assigned",
+    );
+    // Naming a visit that is not the current one is refused.
+    assert.equal(
+      (
+        (await send("status", { jobId: "mv", status: "EnRoute", visitId: "v2" })) as {
+          code: string;
+        }
+      ).code,
+      "invalid",
+    );
+  });
+
+  it("status moves the current visit with the job, in the same write", async () => {
+    assert.equal(
+      (await send("status", { jobId: "mv", status: "InProgress", visitId: "v1" })).ok,
+      true,
+    );
+    assert.equal(m.jobs.get("mv")!.status, "InProgress");
+    assert.equal(m.visits.get("v1")!.status, "InProgress");
+    assert.equal(m.visits.get("v1")!.startedAt, T(0));
+  });
+
+  it("complete is refused while another visit is planned; visit_done hands over to it", async () => {
+    await send("status", { jobId: "mv", status: "InProgress" });
+    const refused = (await send("complete", {
+      jobId: "mv",
+      noSignatureReason: "not_on_site",
+    })) as { code: string };
+    assert.equal(refused.code, "bad_transition");
+    assert.equal(
+      (await send("visit_done", { jobId: "mv", note: "Heads on poles 1 to 4", at: T(1) })).ok,
+      true,
+    );
+    assert.equal(m.jobs.get("mv")!.status, "Scheduled");
+    assert.equal(m.visits.get("v1")!.status, "Done");
+    assert.equal(m.visits.get("v1")!.note, "Heads on poles 1 to 4");
+
+    // Tom's visit is now current: he may start it and complete the job.
+    assert.equal(
+      (await send("status", { jobId: "mv", status: "InProgress", at: T(2) }, "u-b")).ok,
+      true,
+    );
+    const done = await send(
+      "complete",
+      { jobId: "mv", noSignatureReason: "not_on_site", at: T(3) },
+      "u-b",
+    );
+    assert.equal(done.ok, true);
+    assert.equal(m.jobs.get("mv")!.status, "Complete");
+    assert.equal(m.visits.get("v2")!.status, "Done");
+  });
+
+  it("visit_done on the last visit holds the job for a return visit", async () => {
+    m.visits.set("v2", { ...m.visits.get("v2")!, status: "Cancelled" });
+    await send("status", { jobId: "mv", status: "InProgress" });
+    assert.equal(
+      (await send("visit_done", { jobId: "mv", note: "Need a part", at: T(1) })).ok,
+      true,
+    );
+    const j = m.jobs.get("mv")!;
+    assert.equal(j.status, "OnHold");
+    assert.equal(j.holdReason, HOLD_REASONS.return_visit);
+    assert.equal(j.holdNote, "Need a part");
+    // On a job with no visits too, and only from work under way.
+    assert.equal(
+      ((await send("visit_done", { jobId: "j1" })) as { code: string }).code,
+      "bad_transition",
+    );
+  });
+
+  it("rows the bridge adds carry the job's techs, so the other tech can read them", async () => {
+    await send("note", { jobId: "mv", text: "Feeds checked" });
+    const note = [...m.rows.notes.values()].find((n) => n.jobId === "mv") as unknown as {
+      jobTechIds: string[];
+    };
+    assert.deepEqual(note.jobTechIds, ["tech-a", "tech-b"]);
+  });
+
+  it("receipts stay the sending tech's own on a shared job (Codex review of PR #21)", async () => {
+    await send("receipt", {
+      jobId: "mv",
+      kind: "materials",
+      paidWith: "personal",
+      amount: 42.5,
+      photos: [{ base64: JPEG }],
+    });
+    const a = (await jobsFor("u-a")).find((j) => j.id === "mv")!;
+    const b = (await jobsFor("u-b")).find((j) => j.id === "mv")!;
+    assert.equal((a.receipts as unknown[]).length, 1);
+    assert.equal((b.receipts as unknown[]).length, 0);
+  });
+
+  it("a visit reassigned by the office meanwhile refuses the old tech's change", async () => {
+    // The bridge read the visit as Tara's; the office then gives it to Tom before the save.
+    const real = m.store.updateJob;
+    m.store.updateJob = async (id, patch, expect, v) => {
+      m.visits.set("v1", { ...m.visits.get("v1")!, assignedTechId: "tech-b" });
+      return real(id, patch, expect, v);
+    };
+    const r = (await send("status", { jobId: "mv", status: "EnRoute" })) as { code: string };
+    assert.equal(r.code, "serv1_unavailable");
+    assert.equal(m.jobs.get("mv")!.status, "Scheduled");
+    assert.equal(m.visits.get("v1")!.status, "Scheduled");
+  });
+
+  it("complete is refused if the office adds a visit during the signature upload", async () => {
+    m.visits.set("v2", { ...m.visits.get("v2")!, status: "Cancelled" });
+    await send("status", { jobId: "mv", status: "InProgress" });
+    const realPut = m.store.putFile;
+    // The office adds visit 3 for the same tech while the image uploads; the job is written too.
+    m.store.putFile = async (k, b, t) => {
+      m.visits.set("v3", visit("v3", 3, "tech-a", "Scheduled"));
+      m.jobs.set("mv", { ...m.jobs.get("mv")!, updatedAt: T(500) });
+      return realPut(k, b, t);
+    };
+    const body = {
+      jobId: "mv",
+      signerName: "Pat Synthetic",
+      signaturePng: [{ base64: PNG }],
+      at: T(1),
+    };
+    assert.equal(((await send("complete", body)) as { code: string }).code, "bad_transition");
+    m.store.putFile = realPut;
+    assert.equal(m.jobs.get("mv")!.status, "InProgress");
+    assert.equal(m.visits.get("v1")!.status, "InProgress");
+  });
+
+  it("complete is cancelled if the job is written after the visits were read again", async () => {
+    m.visits.set("v2", { ...m.visits.get("v2")!, status: "Cancelled" });
+    await send("status", { jobId: "mv", status: "InProgress" });
+    const realVisits = m.store.visits;
+    let reads = 0;
+    // The second visits read (after the upload) races an office change that writes the job.
+    m.store.visits = async (j) => {
+      const rows = await realVisits(j);
+      if (++reads === 2) m.jobs.set("mv", { ...m.jobs.get("mv")!, updatedAt: T(600) });
+      return rows;
+    };
+    const body = {
+      jobId: "mv",
+      signerName: "Pat Synthetic",
+      signaturePng: [{ base64: PNG }],
+      at: T(1),
+    };
+    assert.equal(((await send("complete", body)) as { code: string }).code, "serv1_unavailable");
+    m.store.visits = realVisits;
+    assert.equal(m.jobs.get("mv")!.status, "InProgress");
+  });
+
+  it("a visit change is recognised on retry even if saving the action afterwards failed", async () => {
+    await send("status", { jobId: "mv", status: "InProgress" });
+    const real = m.store.saveAction;
+    m.store.saveAction = async () => {
+      throw new Error("network");
+    };
+    const body = { jobId: "mv", note: null, at: T(1), actionId: "vd-1" };
+    // The job and visit are saved with the marker; the separate save afterwards fails.
+    assert.equal(((await send("visit_done", body)) as { code: string }).code, "serv1_unavailable");
+    m.store.saveAction = real;
+    assert.equal(m.visits.get("v1")!.status, "Done");
+    // The job now waits for Tom's visit, but the identical retry is still answered ok.
+    assert.equal((await send("visit_done", body)).ok, true);
+    assert.equal(m.visits.get("v2")!.status, "Scheduled");
+  });
+
+  it("a retry of a saved action is ok even after the job moved on (Codex review of PR #21)", async () => {
+    m.visits.set("v2", { ...m.visits.get("v2")!, status: "Cancelled" });
+    await send("status", { jobId: "mv", status: "InProgress" });
+    const body = { jobId: "mv", noSignatureReason: "not_on_site", at: T(1), actionId: "done-1" };
+    assert.equal((await send("complete", body)).ok, true);
+    // The reply was lost; the phone sends the same action again.
+    assert.equal((await send("complete", body)).ok, true);
+    // Another tech reusing that action id is not answered from it.
+    assert.equal(((await send("complete", body, "u-b")) as { code: string }).code, "not_assigned");
   });
 });

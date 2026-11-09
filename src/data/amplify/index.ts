@@ -39,6 +39,8 @@ import type {
   NewTechNote,
   TechReceipt,
   NewTechReceipt,
+  Visit,
+  NewVisit,
   JobMaterial,
   User,
 } from "../types";
@@ -131,6 +133,9 @@ export function createAmplifyBackend(outputs: object): Backend {
     }
   };
   const num = (v: number | null | undefined) => (typeof v === "number" ? v : null);
+  /** a.string().array() fields: drop the nulls AppSync allows inside the list. */
+  const ids = (v: (string | null)[] | null | undefined): string[] | null =>
+    v ? v.filter((x): x is string => typeof x === "string") : null;
 
   type M = Client["models"];
   type Row<K extends keyof Schema> = Schema[K]["type"];
@@ -211,6 +216,23 @@ export function createAmplifyBackend(outputs: object): Backend {
     materials: jsonList<JobMaterial>(r.materials),
     materialsAt: text(r.materialsAt),
     techStatusAt: text(r.techStatusAt),
+    visitTechIds: ids(r.visitTechIds),
+  });
+  const mapVisit = (r: Row<"Visit">): Visit => ({
+    id: r.id,
+    createdAt: r.createdAt,
+    updatedAt: r.updatedAt,
+    jobId: r.jobId,
+    number: r.number,
+    scheduledStart: text(r.scheduledStart),
+    scheduledEnd: text(r.scheduledEnd),
+    assignedTechId: text(r.assignedTechId),
+    jobTechIds: ids(r.jobTechIds),
+    status: (r.status ?? "Scheduled") as Visit["status"],
+    startedAt: text(r.startedAt),
+    completedAt: text(r.completedAt),
+    holdReason: text(r.holdReason),
+    note: text(r.note),
   });
   const mapTechNote = (r: Row<"TechNote">): TechNote => ({
     id: r.id,
@@ -218,6 +240,7 @@ export function createAmplifyBackend(outputs: object): Backend {
     updatedAt: r.updatedAt,
     jobId: r.jobId,
     assignedTechId: text(r.assignedTechId),
+    jobTechIds: ids(r.jobTechIds),
     text: r.text,
     by: text(r.by),
     at: r.at,
@@ -296,6 +319,7 @@ export function createAmplifyBackend(outputs: object): Backend {
     updatedAt: r.updatedAt,
     jobId: r.jobId,
     assignedTechId: text(r.assignedTechId),
+    jobTechIds: ids(r.jobTechIds),
     storagePath: r.storagePath,
     type: (r.type ?? "Document") as Attachment["type"],
     caption: text(r.caption),
@@ -307,6 +331,7 @@ export function createAmplifyBackend(outputs: object): Backend {
     updatedAt: r.updatedAt,
     jobId: r.jobId,
     assignedTechId: text(r.assignedTechId),
+    jobTechIds: ids(r.jobTechIds),
     signerName: r.signerName,
     storagePath: r.storagePath,
     signedAt: r.signedAt,
@@ -506,7 +531,13 @@ export function createAmplifyBackend(outputs: object): Backend {
     async update(id, patch) {
       const before = patch.assignedTechId !== undefined ? await jobsRepo.get(id) : null;
       const after = await jobsRepo.update(id, patch);
-      if (before && before.assignedTechId !== after.assignedTechId)
+      // A multi-visit job's rows keep their own tech (the others read them through jobTechIds);
+      // re-tagging would hand one tech's receipts to the next (Codex review of PR #21).
+      if (
+        before &&
+        before.assignedTechId !== after.assignedTechId &&
+        !(after.visitTechIds ?? []).length
+      )
         await retagFileRows(id, after.assignedTechId);
       return after;
     },
@@ -598,6 +629,7 @@ export function createAmplifyBackend(outputs: object): Backend {
       "id",
       plain,
     ),
+    visits: repo<"Visit", Visit, NewVisit>("visits", "Visit", mapVisit, "id", plain),
     files: filesApi,
     onChange(listener) {
       listeners.add(listener);

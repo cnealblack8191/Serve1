@@ -11,11 +11,22 @@ import { JobPhotos } from "@/components/serv1/tech/JobPhotos";
 import { JobStatusBadge, PriorityTag } from "@/components/serv1/tech/JobStatusBadge";
 import { HoldDialog } from "@/components/serv1/tech/HoldDialog";
 import { SignatureStep } from "@/components/serv1/tech/SignatureStep";
+import { visitWhen } from "@/components/serv1/visits/format";
+import { VisitList } from "@/components/serv1/visits/VisitList";
 import { JOB_STATUS_CLASS, JOB_STATUS_LABEL } from "@/lib/status";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
+  actingVisit,
   isFinished,
+  isLastOpenVisit,
+  isOpenVisit,
+  isReturnHold,
+  useCurrentUser,
+  useTechNames,
+  useVisitActions,
+  useVisits,
+  visitsOf,
   useCustomers,
   useFileUrl,
   useJob,
@@ -38,7 +49,7 @@ function Page() {
   return <JobScreen key={id} id={id} />;
 }
 
-type Step = "detail" | "sign" | "done";
+type Step = "detail" | "sign" | "done" | "visitDone";
 
 function JobScreen({ id }: { id: string }) {
   const job = useJob(id);
@@ -51,8 +62,16 @@ function JobScreen({ id }: { id: string }) {
   const signatureUrl = useFileUrl(signature.data?.storagePath);
   const [signatureUnreadable, setSignatureUnreadable] = useState(false);
   const [step, setStep] = useState<Step>("detail");
+  const visits = useVisits();
+  const me = useCurrentUser();
+  const techs = useTechNames();
+  const visitActions = useVisitActions();
+  // The visit being ended, kept while the dialog is open so a retry ends the same visit.
+  const [finishingId, setFinishingId] = useState<string | null>(null);
+  const [nextText, setNextText] = useState("");
 
-  if (job.isLoading) return <p className="text-base text-muted-foreground">Loading job…</p>;
+  if (job.isLoading || visits.isLoading)
+    return <p className="text-base text-muted-foreground">Loading job…</p>;
   const j = job.data;
   if (!j) {
     return (
@@ -66,9 +85,30 @@ function JobScreen({ id }: { id: string }) {
   const customer = customers.data?.find((c) => c.id === j.customerId);
   const site = j.siteId ? sites.data?.find((s) => s.id === j.siteId) : undefined;
 
+  // Multi-visit jobs (docs/VISITS.md): the tech acts on the job only while its current visit is
+  // theirs; a job with no visits is its own one visit.
+  const { visits: vs, implied } = visitsOf(j, visits.data ?? []);
+  // The current visit, or a finished last visit whose job save failed (so it can be retried).
+  const cur = actingVisit(j, vs);
+  const myId = me.data?.identityId ?? null;
+  const myTurn = implied || (!!cur && cur.assignedTechId === myId);
+  // The job passes to the next visit's tech when the office hands it over (only the office
+  // reassigns a job); until then that tech sees the job but cannot change it.
+  const mine = myTurn && (implied || j.assignedTechId === myId);
+  const waitingHandover = myTurn && !mine;
+  const myNext = vs.find((v) => isOpenVisit(v) && v.assignedTechId === myId) ?? null;
+  const shown = (mine ? cur : myNext) ?? cur ?? vs[vs.length - 1]!;
+  const lastVisit = !cur || isLastOpenVisit(vs, cur);
+  const endingId = finishingId ?? cur?.id ?? null;
+  const nextPlanned = endingId ? vs.find((v) => v.id !== endingId && isOpenVisit(v)) : undefined;
+  const techName = (id: string | null) =>
+    techs.data?.find((t) => t.identityId === id)?.name ?? "another tech";
+
   if (step === "done") return <DoneScreen customerName={customer?.name} />;
-  // Signing completes the job, so it is offered only while the job is In Progress.
-  if (step === "sign" && j.status === "InProgress") {
+  if (step === "visitDone") return <DoneScreen visitDone={nextText} />;
+  // Signing completes the job, so it is offered only while the job is In Progress, on its last
+  // open visit, to that visit's tech.
+  if (step === "sign" && j.status === "InProgress" && mine && lastVisit) {
     return (
       <SignatureStep
         job={j}
@@ -79,8 +119,9 @@ function JobScreen({ id }: { id: string }) {
     );
   }
 
-  const notStarted = j.status === "New" || j.status === "Scheduled" || j.status === "EnRoute";
-  const working = j.status === "InProgress";
+  const notStarted =
+    mine && (j.status === "New" || j.status === "Scheduled" || j.status === "EnRoute");
+  const working = mine && j.status === "InProgress";
   const onHold = j.status === "OnHold";
   const doMove = (action: "enRoute" | "start" | "resume") => move.mutate({ job: j, action });
   const start = () => doMove("start");
@@ -94,8 +135,18 @@ function JobScreen({ id }: { id: string }) {
           <JobStatusBadge status={j.status} />
         </div>
         <p className="text-base font-medium">
-          {dayLabel(j.scheduledStart)}, {timeRange(j)}
+          {dayLabel(shown.scheduledStart)},{" "}
+          {timeRange({
+            ...j,
+            scheduledStart: shown.scheduledStart,
+            scheduledEnd: shown.scheduledEnd,
+          })}
         </p>
+        {!implied ? (
+          <p className="text-sm font-medium text-muted-foreground">
+            Visit {shown.number} of {vs.length}
+          </p>
+        ) : null}
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
           {j.jobNumber ? (
             <span className="text-sm text-muted-foreground">{j.jobNumber}</span>
@@ -148,6 +199,24 @@ function JobScreen({ id }: { id: string }) {
         <p className="-mt-2 text-sm text-muted-foreground">Customer phone: {customer.phone}</p>
       ) : null}
 
+      {waitingHandover ? (
+        <section className="rounded-md border border-border bg-muted p-4 text-base" role="status">
+          <p className="font-semibold">Your visit is next</p>
+          <p>The office is handing this job to you. Ask them if it does not change soon.</p>
+        </section>
+      ) : !mine && cur ? (
+        <section className="rounded-md border border-border bg-muted p-4 text-base" role="status">
+          <p className="font-semibold">
+            Visit {cur.number} is {techName(cur.assignedTechId)}&apos;s
+          </p>
+          <p>
+            {myNext
+              ? `Your visit: ${visitWhen(myNext)}. You can act on the job then.`
+              : "You can read this job; there is no visit of yours still to come."}
+          </p>
+        </section>
+      ) : null}
+
       {onHold ? (
         <section
           className={cn("rounded-md p-4 text-base ring-1", JOB_STATUS_CLASS.OnHold)}
@@ -155,6 +224,7 @@ function JobScreen({ id }: { id: string }) {
         >
           <p className="font-semibold">{JOB_STATUS_LABEL.OnHold}</p>
           {j.holdReason ? <p>{j.holdReason}</p> : null}
+          {j.holdNote ? <p className="whitespace-pre-wrap">{j.holdNote}</p> : null}
         </section>
       ) : null}
       {j.reviewNote && working ? (
@@ -164,9 +234,15 @@ function JobScreen({ id }: { id: string }) {
         </section>
       ) : null}
 
-      {working || onHold || isFinished(j.status) ? <JobPhotos job={j} canAdd={working} /> : null}
+      {working || onHold || isFinished(j.status) || !implied ? (
+        <JobPhotos job={j} canAdd={working} />
+      ) : null}
 
       {working ? <JobNotes job={j} /> : null}
+
+      {!implied ? (
+        <VisitList visits={vs} techs={techs.data ?? []} currentId={cur?.id ?? null} meId={myId} />
+      ) : null}
       {!working && j.notes ? (
         <section className="space-y-1">
           <h2 className="text-lg font-semibold">Notes</h2>
@@ -193,13 +269,13 @@ function JobScreen({ id }: { id: string }) {
         </section>
       ) : null}
 
-      {update.isError || move.isError ? (
+      {update.isError || move.isError || visitActions.finish.isError ? (
         <p className="text-sm text-red-700 dark:text-red-400" role="alert">
           Could not update the job. Try again.
         </p>
       ) : null}
 
-      {j.status === "Scheduled" ? (
+      {mine && j.status === "Scheduled" ? (
         <Button
           variant="outline"
           className="h-12 w-full text-base"
@@ -219,6 +295,47 @@ function JobScreen({ id }: { id: string }) {
           Put on hold
         </Button>
       ) : null}
+      {/* "Job complete" is offered only on the last open visit; any visit can end with a return. */}
+      {working && lastVisit ? (
+        <Button
+          variant="outline"
+          className="h-12 w-full text-base"
+          onClick={() => setFinishingId(cur?.id ?? "")}
+          disabled={visitActions.finish.isPending}
+        >
+          Visit done, return needed
+        </Button>
+      ) : null}
+      <HoldDialog
+        open={finishingId !== null}
+        onOpenChange={(open) => !open && setFinishingId(null)}
+        busy={visitActions.finish.isPending}
+        optional={!!nextPlanned}
+        title="Visit done, return needed"
+        description={
+          nextPlanned
+            ? `Visit ${nextPlanned.number} is planned for ${visitWhen(nextPlanned)}. Add anything the next visit should know.`
+            : "No other visit is planned yet. Say what is left, so the office can plan the return visit."
+        }
+        label="What is left to do"
+        saveLabel="Visit done"
+        onSave={(note) =>
+          visitActions.finish.mutate(
+            { job: j, note: note || null, visitId: finishingId || null },
+            {
+              onSuccess: () => {
+                setFinishingId(null);
+                setNextText(
+                  nextPlanned
+                    ? `Next: visit ${nextPlanned.number}, ${visitWhen(nextPlanned)}.`
+                    : "The office will plan the return visit.",
+                );
+                setStep("visitDone");
+              },
+            },
+          )
+        }
+      />
       <HoldDialog
         open={holding}
         onOpenChange={setHolding}
@@ -234,7 +351,7 @@ function JobScreen({ id }: { id: string }) {
             {move.isPending ? "Saving…" : "Start Job"}
           </Button>
         </BottomAction>
-      ) : onHold ? (
+      ) : onHold && mine && !isReturnHold(j) ? (
         <BottomAction>
           <Button
             className={PRIMARY_BUTTON}
@@ -244,10 +361,20 @@ function JobScreen({ id }: { id: string }) {
             Resume job
           </Button>
         </BottomAction>
-      ) : working ? (
+      ) : working && lastVisit ? (
         <BottomAction>
           <Button className={PRIMARY_BUTTON} onClick={() => setStep("sign")}>
-            Complete
+            Job complete
+          </Button>
+        </BottomAction>
+      ) : working ? (
+        <BottomAction>
+          <Button
+            className={PRIMARY_BUTTON}
+            onClick={() => setFinishingId(cur?.id ?? "")}
+            disabled={visitActions.finish.isPending}
+          >
+            Visit done, return needed
           </Button>
         </BottomAction>
       ) : null}

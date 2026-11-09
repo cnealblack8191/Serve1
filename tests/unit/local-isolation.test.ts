@@ -37,7 +37,12 @@ describe("local backend: technician isolation", () => {
     await as(b, "tech1@serv1.demo");
     const jobs = await b.jobs.list();
     assert.ok(jobs.length > 0);
-    assert.ok(jobs.every((j) => j.assignedTechId === "local-tech-1"));
+    assert.ok(
+      jobs.every(
+        (j) =>
+          j.assignedTechId === "local-tech-1" || (j.visitTechIds ?? []).includes("local-tech-1"),
+      ),
+    );
     assert.equal(await b.jobs.get("job-3"), null); // tech2's job
   });
 

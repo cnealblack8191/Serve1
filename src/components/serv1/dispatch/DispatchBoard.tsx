@@ -22,15 +22,22 @@ import {
   useJobs,
   useSites,
   useTechNames,
+  useVisitActions,
+  useVisits,
+  liveVisitRows,
+  handoversDue,
+  visitEntries,
+  withCurrentVisit,
   type Job,
   type NewJob,
   type User,
+  type VisitEntry,
 } from "@/data";
 
 import { AssignDialog } from "./AssignDialog";
 import { AttentionQueue } from "./AttentionQueue";
 import { ConfirmDropDialog } from "./ConfirmDropDialog";
-import { JOB_DRAG_TYPE, jobLabel } from "./board";
+import { cardId, JOB_DRAG_TYPE, jobLabel } from "./board";
 import { JobCard } from "./JobCard";
 import { StatusLegend } from "./StatusLegend";
 import { TechTimeline } from "./TechTimeline";
@@ -55,6 +62,8 @@ const dayText = (d: Date) =>
 type Pending = {
   job: Job;
   patch: Partial<NewJob>;
+  /** For a visit of a multi-visit job: the visit write to run instead of the job patch. */
+  run?: () => Promise<unknown>;
   message: string;
   done: string;
   /** Set when the move double-books the tech; the board then always asks first. */
@@ -68,6 +77,8 @@ export function DispatchBoard() {
   const customers = useCustomers();
   const sites = useSites();
   const { update } = useJobMutations();
+  const visitsQuery = useVisits();
+  const visitActions = useVisitActions();
 
   const [day, setDay] = useState(startOfToday);
   const [confirmOnDrop, setConfirmOnDrop] = useState(readConfirmSetting);
@@ -76,6 +87,24 @@ export function DispatchBoard() {
   const [dragging, setDragging] = useState<Job | null>(null);
 
   const allJobs = useMemo(() => jobs.data ?? [], [jobs.data]);
+  const allVisits = useMemo(() => visitsQuery.data ?? [], [visitsQuery.data]);
+  // One card per visit (docs/VISITS.md); a job with no visits is its own one visit.
+  const entries = useMemo(() => visitEntries(allJobs, allVisits), [allJobs, allVisits]);
+  // "Needs attention" judges each job by the visit it is on now.
+  const attentionJobs = useMemo(
+    () => allJobs.map((j) => withCurrentVisit(j, allVisits)),
+    [allJobs, allVisits],
+  );
+  /** A board card by its drag id: a visit entry, or a queued job. */
+  const cardById = (id: string): Job | VisitEntry | undefined =>
+    entries.find((e) => cardId(e) === id) ?? allJobs.find((j) => j.id === id);
+  const realVisit = (j: Job) => {
+    const e = j as Partial<VisitEntry>;
+    return e.visit && e.implied === false ? e.visit : null;
+  };
+  // A tech ended a visit and the next is another tech's: only the office reassigns a job.
+  const handovers = useMemo(() => handoversDue(allJobs, allVisits), [allJobs, allVisits]);
+  const hasVisitRows = (j: Job) => liveVisitRows(j.id, allVisits).length > 0;
   const techs = useMemo(
     () => (techsQuery.data ?? []).filter((t) => !!t.identityId),
     [techsQuery.data],
@@ -92,7 +121,8 @@ export function DispatchBoard() {
 
   const save = async (p: Pending) => {
     try {
-      await update.mutateAsync({ id: p.job.id, patch: p.patch });
+      if (p.run) await p.run();
+      else await update.mutateAsync({ id: p.job.id, patch: p.patch });
       toast.success(p.done);
     } catch (err) {
       toast.error(`Couldn't update ${jobLabel(p.job)}`, {
@@ -108,10 +138,23 @@ export function DispatchBoard() {
     const end = new Date(patch.scheduledEnd!);
     const when = `${dayText(start)}, ${formatSlot(start.getHours() * 60 + start.getMinutes())} – ${formatSlot(end.getHours() * 60 + end.getMinutes())}`;
     const verb = job.assignedTechId ? "Move" : "Schedule";
-    const clashes = findOverlaps(allJobs, job.id, tech.identityId!, start, end);
+    const clashes = findOverlaps(entries, cardId(job), tech.identityId!, start, end);
+    const plan = {
+      assignedTechId: tech.identityId!,
+      start,
+      minutes: Math.round((end.getTime() - start.getTime()) / 60_000),
+    };
+    const visit = realVisit(job);
+    // A visit moves alone; a job that already has visits gets a new one; others move as today.
+    const run = visit
+      ? () => visitActions.reschedule.mutateAsync({ visit, plan })
+      : hasVisitRows(job)
+        ? () => visitActions.add.mutateAsync({ job, plan })
+        : undefined;
     return {
       job,
       patch,
+      run,
       warning: clashes.length
         ? `${tech.name} already has ${clashes.map(jobLabel).join(", ")} at that time.`
         : undefined,
@@ -120,8 +163,8 @@ export function DispatchBoard() {
     };
   };
 
-  const onDropJob = (jobId: string, tech: User, slot: number) => {
-    const job = allJobs.find((j) => j.id === jobId);
+  const onDropJob = (id: string, tech: User, slot: number) => {
+    const job = cardById(id);
     if (!job || !canDispatch(job)) return;
     const start = atMinutes(day, slot);
     if (job.assignedTechId === tech.identityId && job.scheduledStart === start.toISOString())
@@ -129,19 +172,26 @@ export function DispatchBoard() {
     propose(scheduleChange(job, tech, start), confirmOnDrop);
   };
 
-  const onDropOnQueue = (jobId: string) => {
-    const job = allJobs.find((j) => j.id === jobId);
+  const onDropOnQueue = (id: string) => {
+    const job = cardById(id);
     if (!job || !canDispatch(job) || isUnscheduled(job)) return;
     propose(
       {
         job,
         patch: unschedulePatch(),
+        run: unscheduleRun(job),
         message: `Take ${jobLabel(job)} off ${techName(job.assignedTechId ?? "")}'s schedule and move it back to Unscheduled?`,
         done: `${jobLabel(job)} moved back to Unscheduled`,
       },
       confirmOnDrop,
     );
   };
+
+  /** Taking one visit of a multi-visit job off the board removes that visit only. */
+  function unscheduleRun(job: Job) {
+    const visit = realVisit(job);
+    return visit ? () => visitActions.remove.mutateAsync(visit) : undefined;
+  }
 
   const setConfirm = (on: boolean) => {
     setConfirmOnDrop(on);
@@ -159,8 +209,8 @@ export function DispatchBoard() {
       return next;
     });
 
-  const loading = jobs.isLoading || techsQuery.isLoading;
-  const loadError = jobs.error ?? techsQuery.error;
+  const loading = jobs.isLoading || techsQuery.isLoading || visitsQuery.isLoading;
+  const loadError = jobs.error ?? techsQuery.error ?? visitsQuery.error;
 
   return (
     <>
@@ -213,7 +263,33 @@ export function DispatchBoard() {
         <EmptyState title="Loading the board…" />
       ) : (
         <>
-          <AttentionQueue jobs={allJobs} customers={customerMap} />
+          {handovers.length ? (
+            <section
+              role="status"
+              aria-label="Jobs to hand over"
+              className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-border bg-muted p-3 text-sm"
+            >
+              <span>
+                {handovers.length === 1
+                  ? `${jobLabel(handovers[0]!)} is ready for its next visit's tech.`
+                  : `${handovers.length} jobs are ready for their next visit's tech.`}{" "}
+                Hand over so that tech can work on it.
+              </span>
+              <Button
+                size="sm"
+                disabled={visitActions.handOver.isPending}
+                onClick={() =>
+                  visitActions.handOver.mutate(handovers, {
+                    onSuccess: () => toast.success("Handed over"),
+                    onError: (e) => toast.error("Couldn't hand over", { description: e.message }),
+                  })
+                }
+              >
+                Hand over
+              </Button>
+            </section>
+          ) : null}
+          <AttentionQueue jobs={attentionJobs} customers={customerMap} />
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
             <section
               aria-label="Unscheduled jobs"
@@ -267,7 +343,7 @@ export function DispatchBoard() {
               ) : (
                 <TechTimeline
                   techs={techs}
-                  jobs={allJobs}
+                  jobs={entries}
                   day={day}
                   customers={customerMap}
                   sites={siteMap}
@@ -289,12 +365,28 @@ export function DispatchBoard() {
       )}
 
       <AssignDialog
-        jobs={allJobs}
+        jobs={entries}
         job={assigning}
         techs={techs}
         day={day}
-        busy={update.isPending}
+        busy={update.isPending || visitActions.add.isPending || visitActions.reschedule.isPending}
         onClose={() => setAssigning(null)}
+        onAddVisit={(job, techId, start, minutes) => {
+          setAssigning(null);
+          setDay(atMinutes(start, 0));
+          const name = techs.find((t) => t.identityId === techId)?.name ?? "the tech";
+          void save({
+            job,
+            patch: {},
+            run: () =>
+              visitActions.add.mutateAsync({
+                job,
+                plan: { assignedTechId: techId, start, minutes },
+              }),
+            message: "",
+            done: `Visit added to ${job.jobNumber ?? "the job"} with ${name}, ${dayText(start)}`,
+          });
+        }}
         onSubmit={(job, techId, start, minutes) => {
           const tech = techs.find((t) => t.identityId === techId);
           if (!tech) return;
@@ -307,8 +399,11 @@ export function DispatchBoard() {
           void save({
             job,
             patch: unschedulePatch(),
+            run: unscheduleRun(job),
             message: "",
-            done: `${jobLabel(job)} moved back to Unscheduled`,
+            done: realVisit(job)
+              ? `${jobLabel(job)} removed`
+              : `${jobLabel(job)} moved back to Unscheduled`,
           });
         }}
       />

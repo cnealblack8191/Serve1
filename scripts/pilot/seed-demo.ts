@@ -95,6 +95,7 @@ async function main() {
           : { ...r, materials: JSON.stringify(j.materials) };
       },
     ],
+    ["Visit", "visits", plan.visits, (r) => ({ id: String(r.id) }), (r) => r],
     ["Opportunity", "opportunities", plan.opportunities, (r) => ({ id: String(r.id) }), (r) => r],
     [
       "Invoice",

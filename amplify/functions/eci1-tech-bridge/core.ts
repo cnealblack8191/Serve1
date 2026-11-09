@@ -6,6 +6,11 @@
  *
  * Every call: linked, active Tech user -> job assigned to that user -> status rules -> actionId
  * repeat check -> save -> audit row. Never creates or deletes jobs, never touches office data.
+ *
+ * Multi-visit jobs (docs/VISITS.md, additive): a job with Visit rows is worked one visit at a time.
+ * Only the tech of the current visit (the first one still open) may change the job; the visit's
+ * status follows each change in the same write; "visit_done" ends a visit with a return needed,
+ * and "complete" is accepted only on the last open visit. A job with no visits is one visit.
  */
 
 import { createHash } from "node:crypto";
@@ -18,6 +23,7 @@ export const ROUTES = [
   "materials",
   "receipt",
   "complete",
+  "visit_done",
 ] as const;
 export type Route = (typeof ROUTES)[number];
 
@@ -100,6 +106,50 @@ export interface BJob {
   materials: Material[] | null;
   materialsAt: string | null;
   techStatusAt: string | null;
+  /** Every tech with a visit on the job (Serv1 keeps it in step with the Visit rows). */
+  visitTechIds?: string[] | null;
+}
+
+export type VisitStatus = "Scheduled" | "EnRoute" | "InProgress" | "OnHold" | "Done" | "Cancelled";
+export interface BVisit {
+  id: string;
+  jobId: string;
+  number: number;
+  scheduledStart: string | null;
+  scheduledEnd: string | null;
+  assignedTechId: string | null;
+  status: VisitStatus;
+  startedAt: string | null;
+  completedAt: string | null;
+  holdReason: string | null;
+  note: string | null;
+}
+/**
+ * A visit change saved with a job change: only if the visit's status and tech are still what the
+ * rules saw (the office may reassign it meanwhile; Codex review of PR #21).
+ */
+export interface VisitWrite {
+  id: string;
+  patch: Partial<BVisit>;
+  expectStatus: VisitStatus;
+  expectAssignedTechId: string | null;
+  /**
+   * The action's repeat marker, saved in the same atomic write. A visit change can move the job to
+   * another visit, so a retry after a lost marker would be refused; with the marker saved together,
+   * the retry is always recognised (Codex review of PR #21). A marker that already exists means
+   * this exact action was already applied: the write then changes nothing and succeeds.
+   */
+  action?: ActionRow;
+}
+
+/** The repeat marker of one tech action (saveAction). */
+export interface ActionRow {
+  id: string;
+  jobId: string;
+  route: Route;
+  serv1UserId: string;
+  at: string;
+  result: "applied" | "stale_ignored";
 }
 
 export interface Material {
@@ -133,6 +183,8 @@ export interface BReceipt {
   note: string | null;
   storagePath: string | null;
   at: string;
+  /** The tech who sent it: receipts stay theirs alone, even on a shared job. */
+  assignedTechId?: string | null;
 }
 export interface BSignature {
   id: string;
@@ -143,7 +195,7 @@ export interface BSignature {
 
 /** Fields a job update is conditional on: the state the rules were checked against. */
 export type JobExpect = Partial<
-  Pick<BJob, "assignedTechId" | "status" | "techStatusAt" | "materialsAt">
+  Pick<BJob, "assignedTechId" | "status" | "techStatusAt" | "materialsAt" | "updatedAt">
 >;
 
 /** The job changed between the check and the save; nothing was saved. */
@@ -152,7 +204,11 @@ export class JobChanged extends Error {}
 export interface BridgeStore {
   getUser(id: string): Promise<BUser | null>;
   getJob(id: string): Promise<BJob | null>;
+  /** Jobs assigned to the tech, or with a visit of theirs (visitTechIds). */
   jobsAssignedTo(identityId: string): Promise<BJob[]>;
+  /** The job's Visit rows (any status). */
+  /** The job's visits. `fresh` reads the table again rather than this request's earlier read. */
+  visits(jobId: string, opts?: { fresh?: boolean }): Promise<BVisit[]>;
   getCustomer(id: string): Promise<{ name: string; phone: string | null } | null>;
   getSite(
     id: string,
@@ -164,17 +220,19 @@ export interface BridgeStore {
   /**
    * Saves fields on the job only if it still matches `expect` (atomically), else throws
    * JobChanged, so an office lock or a newer tech change made meanwhile is never overwritten.
+   * With `visit`, that visit is changed in the same atomic write (multi-visit jobs).
    */
-  updateJob(id: string, patch: Partial<BJob>, expect: JobExpect): Promise<void>;
+  updateJob(id: string, patch: Partial<BJob>, expect: JobExpect, visit?: VisitWrite): Promise<void>;
   /** Creates a row with this id unless it exists (repeats then do nothing). */
   // Each add is atomic with a check that the job still matches `expect` (else JobChanged), so a
   // reassignment or office lock made meanwhile never gets a row tagged for the wrong tech.
+  // jobTechIds: the job's visitTechIds, so every tech on the job may read the row (docs/VISITS.md).
   addNote(
-    row: BNote & { assignedTechId: string; actionId: string },
+    row: BNote & { assignedTechId: string; actionId: string; jobTechIds?: string[] | null },
     expect: JobExpect,
   ): Promise<void>;
   addPhoto(
-    row: BPhoto & { assignedTechId: string; uploadedBy: string },
+    row: BPhoto & { assignedTechId: string; uploadedBy: string; jobTechIds?: string[] | null },
     expect: JobExpect,
   ): Promise<void>;
   addReceipt(
@@ -182,21 +240,16 @@ export interface BridgeStore {
     expect: JobExpect,
   ): Promise<void>;
   addSignature(
-    row: BSignature & { assignedTechId: string; storagePath: string },
+    row: BSignature & { assignedTechId: string; storagePath: string; jobTechIds?: string[] | null },
     expect: JobExpect,
   ): Promise<void>;
   putFile(key: string, bytes: Uint8Array, contentType: string): Promise<void>;
   fileUrl(key: string): Promise<string>;
   /** The saved action for this id, if any (the repeat check). */
-  getAction(actionId: string): Promise<{ result: string } | null>;
-  saveAction(row: {
-    id: string;
-    jobId: string;
-    route: Route;
-    serv1UserId: string;
-    at: string;
-    result: "applied" | "stale_ignored";
-  }): Promise<void>;
+  getAction(
+    actionId: string,
+  ): Promise<{ result: string; jobId?: string | null; serv1UserId?: string | null } | null>;
+  saveAction(row: ActionRow): Promise<void>;
   audit(row: {
     eciUserId: string | null;
     serv1UserId: string | null;
@@ -222,6 +275,16 @@ export const TECH_MOVES: Record<string, JobStatus[]> = {
   InProgress: ["OnHold", "Complete"],
   OnHold: ["EnRoute", "InProgress"],
 };
+
+/** Where a tech may end a visit from (visit_done), as in src/data/jobflow.ts. */
+const VISIT_DONE_FROM: JobStatus[] = ["EnRoute", "InProgress", "OnHold"];
+const OPEN_VISIT: VisitStatus[] = ["Scheduled", "EnRoute", "InProgress", "OnHold"];
+
+/** A job's visits that are not cancelled, in order; [] for a job with no Visit rows. */
+const liveVisits = (vs: BVisit[]) =>
+  vs.filter((v) => v.status !== "Cancelled").sort((a, b) => a.number - b.number);
+/** The id a job with no Visit rows uses for its one visit (never stored). */
+const impliedVisitId = (jobId: string) => `${jobId}#1`;
 
 /** Hold reasons: the phone sends a code; the office reads words. */
 export const HOLD_REASONS: Record<string, string> = {
@@ -275,6 +338,14 @@ export function pathBelongsToJob(path: string, jobId: string): boolean {
   if (parts[0] === "jobs") return parts[1] === keyPart(jobId) && parts.length > 2;
   if (parts[0] === "tech-files") return parts.length > 3 && parts[2] === jobId;
   return false;
+}
+
+/** The one visit of a job with no Visit rows, as a status. */
+function impliedVisitStatus(j: BJob): VisitStatus {
+  if (j.status === "New" || j.status === "Scheduled") return "Scheduled";
+  if (j.status === "EnRoute" || j.status === "InProgress") return j.status;
+  if (j.status === "OnHold") return j.holdReason === HOLD_REASONS.return_visit ? "Done" : "OnHold";
+  return j.status === "Cancelled" ? "Cancelled" : "Done";
 }
 
 /** Phone times compared as instants (whole and fractional seconds both allowed). */
@@ -353,18 +424,50 @@ export async function handleBridge(
     if (!sentAt) return finish(fail("invalid"));
     const job = await store.getJob(jobId);
     if (!job) return finish(fail("job_not_found"));
-    if (job.assignedTechId !== user.identityId) return finish(fail("not_assigned"));
-
-    // 3. Repeat check: a saved actionId changes nothing (photos repeat per position).
     const index = route === "photos" ? Number(body.index ?? 0) : 0;
     if (!Number.isInteger(index) || index < 0 || index > 9) return finish(fail("invalid"));
     const repeatKey = route === "photos" ? `${actionId}#${index}` : actionId;
+    // A retry of an action this tech already saved on this job is answered first: the save may
+    // have moved the job to another tech's visit (Codex review of PR #21).
+    const saved = await store.getAction(repeatKey);
+    if (saved && saved.jobId === job.id && saved.serv1UserId === user.id)
+      return finish({ ok: true });
+    // A multi-visit job is the current visit's tech's to change; others only read it.
+    const visits = liveVisits(await store.visits(job.id));
+    const visit = visits.find((v) => OPEN_VISIT.includes(v.status)) ?? null;
+    if (visits.length) {
+      if (!visit || visit.assignedTechId !== user.identityId)
+        return finish(
+          fail(
+            "not_assigned",
+            (job.visitTechIds ?? []).includes(user.identityId)
+              ? "This visit is another tech's. You can act on the job on your own visit."
+              : undefined,
+          ),
+        );
+    } else if (job.assignedTechId !== user.identityId) return finish(fail("not_assigned"));
+    // The phone may say which visit it means; it must be the current one.
+    if (body.visitId !== undefined && body.visitId !== (visit?.id ?? impliedVisitId(job.id)))
+      return finish(fail("invalid", "That visit is not the current one. Refresh the job."));
+    const moreVisits = visits.some((v) => v.id !== visit?.id && OPEN_VISIT.includes(v.status));
+
+    // 3. Repeat check: a saved actionId changes nothing (photos repeat per position).
     if (await store.getAction(repeatKey)) return finish({ ok: true });
 
     // 4. Office statuses win.
     if (LOCKED.includes(job.status)) return finish(fail("job_locked"));
 
-    const outcome = await write(route, body, { store, job, user, actionId, sentAt, index });
+    const outcome = await write(route, body, {
+      store,
+      job,
+      user,
+      actionId,
+      route,
+      sentAt,
+      index,
+      visit,
+      moreVisits,
+    });
     if (!outcome.ok) return finish(outcome);
     await store.saveAction({
       id: repeatKey,
@@ -392,14 +495,38 @@ type WriteCtx = {
   job: BJob;
   user: BUser;
   actionId: string;
+  route: Route;
   sentAt: string;
   index: number;
+  /** The current visit of a multi-visit job (null for a job with no visits). */
+  visit: BVisit | null;
+  /** Another visit of the job is still open after this one. */
+  moreVisits: boolean;
 };
 type WriteOutcome = { ok: true; stale?: boolean } | Extract<Reply, { ok: false }>;
 
 async function write(route: Route, b: Record<string, unknown>, c: WriteCtx): Promise<WriteOutcome> {
-  const { store, job, user, actionId, sentAt } = c;
+  const { store, job, user, actionId, sentAt, visit, moreVisits } = c;
   const tech = user.identityId!;
+  const jobTechIds = job.visitTechIds ?? null;
+  /** The current visit's change, saved atomically with the job's. */
+  const visitWrite = (patch: Partial<BVisit>): VisitWrite | undefined =>
+    visit
+      ? {
+          id: visit.id,
+          patch,
+          expectStatus: visit.status,
+          expectAssignedTechId: visit.assignedTechId,
+          action: {
+            id: actionId,
+            jobId: job.id,
+            route: c.route,
+            serv1UserId: user.id,
+            at: sentAt,
+            result: "applied",
+          },
+        }
+      : undefined;
   const staleStatus = olderThan(sentAt, job.techStatusAt);
   // Every job write (and every row added to it) is conditional on the state checked here.
   const expectJob: JobExpect = { assignedTechId: job.assignedTechId, status: job.status };
@@ -430,7 +557,38 @@ async function write(route: Route, b: Record<string, unknown>, c: WriteCtx): Pro
         patch.holdReason = null;
         patch.holdNote = null;
       }
-      await store.updateJob(job.id, patch, expectStatus);
+      await store.updateJob(
+        job.id,
+        patch,
+        expectStatus,
+        visitWrite({
+          status: to,
+          ...(to === "InProgress" && !visit?.startedAt ? { startedAt: sentAt } : {}),
+          holdReason: to === "OnHold" ? (patch.holdReason ?? null) : null,
+        }),
+      );
+      return { ok: true };
+    }
+    case "visit_done": {
+      // End this visit with another trip needed. With a later visit planned the job waits for it
+      // (Scheduled); with none it goes On hold "Needs a return visit" for the office to plan one.
+      if (!optStr(b.note, 1000)) return fail("invalid") as WriteOutcome;
+      if (staleStatus) return { ok: true, stale: true };
+      if (!VISIT_DONE_FROM.includes(job.status)) return fail("bad_transition") as WriteOutcome;
+      const note = typeof b.note === "string" && b.note.trim() ? b.note.trim() : null;
+      await store.updateJob(
+        job.id,
+        moreVisits
+          ? { status: "Scheduled", techStatusAt: sentAt, holdReason: null, holdNote: null }
+          : {
+              status: "OnHold",
+              techStatusAt: sentAt,
+              holdReason: HOLD_REASONS.return_visit!,
+              holdNote: note,
+            },
+        expectStatus,
+        visitWrite({ status: "Done", completedAt: sentAt, note }),
+      );
       return { ok: true };
     }
     case "note": {
@@ -440,6 +598,7 @@ async function write(route: Route, b: Record<string, unknown>, c: WriteCtx): Pro
           id: `eci1-${actionId}`,
           jobId: job.id,
           assignedTechId: tech,
+          jobTechIds,
           text: b.text.trim(),
           by: user.name,
           at: sentAt,
@@ -463,6 +622,7 @@ async function write(route: Route, b: Record<string, unknown>, c: WriteCtx): Pro
           id: `eci1-${actionId}-${c.index}`,
           jobId: job.id,
           assignedTechId: tech,
+          jobTechIds,
           storagePath: key,
           caption: typeof caption === "string" && caption.trim() ? caption.trim() : null,
           uploadedBy: user.name,
@@ -555,6 +715,12 @@ async function write(route: Route, b: Record<string, unknown>, c: WriteCtx): Pro
       if (staleStatus) return { ok: true, stale: true };
       if (job.status !== "Complete" && !OPEN.includes(job.status))
         return fail("bad_transition") as WriteOutcome;
+      // Job complete only on the last open visit (owner, 2026-11-09).
+      if (moreVisits)
+        return fail(
+          "bad_transition",
+          "Other visits of this job are still planned. Use visit_done to end this visit.",
+        ) as WriteOutcome;
       if (png) {
         const key = `jobs/${keyPart(job.id)}/signatures/${actionKey(actionId)}.png`;
         await store.putFile(key, png, "image/png");
@@ -563,12 +729,25 @@ async function write(route: Route, b: Record<string, unknown>, c: WriteCtx): Pro
             id: `eci1-${actionId}`,
             jobId: job.id,
             assignedTechId: tech,
+            jobTechIds,
             signerName: (signer as string).trim(),
             signedAt: sentAt,
             storagePath: key,
           },
           expectJob,
         );
+      }
+      // The office may have changed the visit plan during the upload (Codex review of PR #21).
+      // Read the visits again, and save only if the job is untouched since it was read: every
+      // office change to a job's visits also writes the job (syncJobWithVisits), so a visit
+      // added after this read cancels the save (JobChanged) and the phone's retry is refused.
+      if (visit) {
+        const again = liveVisits(await store.visits(job.id, { fresh: true }));
+        if (again.some((v) => v.id !== visit.id && OPEN_VISIT.includes(v.status)))
+          return fail(
+            "bad_transition",
+            "Other visits of this job are still planned. Use visit_done to end this visit.",
+          ) as WriteOutcome;
       }
       // minutesOnJob is information only: pay hours come from TimeX.
       await store.updateJob(
@@ -585,7 +764,8 @@ async function write(route: Route, b: Record<string, unknown>, c: WriteCtx): Pro
               ? b.noSignatureNote.trim()
               : null,
         },
-        expectStatus,
+        visit ? { ...expectStatus, updatedAt: job.updatedAt } : expectStatus,
+        visitWrite({ status: "Done", completedAt: sentAt }),
       );
       return { ok: true };
     }
@@ -594,7 +774,12 @@ async function write(route: Route, b: Record<string, unknown>, c: WriteCtx): Pro
   }
 }
 
-/** Contract 3: open jobs, scheduled -7..+14 days, and jobs completed or cancelled today. */
+/**
+ * Contract 3: open jobs, scheduled -7..+14 days, and jobs completed or cancelled today. A
+ * multi-visit job is listed while the tech has a visit still open on it, or did one today; its
+ * time is the tech's own visit, and `visits`, `currentVisitId`, `myVisitId` and `canAct` say
+ * where the job stands (docs/VISITS.md). A job with no visits lists its one implied visit.
+ */
 async function listJobs(
   store: BridgeStore,
   identityId: string,
@@ -604,7 +789,20 @@ async function listJobs(
   const today = dayIn(now, opts.timeZone);
   const from = now.getTime() - 7 * 86_400_000;
   const to = now.getTime() + 14 * 86_400_000;
-  const jobs = (await store.jobsAssignedTo(identityId)).filter((j) => {
+  const candidates = await store.jobsAssignedTo(identityId);
+  const visitsOf = new Map<string, BVisit[]>();
+  for (const j of candidates) visitsOf.set(j.id, liveVisits(await store.visits(j.id)));
+  const jobs = candidates.filter((j) => {
+    const vs = visitsOf.get(j.id)!;
+    if (vs.length) {
+      const mine = vs.filter((v) => v.assignedTechId === identityId);
+      if (!mine.length) return false;
+      if (mine.some((v) => OPEN_VISIT.includes(v.status))) return OPEN.includes(j.status);
+      return (
+        (!!j.completedAt && dayIn(j.completedAt, opts.timeZone) === today) ||
+        mine.some((v) => !!v.completedAt && dayIn(v.completedAt, opts.timeZone) === today)
+      );
+    }
     if (j.assignedTechId !== identityId) return false;
     if (OPEN.includes(j.status)) return true;
     if (j.status === "Complete" && j.completedAt && dayIn(j.completedAt, opts.timeZone) === today)
@@ -648,6 +846,35 @@ async function listJobs(
           },
         ]
       : [];
+    const vs = visitsOf.get(j.id)!;
+    const current = vs.find((v) => OPEN_VISIT.includes(v.status)) ?? null;
+    const mineOpen = vs.find(
+      (v) => v.assignedTechId === identityId && OPEN_VISIT.includes(v.status),
+    );
+    const mine = mineOpen ?? [...vs].reverse().find((v) => v.assignedTechId === identityId) ?? null;
+    const visitList = vs.length
+      ? vs.map((v) => ({
+          id: v.id,
+          number: v.number,
+          scheduledStart: v.scheduledStart,
+          scheduledEnd: v.scheduledEnd,
+          status: v.status,
+          mine: v.assignedTechId === identityId,
+          completedAt: v.completedAt,
+          note: v.note,
+        }))
+      : [
+          {
+            id: impliedVisitId(j.id),
+            number: 1,
+            scheduledStart: j.scheduledStart,
+            scheduledEnd: j.scheduledEnd,
+            status: impliedVisitStatus(j),
+            mine: true,
+            completedAt: j.completedAt,
+            note: null,
+          },
+        ];
     out.push({
       id: j.id,
       jobNumber: j.jobNumber,
@@ -663,8 +890,18 @@ async function listJobs(
         contactName: null,
         contactPhone: null,
       },
-      scheduledStart: j.scheduledStart,
-      scheduledEnd: j.scheduledEnd,
+      // The tech's own visit time on a multi-visit job.
+      scheduledStart: mine ? mine.scheduledStart : j.scheduledStart,
+      scheduledEnd: mine ? mine.scheduledEnd : j.scheduledEnd,
+      visits: visitList,
+      currentVisitId: vs.length ? (current?.id ?? null) : impliedVisitId(j.id),
+      myVisitId: vs.length ? (mine?.id ?? null) : impliedVisitId(j.id),
+      /** The tech may change the job now (its current visit is theirs). */
+      canAct: vs.length ? current?.assignedTechId === identityId : true,
+      /** Complete is accepted now; otherwise end the visit with visit_done. */
+      lastVisit: vs.length
+        ? !!current && !vs.some((v) => v.id !== current.id && OPEN_VISIT.includes(v.status))
+        : true,
       startedAt: j.startedAt,
       completedAt: j.completedAt,
       officeChangedAt: j.officeChangedAt ?? j.createdAt,
@@ -694,20 +931,24 @@ async function listJobs(
       ),
       materials: j.materials ?? [],
       receipts: await Promise.all(
-        receipts.map(async (r) => ({
-          id: r.id,
-          kind: r.kind,
-          vendor: r.vendor,
-          date: r.date,
-          amount: r.amount,
-          paidWith: r.paidWith,
-          note: r.note,
-          url:
-            r.storagePath && pathBelongsToJob(r.storagePath, j.id)
-              ? await store.fileUrl(r.storagePath)
-              : null,
-          at: r.at,
-        })),
+        // Only this tech's own receipts: amounts and personal payments are never shared
+        // with the other techs on the job (Codex review of PR #21).
+        receipts
+          .filter((r) => r.assignedTechId === identityId)
+          .map(async (r) => ({
+            id: r.id,
+            kind: r.kind,
+            vendor: r.vendor,
+            date: r.date,
+            amount: r.amount,
+            paidWith: r.paidWith,
+            note: r.note,
+            url:
+              r.storagePath && pathBelongsToJob(r.storagePath, j.id)
+                ? await store.fileUrl(r.storagePath)
+                : null,
+            at: r.at,
+          })),
       ),
       signature: signature ? { signerName: signature.signerName, at: signature.signedAt } : null,
       noSignatureReason: j.noSignatureReason,

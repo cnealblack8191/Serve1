@@ -47,6 +47,7 @@ const schema = a.schema({
     "Cancelled",
   ]),
   JobPriority: a.enum(["Low", "Normal", "High", "Emergency"]),
+  VisitStatus: a.enum(["Scheduled", "EnRoute", "InProgress", "OnHold", "Done", "Cancelled"]),
   InvoiceStatus: a.enum(["Draft", "Sent", "Paid"]),
   UserRole: a.enum(["Admin", "Office", "Tech", "Owner"]),
   AttachmentType: a.enum(["Photo", "Document", "Signature", "InvoicePdf"]),
@@ -143,6 +144,7 @@ const schema = a.schema({
           allow.groups(office).to(["create", "read", "update"]),
           allow.groups(["Owner"]).to(["read"]),
           allow.ownerDefinedIn("assignedTechId").to(["read"]),
+          allow.ownersDefinedIn("visitTechIds").to(["read"]),
         ]),
       assignedTech: a.belongsTo("User", "assignedTechId"),
       scheduledStart: a.datetime(),
@@ -182,6 +184,18 @@ const schema = a.schema({
       materials: a.json(),
       materialsAt: a.datetime(),
       techStatusAt: a.datetime(),
+      // Multi-visit jobs (docs/VISITS.md): every tech with a visit on the job. Only the office
+      // sets it (src/data/visits.ts keeps it in step with the Visit rows); those techs may read
+      // the job and update its work fields, as the assigned tech may.
+      visitTechIds: a
+        .string()
+        .array()
+        .authorization((allow) => [
+          allow.groups(office).to(["create", "read", "update"]),
+          allow.groups(["Owner"]).to(["read"]),
+          allow.ownerDefinedIn("assignedTechId").to(["read"]),
+          allow.ownersDefinedIn("visitTechIds").to(["read"]),
+        ]),
       attachments: a.hasMany("Attachment", "jobId"),
       signatures: a.hasMany("Signature", "jobId"),
       invoice: a.hasOne("Invoice", "jobId"),
@@ -189,13 +203,90 @@ const schema = a.schema({
     .authorization((allow) => [
       allow.groups(office).to(["create", "read", "update", "delete"]),
       allow.groups(["Owner"]).to(["read"]),
-      // A tech sees and updates only jobs whose assignedTechId is their identity.
+      // A tech updates only the job assigned to them: the current visit's tech, which the office
+      // keeps in step (src/data/visits.ts). Other techs with a visit on it only read it (Codex
+      // review of PR #21: shared access stays read-only on the server).
       allow.ownerDefinedIn("assignedTechId").to(["read", "update"]),
+      allow.ownersDefinedIn("visitTechIds").to(["read"]),
+    ]),
+
+  // One trip to the site for a job (docs/VISITS.md). Additive: a job with no visits is one visit
+  // built from its own schedule fields. The office plans visits; the visit's tech moves its
+  // status; every tech on the job reads every visit (jobTechIds, copied from the job).
+  Visit: a
+    .model({
+      jobId: a
+        .id()
+        .required()
+        .authorization((allow) => [
+          allow.groups(office).to(["create", "read", "update"]),
+          allow.groups(["Owner"]).to(["read"]),
+          allow.ownerDefinedIn("assignedTechId").to(["read"]),
+          allow.ownersDefinedIn("jobTechIds").to(["read"]),
+        ]),
+      number: a
+        .integer()
+        .required()
+        .authorization((allow) => [
+          allow.groups(office).to(["create", "read", "update"]),
+          allow.groups(["Owner"]).to(["read"]),
+          allow.ownerDefinedIn("assignedTechId").to(["read"]),
+          allow.ownersDefinedIn("jobTechIds").to(["read"]),
+        ]),
+      scheduledStart: a
+        .datetime()
+        .authorization((allow) => [
+          allow.groups(office).to(["create", "read", "update"]),
+          allow.groups(["Owner"]).to(["read"]),
+          allow.ownerDefinedIn("assignedTechId").to(["read"]),
+          allow.ownersDefinedIn("jobTechIds").to(["read"]),
+        ]),
+      scheduledEnd: a
+        .datetime()
+        .authorization((allow) => [
+          allow.groups(office).to(["create", "read", "update"]),
+          allow.groups(["Owner"]).to(["read"]),
+          allow.ownerDefinedIn("assignedTechId").to(["read"]),
+          allow.ownersDefinedIn("jobTechIds").to(["read"]),
+        ]),
+      // Field-level rule: only the office sets or changes who does the visit.
+      assignedTechId: a
+        .string()
+        .authorization((allow) => [
+          allow.groups(office).to(["create", "read", "update"]),
+          allow.groups(["Owner"]).to(["read"]),
+          allow.ownerDefinedIn("assignedTechId").to(["read"]),
+          allow.ownersDefinedIn("jobTechIds").to(["read"]),
+        ]),
+      jobTechIds: a
+        .string()
+        .array()
+        .authorization((allow) => [
+          allow.groups(office).to(["create", "read", "update"]),
+          allow.groups(["Owner"]).to(["read"]),
+          allow.ownerDefinedIn("assignedTechId").to(["read"]),
+          allow.ownersDefinedIn("jobTechIds").to(["read"]),
+        ]),
+      status: a.ref("VisitStatus").required(),
+      startedAt: a.datetime(),
+      completedAt: a.datetime(),
+      holdReason: a.string(),
+      note: a.string(),
+    })
+    .secondaryIndexes((index) => [index("jobId")])
+    .authorization((allow) => [
+      allow.groups(office).to(["create", "read", "update", "delete"]),
+      allow.groups(["Owner"]).to(["read"]),
+      // The visit's own tech moves its status (the fields above stay office-only).
+      allow.ownerDefinedIn("assignedTechId").to(["read", "update"]),
+      allow.ownersDefinedIn("jobTechIds").to(["read"]),
     ]),
 
   Attachment: a
     .model({
       jobId: a.id().required(),
+      // The job's visitTechIds when the row was added (docs/VISITS.md): read-only for them.
+      jobTechIds: a.string().array(),
       job: a.belongsTo("Job", "jobId"),
       // Identity of the job's assigned tech at creation time (owner-style rule below).
       assignedTechId: a.string(),
@@ -208,13 +299,17 @@ const schema = a.schema({
     .authorization((allow) => [
       allow.groups(office).to(["create", "read", "update", "delete"]),
       allow.groups(["Owner"]).to(["read"]),
-      // A tech sees and adds only rows carrying their own identity.
+      // A tech sees and adds only rows carrying their own identity, and reads rows on jobs they
+      // have a visit on.
       allow.ownerDefinedIn("assignedTechId").to(["create", "read"]),
+      allow.ownersDefinedIn("jobTechIds").to(["read"]),
     ]),
 
   Signature: a
     .model({
       jobId: a.id().required(),
+      // The job's visitTechIds when the row was added (docs/VISITS.md): read-only for them.
+      jobTechIds: a.string().array(),
       job: a.belongsTo("Job", "jobId"),
       assignedTechId: a.string(),
       signerName: a.string().required(),
@@ -224,8 +319,10 @@ const schema = a.schema({
     .authorization((allow) => [
       allow.groups(office).to(["create", "read", "update", "delete"]),
       allow.groups(["Owner"]).to(["read"]),
-      // A tech sees and adds only rows carrying their own identity.
+      // A tech sees and adds only rows carrying their own identity, and reads rows on jobs they
+      // have a visit on.
       allow.ownerDefinedIn("assignedTechId").to(["create", "read"]),
+      allow.ownersDefinedIn("jobTechIds").to(["read"]),
     ]),
 
   // One invoice per job, guaranteed by the database: jobId is the primary key
@@ -306,6 +403,8 @@ const schema = a.schema({
     .model({
       jobId: a.id().required(),
       assignedTechId: a.string(),
+      // The job's visitTechIds (docs/VISITS.md): other techs on the job read the note.
+      jobTechIds: a.string().array(),
       text: a.string().required(),
       by: a.string(),
       at: a.datetime().required(),
@@ -315,6 +414,7 @@ const schema = a.schema({
       allow.groups(office).to(["create", "read", "update", "delete"]),
       allow.groups(["Owner"]).to(["read"]),
       allow.ownerDefinedIn("assignedTechId").to(["read"]),
+      allow.ownersDefinedIn("jobTechIds").to(["read"]),
     ]),
 
   // A receipt for office review: never paid or approved by the tech. "personal" means the tech

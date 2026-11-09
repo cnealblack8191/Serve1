@@ -158,6 +158,7 @@ describe("store requests", () => {
         Attachment: "Attachment-t",
         Signature: "Signature-t",
         TechNote: "TechNote-t",
+        Visit: "Visit-t",
         TechReceipt: "TechReceipt-t",
         TechAction: "TechAction-t",
         BridgeAudit: "BridgeAudit-t",
@@ -224,6 +225,105 @@ describe("store requests", () => {
   it("other database errors surface (the bridge then answers serv1_unavailable)", async () => {
     const { store } = fake(() => ({ status: 500, json: {} }));
     await assert.rejects(store.getJob("j1"));
+  });
+  it("a job change with its visit is one transaction, conditional on both (docs/VISITS.md)", async () => {
+    const { store, sent } = fake(() => ({ status: 200, json: {} }));
+    await store.updateJob(
+      "mv",
+      { status: "InProgress" },
+      { assignedTechId: "tech-a", status: "Scheduled" },
+      {
+        id: "v1",
+        patch: { status: "InProgress" },
+        expectStatus: "Scheduled",
+        expectAssignedTechId: "tech-a",
+      },
+    );
+    assert.equal(sent[0]!.target, "DynamoDB_20120810.TransactWriteItems");
+    const [job, visit] = sent[0]!.body!.TransactItems as Record<string, Record<string, unknown>>[];
+    assert.equal(job!.Update!.TableName, "Job-t");
+    assert.equal(
+      job!.Update!.ConditionExpression,
+      "attribute_exists(id) AND #e0 = :e0 AND #e1 = :e1",
+    );
+    assert.equal(visit!.Update!.TableName, "Visit-t");
+    // Still the status and the tech the rules saw (Codex review of PR #21).
+    assert.equal(
+      visit!.Update!.ConditionExpression,
+      "attribute_exists(id) AND #wstatus = :wstatus AND #wtech = :wtech",
+    );
+    assert.deepEqual(
+      (visit!.Update!.ExpressionAttributeValues as Record<string, unknown>)[":wtech"],
+      { S: "tech-a" },
+    );
+    assert.deepEqual(
+      (visit!.Update!.ExpressionAttributeValues as Record<string, unknown>)[":wstatus"],
+      { S: "Scheduled" },
+    );
+    // Either side changed meanwhile: nothing saved, JobChanged.
+    await assert.rejects(
+      fake(cancelled(["None", "ConditionalCheckFailed"])).store.updateJob(
+        "mv",
+        { status: "InProgress" },
+        { status: "Scheduled" },
+        {
+          id: "v1",
+          patch: { status: "InProgress" },
+          expectStatus: "Scheduled",
+          expectAssignedTechId: "tech-a",
+        },
+      ),
+      JobChanged,
+    );
+  });
+  it("the action marker is saved in the same transaction; an existing marker means already applied", async () => {
+    const action = {
+      id: "act-1",
+      jobId: "mv",
+      route: "visit_done" as const,
+      serv1UserId: "u-a",
+      at: NOW.toISOString(),
+      result: "applied" as const,
+    };
+    const vw = {
+      id: "v1",
+      patch: { status: "Done" as const },
+      expectStatus: "InProgress" as const,
+      expectAssignedTechId: "tech-a",
+      action,
+    };
+    const { store, sent } = fake(() => ({ status: 200, json: {} }));
+    await store.updateJob("mv", { status: "Scheduled" }, { status: "InProgress" }, vw);
+    const items = sent[0]!.body!.TransactItems as Record<string, Record<string, unknown>>[];
+    assert.equal(items.length, 3);
+    assert.equal(items[2]!.Put!.TableName, "TechAction-t");
+    assert.equal(items[2]!.Put!.ConditionExpression, "attribute_not_exists(id)");
+    assert.deepEqual((items[2]!.Put!.Item as Record<string, unknown>).id, { S: "act-1" });
+    // Only the marker exists: a repeat of this exact action, nothing more to do.
+    await fake(cancelled(["None", "None", "ConditionalCheckFailed"])).store.updateJob(
+      "mv",
+      { status: "Scheduled" },
+      { status: "InProgress" },
+      vw,
+    );
+    // The job or visit changed: JobChanged, whatever the marker.
+    await assert.rejects(
+      fake(cancelled(["ConditionalCheckFailed", "None", "ConditionalCheckFailed"])).store.updateJob(
+        "mv",
+        { status: "Scheduled" },
+        { status: "InProgress" },
+        vw,
+      ),
+      JobChanged,
+    );
+  });
+  it("a fresh visits read scans the table again; a normal read reuses this request's scan", async () => {
+    const { store, sent } = fake(() => ({ status: 200, json: { Items: [] } }));
+    await store.visits("mv");
+    await store.visits("mv");
+    assert.equal(sent.filter((x) => x.target === "DynamoDB_20120810.Scan").length, 1);
+    await store.visits("mv", { fresh: true });
+    assert.equal(sent.filter((x) => x.target === "DynamoDB_20120810.Scan").length, 2);
   });
   it("job updates touch only the given fields and require the job to exist", async () => {
     const { store, sent } = fake(() => ({ status: 200, json: {} }));

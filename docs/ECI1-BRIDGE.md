@@ -78,6 +78,38 @@ Older records without these fields load as before (`tests/old-records.spec.ts`).
    - whether CloudTrail records function URL calls as Lambda data events.
 5. Link a test tech in ECI1, then deploy again with `ECI1_BRIDGE_ENABLED=true`.
 
+## Multi-visit jobs (additive, docs/VISITS.md)
+
+A job can have several visits, each with its own date, time, tech and status. Older ECI1 clients
+keep working unchanged, because a job with no visits is one visit and every new field is extra.
+
+- **`/jobs`** lists a multi-visit job while the tech has a visit still open on it, or finished
+  one today. Each job gains these fields:
+  - `visits`: `[{ id, number, scheduledStart, scheduledEnd, status, mine, completedAt, note }]`.
+    A job with no visits has one, with id `<jobId>#1`.
+  - `currentVisitId`, `myVisitId`.
+  - `canAct`: the current visit is this tech's.
+  - `lastVisit`: Complete is accepted now.
+
+  `scheduledStart` and `scheduledEnd` are the tech's own visit.
+
+- **Who may write.** Every write is accepted only from the tech of the current visit. Any other tech
+  on the job gets `not_assigned` ("This visit is another tech's…").
+- **`visitId` (optional).** Any write may carry it. If it does not name the current visit, the
+  write is refused with `invalid`.
+- **Status and complete.** `status` and `complete` save the current visit's status in the same
+  DynamoDB transaction as the job (`updateJob(…, visit)`), conditional on both.
+- **`complete`** is refused (`bad_transition`) while another visit is still planned.
+- **New route `visit_done`.** Body: `{ jobId, actionId, at, visitId?, note? }`, accepted from
+  EnRoute, InProgress or On hold.
+  - The current visit becomes Done.
+  - If another visit is planned, the job goes back to Scheduled.
+  - Otherwise it goes On hold "Needs a return visit" (`return_visit`), with `note` as the hold note.
+- **Shared rows.** Notes, photos and signatures the bridge adds carry `jobTechIds`, so every tech
+  on the job can read them. The bridge now reads and writes the `Visit` table (`TABLE_Visit`).
+- **ECI-1X side.** The ECI-1X contract (`docs/SERV1-TECH-API.md`) needs the same additions; the
+  ECI-1X session makes them.
+
 ## Known limits (pilot)
 
 - **Table scans.** Lookups by job or tech scan the table once per call. Add indexes before the tables grow.

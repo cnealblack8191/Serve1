@@ -3,7 +3,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { EmptyState, PageHeader } from "@/components/eci/primitives";
 import { byStart, isToday, OPEN_STATUSES } from "@/components/serv1/tech/format";
 import { TechJobCard } from "@/components/serv1/tech/TechJobCard";
-import { useCustomers, useJobs, useSites } from "@/data";
+import { useCurrentUser, useCustomers, useJobs, useSites, useVisits, visitEntries } from "@/data";
 import { requireRole, TECH_ONLY } from "@/lib/access";
 
 /** Tech home (SPEC.md W3): today's jobs by time, then the tech's other open jobs. */
@@ -15,10 +15,15 @@ export const Route = createFileRoute("/_authenticated/tech/")({
 function Page() {
   // The backend already limits a tech to their own jobs.
   const jobs = useJobs();
+  const visits = useVisits();
+  const me = useCurrentUser();
   const customers = useCustomers();
   const sites = useSites();
 
-  const all = jobs.data ?? [];
+  // One card per visit of mine (docs/VISITS.md); a job with no visits is its own one visit.
+  const all = visitEntries(jobs.data ?? [], visits.data ?? []).filter(
+    (e) => e.assignedTechId === me.data?.identityId,
+  );
   const today = all.filter((j) => isToday(j.scheduledStart)).sort(byStart);
   const later = all
     .filter((j) => !isToday(j.scheduledStart) && OPEN_STATUSES.includes(j.status))
@@ -36,7 +41,7 @@ function Page() {
     <>
       <PageHeader title="Today" description={dateLabel} />
 
-      {jobs.isLoading ? (
+      {jobs.isLoading || visits.isLoading || me.isLoading ? (
         <p className="text-base text-muted-foreground">Loading jobs…</p>
       ) : jobs.isError ? (
         <EmptyState title="Could not load your jobs" hint="Check your connection and try again." />
@@ -44,7 +49,7 @@ function Page() {
         <section className="space-y-3" aria-label="Today's jobs">
           {today.map((j) => (
             <TechJobCard
-              key={j.id}
+              key={j.entryId}
               job={j}
               customer={customer(j.customerId)}
               site={site(j.siteId)}
@@ -63,7 +68,7 @@ function Page() {
           <h2 className="text-lg font-semibold">Later</h2>
           {later.map((j) => (
             <TechJobCard
-              key={j.id}
+              key={j.entryId}
               job={j}
               customer={customer(j.customerId)}
               site={site(j.siteId)}

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { toast } from "sonner";
 
 import { Field } from "@/components/eci/primitives";
 import { AssignDialog } from "@/components/serv1/dispatch/AssignDialog";
@@ -25,6 +26,12 @@ import {
   useJobs,
   useSites,
   useTechNames,
+  currentVisit,
+  scheduleMode,
+  useVisitActions,
+  useVisits,
+  visitEntries,
+  visitsOf,
   type Job,
   type JobAction,
   type JobPriority,
@@ -58,9 +65,19 @@ export function JobActions({ job }: { job: Job }) {
   const move = useJobMove();
   const { update } = useJobMutations();
   const techs = useTechNames();
+  // A job with visits is rescheduled visit by visit (docs/VISITS.md; Codex review of PR #21).
+  const visits = useVisits();
+  const visitActions = useVisitActions();
   const allJobs = useJobs();
   const [reason, setReason] = useState<ReasonAction | null>(null);
   const [assigning, setAssigning] = useState(false);
+  // The visit the job is on now, when it has visits: the dialog moves or removes that visit only.
+  const { visits: vs, implied } = visitsOf(job, visits.data ?? []);
+  const cur = implied ? null : currentVisit(vs);
+  const dialogJob: Job =
+    (cur && visitEntries([job], visits.data ?? []).find((e) => e.visit.id === cur.id)) || job;
+  const visitError = (e: Error) =>
+    toast.error("Couldn't change the visit", { description: e.message });
   const [editing, setEditing] = useState(false);
   if (role !== "Admin" && role !== "Office") return null;
 
@@ -121,22 +138,52 @@ export function JobActions({ job }: { job: Job }) {
         onSave={(r) => reason && go(reason, r)}
       />
       <AssignDialog
-        jobs={allJobs.data ?? []}
-        job={assigning ? job : null}
+        jobs={visitEntries(allJobs.data ?? [], visits.data ?? [])}
+        job={assigning ? dialogJob : null}
         techs={techs.data ?? []}
-        day={job.scheduledStart ? new Date(job.scheduledStart) : new Date()}
-        busy={update.isPending}
+        day={dialogJob.scheduledStart ? new Date(dialogJob.scheduledStart) : new Date()}
+        busy={
+          update.isPending || visitActions.reschedule.isPending || visitActions.remove.isPending
+        }
         onClose={() => setAssigning(false)}
         onSubmit={(j, techId, start, minutes) =>
-          update.mutate(
-            { id: j.id, patch: schedulePatch(j, techId, start, minutes) },
-            { onSuccess: () => setAssigning(false) },
-          )
+          cur
+            ? visitActions.reschedule.mutate(
+                { visit: cur, plan: { assignedTechId: techId, start, minutes } },
+                { onSuccess: () => setAssigning(false), onError: visitError },
+              )
+            : scheduleMode(job, visits.data ?? []) === "add"
+              ? // Visits, but none open (reopened after a cancel): plan a new one (Codex review of PR #21).
+                visitActions.add.mutate(
+                  { job, plan: { assignedTechId: techId, start, minutes } },
+                  { onSuccess: () => setAssigning(false), onError: visitError },
+                )
+              : update.mutate(
+                  { id: j.id, patch: schedulePatch(j, techId, start, minutes) },
+                  { onSuccess: () => setAssigning(false) },
+                )
         }
         onUnschedule={(j) =>
-          update.mutate(
-            { id: j.id, patch: unschedulePatch() },
-            { onSuccess: () => setAssigning(false) },
+          cur
+            ? visitActions.remove.mutate(cur, {
+                onSuccess: () => setAssigning(false),
+                onError: visitError,
+              })
+            : update.mutate(
+                { id: j.id, patch: unschedulePatch() },
+                { onSuccess: () => setAssigning(false) },
+              )
+        }
+        onAddVisit={(j, techId, start, minutes) =>
+          visitActions.add.mutate(
+            { job, plan: { assignedTechId: techId, start, minutes } },
+            {
+              onSuccess: (v) => {
+                toast.success(`Visit ${v.number} added`);
+                setAssigning(false);
+              },
+              onError: visitError,
+            },
           )
         }
       />

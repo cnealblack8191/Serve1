@@ -27,7 +27,9 @@ async function assertCanAttach(job: Job): Promise<string | null> {
   const me = await backend().auth.currentUser();
   if (!me) throw new Error("Not signed in");
   if (me.role === "Tech") {
-    if (job.assignedTechId !== me.identityId) throw new Error("This job is not assigned to you");
+    // The assigned tech, or a tech with a visit on the job (docs/VISITS.md).
+    if (job.assignedTechId !== me.identityId && !(job.visitTechIds ?? []).includes(me.identityId))
+      throw new Error("This job is not assigned to you");
     return me.identityId;
   }
   if (me.role === "Owner") throw new Error("Owners can view jobs but not add files");
@@ -62,6 +64,7 @@ export async function addJobPhoto(
   return backend().attachments.create({
     jobId: job.id,
     assignedTechId,
+    jobTechIds: job.visitTechIds ?? null,
     storagePath,
     type,
     caption,
@@ -76,6 +79,7 @@ export async function addJobSignature(job: Job, png: Blob, signerName: string): 
   return backend().signatures.create({
     jobId: job.id,
     assignedTechId,
+    jobTechIds: job.visitTechIds ?? null,
     signerName,
     storagePath,
     signedAt: new Date().toISOString(),

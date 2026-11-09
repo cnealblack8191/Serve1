@@ -15,7 +15,7 @@ import {
 } from "@/data";
 import { cn } from "@/lib/utils";
 
-import { JOB_DRAG_TYPE } from "./board";
+import { cardId, JOB_DRAG_TYPE } from "./board";
 import { JobCard } from "./JobCard";
 
 const SLOT_PX = 40;
@@ -143,7 +143,7 @@ export function TechTimeline({
                   );
                   return (
                     <JobCard
-                      key={job.id}
+                      key={cardId(job)}
                       job={job}
                       customer={customers.get(job.customerId)}
                       site={job.siteId ? sites.get(job.siteId) : undefined}

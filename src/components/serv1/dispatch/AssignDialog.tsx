@@ -23,9 +23,10 @@ import {
   toDateInput,
   type Job,
   type User,
+  type VisitEntry,
 } from "@/data";
 
-import { jobLabel } from "./board";
+import { cardId, jobLabel } from "./board";
 
 const SELECT_CLASS =
   "h-9 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-ring";
@@ -51,6 +52,7 @@ export function AssignDialog({
   onClose,
   onSubmit,
   onUnschedule,
+  onAddVisit,
   jobs = [],
 }: {
   /** All jobs, to warn about double booking (optional). */
@@ -62,6 +64,11 @@ export function AssignDialog({
   onClose: () => void;
   onSubmit: (job: Job, techIdentityId: string, start: Date, minutes: number) => void;
   onUnschedule: (job: Job) => void;
+  /**
+   * Multi-visit jobs (docs/VISITS.md): plan another trip with the tech, day and time chosen here,
+   * keeping the job's current visit as it is. Offered once the job is on the schedule.
+   */
+  onAddVisit?: (job: Job, techIdentityId: string, start: Date, minutes: number) => void;
 }) {
   const slots = dispatchSlots();
   const [techId, setTechId] = useState("");
@@ -84,11 +91,19 @@ export function AssignDialog({
   const parsedDay = fromDateInput(date);
   const valid = !!job && !!techId && !!parsedDay;
   const start = parsedDay ? atMinutes(parsedDay, slot) : null;
-  const clashes =
-    valid && start
-      ? findOverlaps(jobs, job.id, techId, start, new Date(start.getTime() + hours * 3_600_000))
-      : [];
+  const end = start ? new Date(start.getTime() + hours * 3_600_000) : null;
   const lengths = LENGTHS.includes(hours) ? LENGTHS : [...LENGTHS, hours].sort((a, b) => a - b);
+  const realVisit = (job as Partial<VisitEntry> | null)?.implied === false;
+  const canAddVisit = !!onAddVisit && !!job?.assignedTechId && !!job.scheduledStart;
+  // Scheduling moves this appointment, so it is left out of the check. Adding a visit keeps it,
+  // so an added visit is checked against it too (Codex review of PR #21).
+  const clashes = valid && start && end ? findOverlaps(jobs, cardId(job), techId, start, end) : [];
+  const addClashes =
+    canAddVisit && valid && start && end ? findOverlaps(jobs, "", techId, start, end) : [];
+  const ownClash = addClashes.filter(
+    (c) => ((c as Job & { entryId?: string }).entryId ?? c.id) === (job ? cardId(job) : ""),
+  );
+  const techName = techs.find((t) => t.identityId === techId)?.name ?? "this tech";
 
   return (
     <Dialog open={!!job} onOpenChange={(open) => !open && onClose()}>
@@ -151,14 +166,24 @@ export function AssignDialog({
             </Field>
           </div>
 
-          {clashes.length ? (
+          {clashes.length || ownClash.length ? (
             <p
               role="alert"
               className="rounded-md border border-orange-600 bg-orange-50 p-3 text-sm text-orange-950 dark:bg-orange-950 dark:text-orange-50"
             >
-              Double booking: {techs.find((t) => t.identityId === techId)?.name ?? "this tech"}{" "}
-              already has {clashes.map((c) => `${jobLabel(c)} (${timeText(c)})`).join(", ")} at that
-              time.
+              {clashes.length ? (
+                <>
+                  Double booking: {techName} already has{" "}
+                  {clashes.map((c) => `${jobLabel(c)} (${timeText(c)})`).join(", ")} at that time.
+                </>
+              ) : null}
+              {clashes.length && ownClash.length ? " " : null}
+              {ownClash.length ? (
+                <>
+                  Added as another visit, it would overlap this job&apos;s own visit,{" "}
+                  {ownClash.map((c) => `${jobLabel(c)} (${timeText(c)})`).join(", ")}.
+                </>
+              ) : null}
             </p>
           ) : null}
 
@@ -170,7 +195,7 @@ export function AssignDialog({
                 disabled={busy}
                 onClick={() => onUnschedule(job)}
               >
-                Move back to Unscheduled
+                {realVisit ? "Remove this visit" : "Move back to Unscheduled"}
               </Button>
             ) : (
               <span />
@@ -179,6 +204,19 @@ export function AssignDialog({
               <Button type="button" variant="outline" onClick={onClose}>
                 Cancel
               </Button>
+              {canAddVisit ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={!valid || busy}
+                  onClick={() => {
+                    if (valid && parsedDay)
+                      onAddVisit(job, techId, atMinutes(parsedDay, slot), Math.round(hours * 60));
+                  }}
+                >
+                  {addClashes.length ? "Add as another visit anyway" : "Add as another visit"}
+                </Button>
+              ) : null}
               <Button type="submit" disabled={!valid || busy}>
                 {clashes.length ? "Schedule anyway" : "Schedule"}
               </Button>

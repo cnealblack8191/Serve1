@@ -57,6 +57,16 @@ describe("pilot seed plan", () => {
     const tomJobs = SEED_JOBS.filter((j) => j.assignedTechId === "local-tech-2").length;
     assert.equal(plan.jobs.filter((j) => j.assignedTechId === tom.identityId).length, tomJobs);
   });
+  it("carries the multi-visit demo job: visits and tech lists use the pilot identities", () => {
+    const plan = buildSeedPlan(pilot);
+    const tara = cognitoIdentity(pilot.find((p) => p.username === "tech")!);
+    const job = plan.jobs.find((j) => j.id === "job-20")!;
+    assert.ok(job.visitTechIds!.includes(tara));
+    assert.ok(job.visitTechIds!.includes(noSignInIdentity("local-tech-2")));
+    assert.equal(plan.visits.length, 3);
+    assert.ok(plan.visits.every((v) => v.jobTechIds!.length === 2));
+    assert.equal(plan.visits.find((v) => v.number === 1)!.assignedTechId, tara);
+  });
   it("drops timestamps and the invoice id (the backend sets and keys them)", () => {
     const plan = buildSeedPlan(pilot);
     for (const rows of Object.values(plan))

@@ -7,7 +7,14 @@ import { JOB_STATUS_HEX } from "@/lib/status";
 import { BottomAction, PRIMARY_BUTTON } from "./BottomAction";
 
 /** Shown right after the customer signs (SPEC.md section 13, "Done confirmation"). */
-export function DoneScreen({ customerName }: { customerName?: string }) {
+export function DoneScreen({
+  customerName,
+  visitDone,
+}: {
+  customerName?: string;
+  /** Shown after "Visit done, return needed" instead (docs/VISITS.md): what happens next. */
+  visitDone?: string;
+}) {
   return (
     <>
       <div className="flex flex-col items-center gap-3 py-12 text-center">
@@ -17,10 +24,16 @@ export function DoneScreen({ customerName }: { customerName?: string }) {
           aria-hidden
           strokeWidth={1.5}
         />
-        <h1 className="text-2xl font-semibold">Job complete</h1>
+        <h1 className="text-2xl font-semibold">{visitDone ? "Visit done" : "Job complete"}</h1>
         <p className="max-w-[32ch] text-base text-muted-foreground">
-          {customerName ? `${customerName} signed off. ` : "Signature saved. "}
-          The office can now invoice this job.
+          {visitDone ? (
+            visitDone
+          ) : (
+            <>
+              {customerName ? `${customerName} signed off. ` : "Signature saved. "}
+              The office can now invoice this job.
+            </>
+          )}
         </p>
       </div>
       <BottomAction>

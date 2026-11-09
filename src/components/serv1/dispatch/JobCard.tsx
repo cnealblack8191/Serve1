@@ -6,7 +6,7 @@ import { canDispatch, type Customer, type Job, type Site } from "@/data";
 import { JOB_STATUS_CLASS, JOB_STATUS_HEX, JOB_STATUS_LABEL, PRIORITY_LABEL } from "@/lib/status";
 import { cn } from "@/lib/utils";
 
-import { JOB_DRAG_TYPE, jobLabel } from "./board";
+import { cardId, JOB_DRAG_TYPE, jobLabel } from "./board";
 
 /** One job on the board: in the Unscheduled queue or on a tech's timeline. */
 export function JobCard({
@@ -37,8 +37,8 @@ export function JobCard({
 }) {
   const movable = canDispatch(job);
   const handleDragStart = (e: DragEvent) => {
-    e.dataTransfer.setData(JOB_DRAG_TYPE, job.id);
-    e.dataTransfer.setData("text/plain", job.id);
+    e.dataTransfer.setData(JOB_DRAG_TYPE, cardId(job));
+    e.dataTransfer.setData("text/plain", cardId(job));
     e.dataTransfer.effectAllowed = "move";
     onDragStart?.(job);
   };
