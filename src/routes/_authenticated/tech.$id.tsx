@@ -212,6 +212,7 @@ function JobScreen({ id }: { id: string }) {
         >
           <p className="font-semibold">{JOB_STATUS_LABEL.OnHold}</p>
           {j.holdReason ? <p>{j.holdReason}</p> : null}
+          {j.holdNote ? <p className="whitespace-pre-wrap">{j.holdNote}</p> : null}
         </section>
       ) : null}
       {j.reviewNote && working ? (

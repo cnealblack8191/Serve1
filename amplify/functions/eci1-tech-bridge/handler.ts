@@ -136,6 +136,7 @@ function storeFromEnv(env: Record<string, string | undefined>): BridgeStore | nu
     TechReceipt: t("TechReceipt"),
     TechAction: t("TechAction"),
     BridgeAudit: t("BridgeAudit"),
+    Visit: t("Visit"),
   } satisfies AwsStoreConfig["tables"];
   if (
     Object.values(tables).some((v) => !v) ||

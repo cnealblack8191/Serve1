@@ -49,10 +49,7 @@ describe("multi-visit jobs", () => {
     assert.equal(visits[0]!.scheduledStart, job.scheduledStart);
     assert.equal(visits[0]!.assignedTechId, job.assignedTechId);
     assert.equal(v.visitStatusOf({ status: "Paid", holdReason: null }), "Done");
-    assert.equal(
-      v.visitStatusOf({ status: "OnHold", holdReason: `${v.RETURN_NEEDED}: parts` }),
-      "Done",
-    );
+    assert.equal(v.visitStatusOf({ status: "OnHold", holdReason: v.RETURN_NEEDED }), "Done");
   });
 
   it("the board shows each visit of a multi-visit job on its own tech and time", async () => {
@@ -133,7 +130,8 @@ describe("multi-visit jobs", () => {
     let job = await v.updateJobWithVisit(legacy, movePatch(legacy, "start"));
     job = await v.finishVisit(job, "Need a part");
     assert.equal(job.status, "OnHold");
-    assert.equal(job.holdReason, `${v.RETURN_NEEDED}: Need a part`);
+    assert.equal(job.holdReason, v.RETURN_NEEDED);
+    assert.equal(job.holdNote, "Need a part");
     assert.ok(v.isReturnHold(job));
 
     // The office plans visit 2 for Tom: visit 1 is written from the job and shows as done.

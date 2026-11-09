@@ -624,9 +624,9 @@ const SEED_JOB_LIST: SeedJob[] = [
   {
     id: "job-20",
     jobNumber: null, // set below from the created date
-    customerId: "cust-2",
-    siteId: "site-3",
-    description: "Replace parking lot pole lights, Building C (three visits)",
+    customerId: "cust-6",
+    siteId: "site-9",
+    description: "Replace parking lot pole lights (three visits)",
     jobType: "Lighting",
     priority: "Normal",
     status: "Scheduled",

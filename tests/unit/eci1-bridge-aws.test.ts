@@ -158,6 +158,7 @@ describe("store requests", () => {
         Attachment: "Attachment-t",
         Signature: "Signature-t",
         TechNote: "TechNote-t",
+        Visit: "Visit-t",
         TechReceipt: "TechReceipt-t",
         TechAction: "TechAction-t",
         BridgeAudit: "BridgeAudit-t",
@@ -224,6 +225,41 @@ describe("store requests", () => {
   it("other database errors surface (the bridge then answers serv1_unavailable)", async () => {
     const { store } = fake(() => ({ status: 500, json: {} }));
     await assert.rejects(store.getJob("j1"));
+  });
+  it("a job change with its visit is one transaction, conditional on both (docs/VISITS.md)", async () => {
+    const { store, sent } = fake(() => ({ status: 200, json: {} }));
+    await store.updateJob(
+      "mv",
+      { status: "InProgress" },
+      { assignedTechId: "tech-a", status: "Scheduled" },
+      { id: "v1", patch: { status: "InProgress" }, expectStatus: "Scheduled" },
+    );
+    assert.equal(sent[0]!.target, "DynamoDB_20120810.TransactWriteItems");
+    const [job, visit] = sent[0]!.body!.TransactItems as Record<string, Record<string, unknown>>[];
+    assert.equal(job!.Update!.TableName, "Job-t");
+    assert.equal(
+      job!.Update!.ConditionExpression,
+      "attribute_exists(id) AND #e0 = :e0 AND #e1 = :e1",
+    );
+    assert.equal(visit!.Update!.TableName, "Visit-t");
+    assert.equal(
+      visit!.Update!.ConditionExpression,
+      "attribute_exists(id) AND #wstatus = :wstatus",
+    );
+    assert.deepEqual(
+      (visit!.Update!.ExpressionAttributeValues as Record<string, unknown>)[":wstatus"],
+      { S: "Scheduled" },
+    );
+    // Either side changed meanwhile: nothing saved, JobChanged.
+    await assert.rejects(
+      fake(cancelled(["None", "ConditionalCheckFailed"])).store.updateJob(
+        "mv",
+        { status: "InProgress" },
+        { status: "Scheduled" },
+        { id: "v1", patch: { status: "InProgress" }, expectStatus: "Scheduled" },
+      ),
+      JobChanged,
+    );
   });
   it("job updates touch only the given fields and require the job to exist", async () => {
     const { store, sent } = fake(() => ({ status: 200, json: {} }));

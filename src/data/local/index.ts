@@ -301,6 +301,7 @@ export function createLocalBackend(): Backend {
     "notes",
     "laborHours",
     "holdReason",
+    "holdNote",
     "techStatusAt",
   ]);
   const jobRules: Rules<Job> = {

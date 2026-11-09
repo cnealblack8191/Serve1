@@ -11,6 +11,7 @@ import {
   type BJob,
   type BridgeStore,
   type BUser,
+  type BVisit,
 } from "../../amplify/functions/eci1-tech-bridge/core.ts";
 import { techMayMove } from "../../src/data/jobflow.ts";
 
@@ -62,6 +63,7 @@ function memoryStore() {
     ],
   ]);
   const jobs = new Map<string, BJob>();
+  const visits = new Map<string, BVisit>();
   const rows = {
     notes: new Map<
       string,
@@ -85,16 +87,22 @@ function memoryStore() {
   const store: BridgeStore = {
     getUser: async (id) => users.get(id) ?? null,
     getJob: async (id) => jobs.get(id) ?? null,
-    jobsAssignedTo: async (t) => [...jobs.values()].filter((j) => j.assignedTechId === t),
+    jobsAssignedTo: async (t) =>
+      [...jobs.values()].filter(
+        (j) => j.assignedTechId === t || (j.visitTechIds ?? []).includes(t),
+      ),
+    visits: async (j) => [...visits.values()].filter((v) => v.jobId === j),
     getCustomer: async () => ({ name: "Synthetic Customer", phone: "555-0100" }),
     getSite: async () => ({ name: "Main", address: "1 Test Way", accessNotes: null }),
     notes: async (j) => [...rows.notes.values()].filter((n) => n.jobId === j),
     photos: async (j) => [...rows.photos.values()].filter((n) => n.jobId === j),
     receipts: async (j) => [...rows.receipts.values()].filter((n) => n.jobId === j),
     signature: async (j) => [...rows.signatures.values()].find((n) => n.jobId === j) ?? null,
-    updateJob: async (id, patch, expect) => {
+    updateJob: async (id, patch, expect, visit) => {
       check(id, expect);
+      if (visit && visits.get(visit.id)?.status !== visit.expectStatus) throw new JobChanged();
       jobs.set(id, { ...jobs.get(id)!, ...patch });
+      if (visit) visits.set(visit.id, { ...visits.get(visit.id)!, ...visit.patch });
     },
     addNote: async (r, expect) => {
       check(r.jobId, expect);
@@ -118,7 +126,7 @@ function memoryStore() {
     saveAction: async (r) => void rows.actions.set(r.id, r.result),
     audit: async (r) => void rows.audit.push(r),
   };
-  return { store, jobs, rows, users };
+  return { store, jobs, rows, users, visits };
 }
 
 const opts = { enabled: true, now: NOW, timeZone: "America/New_York" };
@@ -518,5 +526,139 @@ describe("failures", () => {
       ((await send("note", { jobId: "j1", text: "x" })) as { code: string }).code,
       "serv1_unavailable",
     );
+  });
+});
+
+describe("multi-visit jobs (docs/VISITS.md)", () => {
+  const visit = (id: string, number: number, tech: string, status: BVisit["status"]): BVisit => ({
+    id,
+    jobId: "mv",
+    number,
+    scheduledStart: T(number * 1440),
+    scheduledEnd: T(number * 1440 + 120),
+    assignedTechId: tech,
+    status,
+    startedAt: null,
+    completedAt: null,
+    holdReason: null,
+    note: null,
+  });
+  beforeEach(() => {
+    m.jobs.set("mv", job("mv", { assignedTechId: "tech-a", visitTechIds: ["tech-a", "tech-b"] }));
+    m.visits.set("v1", visit("v1", 1, "tech-a", "Scheduled"));
+    m.visits.set("v2", visit("v2", 2, "tech-b", "Scheduled"));
+  });
+  const jobsFor = async (u: string) =>
+    ((await send("jobs", {}, u)) as unknown as { jobs: Record<string, unknown>[] }).jobs;
+
+  it("lists the job for both techs, at each tech's own visit, with who may act", async () => {
+    const a = (await jobsFor("u-a")).find((j) => j.id === "mv")!;
+    const b = (await jobsFor("u-b")).find((j) => j.id === "mv")!;
+    assert.equal(a.canAct, true);
+    assert.equal(b.canAct, false);
+    assert.equal(a.lastVisit, false);
+    assert.equal(a.scheduledStart, T(1440));
+    assert.equal(b.scheduledStart, T(2880));
+    assert.equal(a.currentVisitId, "v1");
+    assert.equal(b.myVisitId, "v2");
+    assert.deepEqual(
+      (b.visits as { id: string; mine: boolean }[]).map((v) => [v.id, v.mine]),
+      [
+        ["v1", false],
+        ["v2", true],
+      ],
+    );
+    // A job with no visits lists its one implied visit.
+    const plain = (await jobsFor("u-a")).find((j) => j.id === "j1")!;
+    assert.equal((plain.visits as unknown[]).length, 1);
+    assert.equal(plain.currentVisitId, "j1#1");
+  });
+
+  it("only the current visit's tech may change the job", async () => {
+    const r = (await send("status", { jobId: "mv", status: "EnRoute" }, "u-b")) as {
+      code: string;
+      message: string;
+    };
+    assert.equal(r.code, "not_assigned");
+    assert.match(r.message, /another tech's/);
+    assert.equal(
+      ((await send("note", { jobId: "mv", text: "hi" }, "u-b")) as { code: string }).code,
+      "not_assigned",
+    );
+    // Naming a visit that is not the current one is refused.
+    assert.equal(
+      (
+        (await send("status", { jobId: "mv", status: "EnRoute", visitId: "v2" })) as {
+          code: string;
+        }
+      ).code,
+      "invalid",
+    );
+  });
+
+  it("status moves the current visit with the job, in the same write", async () => {
+    assert.equal(
+      (await send("status", { jobId: "mv", status: "InProgress", visitId: "v1" })).ok,
+      true,
+    );
+    assert.equal(m.jobs.get("mv")!.status, "InProgress");
+    assert.equal(m.visits.get("v1")!.status, "InProgress");
+    assert.equal(m.visits.get("v1")!.startedAt, T(0));
+  });
+
+  it("complete is refused while another visit is planned; visit_done hands over to it", async () => {
+    await send("status", { jobId: "mv", status: "InProgress" });
+    const refused = (await send("complete", {
+      jobId: "mv",
+      noSignatureReason: "not_on_site",
+    })) as { code: string };
+    assert.equal(refused.code, "bad_transition");
+    assert.equal(
+      (await send("visit_done", { jobId: "mv", note: "Heads on poles 1 to 4", at: T(1) })).ok,
+      true,
+    );
+    assert.equal(m.jobs.get("mv")!.status, "Scheduled");
+    assert.equal(m.visits.get("v1")!.status, "Done");
+    assert.equal(m.visits.get("v1")!.note, "Heads on poles 1 to 4");
+
+    // Tom's visit is now current: he may start it and complete the job.
+    assert.equal(
+      (await send("status", { jobId: "mv", status: "InProgress", at: T(2) }, "u-b")).ok,
+      true,
+    );
+    const done = await send(
+      "complete",
+      { jobId: "mv", noSignatureReason: "not_on_site", at: T(3) },
+      "u-b",
+    );
+    assert.equal(done.ok, true);
+    assert.equal(m.jobs.get("mv")!.status, "Complete");
+    assert.equal(m.visits.get("v2")!.status, "Done");
+  });
+
+  it("visit_done on the last visit holds the job for a return visit", async () => {
+    m.visits.set("v2", { ...m.visits.get("v2")!, status: "Cancelled" });
+    await send("status", { jobId: "mv", status: "InProgress" });
+    assert.equal(
+      (await send("visit_done", { jobId: "mv", note: "Need a part", at: T(1) })).ok,
+      true,
+    );
+    const j = m.jobs.get("mv")!;
+    assert.equal(j.status, "OnHold");
+    assert.equal(j.holdReason, HOLD_REASONS.return_visit);
+    assert.equal(j.holdNote, "Need a part");
+    // On a job with no visits too, and only from work under way.
+    assert.equal(
+      ((await send("visit_done", { jobId: "j1" })) as { code: string }).code,
+      "bad_transition",
+    );
+  });
+
+  it("rows the bridge adds carry the job's techs, so the other tech can read them", async () => {
+    await send("note", { jobId: "mv", text: "Feeds checked" });
+    const note = [...m.rows.notes.values()].find((n) => n.jobId === "mv") as unknown as {
+      jobTechIds: string[];
+    };
+    assert.deepEqual(note.jobTechIds, ["tech-a", "tech-b"]);
   });
 });

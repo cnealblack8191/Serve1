@@ -16,10 +16,14 @@ import type { Job, JobStatus, NewJob, NewVisit, TableName, Visit, VisitStatus } 
  *    and its photos, signature and notes (read-only for work that is not theirs).
  */
 
-/** Hold reason used when a tech ends a visit and another trip is needed but none is planned. */
-export const RETURN_NEEDED = "Return visit needed";
+/**
+ * Hold reason used when a tech ends a visit and another trip is needed but none is planned. The
+ * same words as the ECI1 phone's "return_visit" hold (amplify/functions/eci1-tech-bridge/core.ts),
+ * so both mean the same to the office. The tech's words go in holdNote.
+ */
+export const RETURN_NEEDED = "Needs a return visit";
 export const isReturnHold = (job: Pick<Job, "status" | "holdReason">) =>
-  job.status === "OnHold" && (job.holdReason ?? "").startsWith(RETURN_NEEDED);
+  job.status === "OnHold" && job.holdReason === RETURN_NEEDED;
 
 export const OPEN_VISIT_STATUSES: VisitStatus[] = ["Scheduled", "EnRoute", "InProgress", "OnHold"];
 export const isOpenVisit = (v: Pick<Visit, "status">) => OPEN_VISIT_STATUSES.includes(v.status);
@@ -202,6 +206,7 @@ export async function syncJobWithVisits(jobId: string): Promise<void> {
   ) {
     patch.status = "Scheduled";
     patch.holdReason = null;
+    patch.holdNote = null;
   }
   if (Object.keys(patch).length) await b.jobs.update(jobId, patch);
   for (const v of all)
@@ -334,14 +339,14 @@ export async function finishVisit(job: Job, note: string | null): Promise<Job> {
   const words = note?.trim() || null;
   const live = liveVisitRows(job.id, await rowsOf(job.id));
   const cur = currentVisit(live);
-  const hold: Partial<NewJob> = {
-    status: "OnHold",
-    holdReason: words ? `${RETURN_NEEDED}: ${words}` : RETURN_NEEDED,
-  };
+  const hold: Partial<NewJob> = { status: "OnHold", holdReason: RETURN_NEEDED, holdNote: words };
   if (!live.length || !cur) return b.jobs.update(job.id, hold);
   await b.visits.update(cur.id, { status: "Done", completedAt: nowIso(), note: words });
   const more = live.some((v) => v.id !== cur.id && isOpenVisit(v));
-  return b.jobs.update(job.id, more ? { status: "Scheduled", holdReason: null } : hold);
+  return b.jobs.update(
+    job.id,
+    more ? { status: "Scheduled", holdReason: null, holdNote: null } : hold,
+  );
 }
 
 // ---------------------------------------------------------------- hooks

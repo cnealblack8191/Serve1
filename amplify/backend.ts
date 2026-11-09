@@ -100,6 +100,8 @@ const TABLE_ACCESS: Record<string, "read" | "write" | "readWrite"> = {
   TechReceipt: "readWrite",
   TechAction: "readWrite",
   BridgeAudit: "write",
+  // Multi-visit jobs (docs/VISITS.md): the current visit's status moves with the job.
+  Visit: "readWrite",
 };
 for (const [model, access] of Object.entries(TABLE_ACCESS)) {
   const table = tables[model];

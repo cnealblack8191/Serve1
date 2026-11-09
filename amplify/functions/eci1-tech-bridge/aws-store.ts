@@ -8,6 +8,7 @@ import {
   type BridgeStore,
   type BSignature,
   type BUser,
+  type BVisit,
 } from "./core";
 
 /**
@@ -38,6 +39,8 @@ export interface AwsStoreConfig {
     TechReceipt: string;
     TechAction: string;
     BridgeAudit: string;
+    /** Multi-visit jobs (docs/VISITS.md). */
+    Visit: string;
   };
   credentials: AwsCredentials;
   fetch: (url: string, init: RequestInit) => Promise<Response>;
@@ -236,6 +239,58 @@ export function createAwsStore(cfg: AwsStoreConfig): BridgeStore {
     }
   }
 
+  /**
+   * A job change and its current visit's change in one transaction: both only if the job still
+   * matches `expect` and the visit's status is still what the rules saw (else JobChanged).
+   */
+  async function updateJobAndVisit(
+    id: string,
+    patch: Partial<BJob>,
+    expect: Record<string, unknown>,
+    visit: { id: string; patch: Partial<BVisit>; expectStatus: string },
+  ) {
+    const t = now().toISOString();
+    const jobFields = { ...patch, updatedAt: t } as Record<string, unknown>;
+    delete jobFields.id;
+    const visitFields = { ...visit.patch, updatedAt: t } as Record<string, unknown>;
+    delete visitFields.id;
+    const js = setParts(jobFields, "j");
+    const jc = expectCondition(expect);
+    const vs = setParts(visitFields, "w");
+    try {
+      await ddb("TransactWriteItems", {
+        TransactItems: [
+          {
+            Update: {
+              TableName: cfg.tables.Job,
+              Key: { id: { S: id } },
+              UpdateExpression: js.expression,
+              ConditionExpression: jc.expression,
+              ExpressionAttributeNames: { ...js.names, ...jc.names },
+              ExpressionAttributeValues: { ...js.values, ...jc.values },
+            },
+          },
+          {
+            Update: {
+              TableName: cfg.tables.Visit,
+              Key: { id: { S: visit.id } },
+              UpdateExpression: vs.expression,
+              ConditionExpression: "attribute_exists(id) AND #wstatus = :wstatus",
+              ExpressionAttributeNames: { ...vs.names, "#wstatus": "status" },
+              ExpressionAttributeValues: { ...vs.values, ":wstatus": { S: visit.expectStatus } },
+            },
+          },
+        ],
+      });
+    } catch (e) {
+      if (e instanceof TransactionCanceled) throw new JobChanged();
+      throw e;
+    } finally {
+      scans.delete(cfg.tables.Job);
+      scans.delete(cfg.tables.Visit);
+    }
+  }
+
   /** Creates the row unless one with this id exists (then does nothing). */
   async function putOnce(table: string, typename: string, row: Record<string, unknown>) {
     const t = now().toISOString();
@@ -278,7 +333,33 @@ export function createAwsStore(cfg: AwsStoreConfig): BridgeStore {
     materials: list(r.materials),
     materialsAt: s(r.materialsAt),
     techStatusAt: s(r.techStatusAt),
+    visitTechIds: list<string>(r.visitTechIds),
   });
+  const toVisit = (r: Record<string, unknown>): BVisit => ({
+    id: String(r.id),
+    jobId: String(r.jobId ?? ""),
+    number: typeof r.number === "number" ? r.number : 0,
+    scheduledStart: s(r.scheduledStart),
+    scheduledEnd: s(r.scheduledEnd),
+    assignedTechId: s(r.assignedTechId),
+    status: (s(r.status) ?? "Scheduled") as BVisit["status"],
+    startedAt: s(r.startedAt),
+    completedAt: s(r.completedAt),
+    holdReason: s(r.holdReason),
+    note: s(r.note),
+  });
+
+  /** SET expression parts for an update (names and values prefixed so two can share a call). */
+  function setParts(fields: Record<string, unknown>, p: string) {
+    const names: Record<string, string> = {};
+    const values: Record<string, AV> = {};
+    const sets = Object.entries(fields).map(([k, v], i) => {
+      names[`#${p}f${i}`] = k;
+      values[`:${p}v${i}`] = toAV(v);
+      return `#${p}f${i} = :${p}v${i}`;
+    });
+    return { names, values, expression: `SET ${sets.join(", ")}` };
+  }
 
   const s3Url = (key: string) =>
     new URL(`https://${cfg.bucket}.s3.${cfg.region}.amazonaws.com/${key}`);
@@ -301,7 +382,14 @@ export function createAwsStore(cfg: AwsStoreConfig): BridgeStore {
       return r ? toJob(r) : null;
     },
     async jobsAssignedTo(identityId) {
-      return (await scan(cfg.tables.Job)).filter((r) => r.assignedTechId === identityId).map(toJob);
+      return (await scan(cfg.tables.Job))
+        .map(toJob)
+        .filter(
+          (j) => j.assignedTechId === identityId || (j.visitTechIds ?? []).includes(identityId),
+        );
+    },
+    async visits(jobId) {
+      return (await scan(cfg.tables.Visit)).filter((r) => r.jobId === jobId).map(toVisit);
     },
     async getCustomer(id) {
       const r = await get(cfg.tables.Customer, id);
@@ -373,7 +461,8 @@ export function createAwsStore(cfg: AwsStoreConfig): BridgeStore {
           } satisfies BSignature)
         : null;
     },
-    async updateJob(id, patch, expect) {
+    async updateJob(id, patch, expect, visit) {
+      if (visit) return updateJobAndVisit(id, patch, expect, visit);
       const fields = { ...patch, updatedAt: now().toISOString() } as Record<string, unknown>;
       delete fields.id;
       const names: Record<string, string> = {};
@@ -424,6 +513,7 @@ export function createAwsStore(cfg: AwsStoreConfig): BridgeStore {
           type: "Photo",
           caption: r.caption,
           uploadedBy: r.uploadedBy,
+          jobTechIds: r.jobTechIds ?? null,
         },
         expect,
       ),
