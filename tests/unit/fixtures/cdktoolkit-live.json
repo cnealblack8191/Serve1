@@ -1,0 +1,146 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "Serv1 deployment assets and static hosting; no CDK deployment roles.",
+  "Metadata": {
+    "AWSToolsMetrics": { "AWSAgentToolkit": "aws-cloudformation@3" },
+    "com.aws.cloudformation.Context": {
+      "must": [
+        "Account 111111111111; us-east-1.",
+        "One serve1-builder developer role; retain bounded app runtime roles.",
+        "No ECI modification or retirement."
+      ]
+    },
+    "ValidationBlockers": [
+      "Application deployment and live integration require separate execution approval."
+    ]
+  },
+  "Conditions": {
+    "ApprovedTarget": {
+      "Fn::And": [
+        { "Fn::Equals": [{ "Ref": "AWS::AccountId" }, "111111111111"] },
+        { "Fn::Equals": [{ "Ref": "AWS::Region" }, "us-east-1"] }
+      ]
+    }
+  },
+  "Resources": {
+    "StagingBucket": {
+      "Type": "AWS::S3::Bucket",
+      "Condition": "ApprovedTarget",
+      "Properties": {
+        "BucketName": "cdk-hnb659fds-assets-111111111111-us-east-1",
+        "VersioningConfiguration": { "Status": "Enabled" },
+        "BucketEncryption": {
+          "ServerSideEncryptionConfiguration": [
+            { "ServerSideEncryptionByDefault": { "SSEAlgorithm": "AES256" } }
+          ]
+        },
+        "PublicAccessBlockConfiguration": {
+          "BlockPublicAcls": true,
+          "IgnorePublicAcls": true,
+          "BlockPublicPolicy": true,
+          "RestrictPublicBuckets": true
+        },
+        "OwnershipControls": { "Rules": [{ "ObjectOwnership": "BucketOwnerEnforced" }] },
+        "Tags": [{ "Key": "Project", "Value": "serv1-demo" }]
+      },
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain"
+    },
+    "StagingBucketPolicy": {
+      "Type": "AWS::S3::BucketPolicy",
+      "Condition": "ApprovedTarget",
+      "Properties": {
+        "Bucket": { "Ref": "StagingBucket" },
+        "PolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Sid": "RequireTLS",
+              "Effect": "Deny",
+              "Action": "s3:*",
+              "Resource": [
+                "arn:aws:s3:::cdk-hnb659fds-assets-111111111111-us-east-1",
+                "arn:aws:s3:::cdk-hnb659fds-assets-111111111111-us-east-1/*"
+              ],
+              "Condition": { "Bool": { "aws:SecureTransport": "false" } },
+              "Principal": "*"
+            }
+          ]
+        }
+      }
+    },
+    "ContainerAssetsRepository": {
+      "Type": "AWS::ECR::Repository",
+      "Condition": "ApprovedTarget",
+      "Properties": {
+        "RepositoryName": "cdk-hnb659fds-container-assets-111111111111-us-east-1",
+        "EncryptionConfiguration": { "EncryptionType": "AES256" },
+        "ImageScanningConfiguration": { "ScanOnPush": true },
+        "ImageTagMutability": "IMMUTABLE",
+        "Tags": [{ "Key": "Project", "Value": "serv1-demo" }]
+      },
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain"
+    },
+    "CdkBootstrapVersion": {
+      "Type": "AWS::SSM::Parameter",
+      "Condition": "ApprovedTarget",
+      "Properties": {
+        "Name": "/cdk-bootstrap/hnb659fds/version",
+        "Type": "String",
+        "Value": "6",
+        "Description": "Custom Serv1-only bootstrap, contract v6; not stock latest CDK bootstrap.",
+        "Tags": { "Project": "serv1-demo" }
+      }
+    },
+    "HostingApp": {
+      "Type": "AWS::Amplify::App",
+      "Condition": "ApprovedTarget",
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain",
+      "Properties": {
+        "Name": "serv1-demo",
+        "Platform": "WEB",
+        "CustomRules": [{ "Source": "/<*>", "Target": "/index.html", "Status": "404-200" }],
+        "Tags": [
+          { "Key": "Project", "Value": "serv1-demo" },
+          { "Key": "Environment", "Value": "demo" }
+        ]
+      }
+    },
+    "HostingBranch": {
+      "Type": "AWS::Amplify::Branch",
+      "Condition": "ApprovedTarget",
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain",
+      "Properties": {
+        "AppId": { "Fn::GetAtt": ["HostingApp", "AppId"] },
+        "BranchName": "demo",
+        "EnableAutoBuild": false,
+        "Stage": "DEVELOPMENT",
+        "Tags": [{ "Key": "Project", "Value": "serv1-demo" }]
+      }
+    }
+  },
+  "Outputs": {
+    "BucketName": { "Condition": "ApprovedTarget", "Value": { "Ref": "StagingBucket" } },
+    "BucketDomainName": {
+      "Condition": "ApprovedTarget",
+      "Value": { "Fn::GetAtt": ["StagingBucket", "RegionalDomainName"] }
+    },
+    "ImageRepositoryName": {
+      "Condition": "ApprovedTarget",
+      "Value": { "Ref": "ContainerAssetsRepository" }
+    },
+    "BootstrapVersion": { "Condition": "ApprovedTarget", "Value": "6" },
+    "HostingAppId": {
+      "Condition": "ApprovedTarget",
+      "Value": { "Fn::GetAtt": ["HostingApp", "AppId"] }
+    },
+    "HostingDomain": {
+      "Condition": "ApprovedTarget",
+      "Value": { "Fn::GetAtt": ["HostingApp", "DefaultDomain"] }
+    },
+    "HostingBranch": { "Condition": "ApprovedTarget", "Value": "demo" }
+  }
+}

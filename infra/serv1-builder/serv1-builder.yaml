@@ -10,6 +10,13 @@ Parameters:
     Type: String
     Default: eci-ai-session
     Description: The IAM user that may assume the role (the one standing AI session credential).
+  HostingAppId:
+    Type: String
+    Default: d2yxtjpp0ljka2
+    AllowedPattern: "^d[a-z0-9]{12,14}$"
+    Description: >-
+      The one Amplify Hosting app this role may publish to (serv1-demo, stack serv1-hosting;
+      infra/hosting-move/RUNBOOK.md).
 
 Resources:
   Serv1BuilderRole:
@@ -50,6 +57,42 @@ Resources:
       ManagedPolicyArns:
         - !Sub arn:${AWS::Partition}:iam::aws:policy/service-role/AmplifyBackendDeployFullAccess
       Policies:
+        # scripts/pilot/deploy-web.sh and teardown.sh: publish a build to the one hosting app and
+        # manage its serv1.ecinc.us domain link. Nothing else in Amplify Hosting, and never deleting
+        # the app or its branch (owner decisions, 2026-11-09).
+        - PolicyName: Serv1HostingDeploy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: FindTheApp
+                Effect: Allow
+                Action: amplify:ListApps
+                Resource: "*"
+              - Sid: PublishToTheOneApp
+                Effect: Allow
+                Action:
+                  - amplify:GetApp
+                  - amplify:GetBranch
+                  - amplify:CreateDeployment
+                  - amplify:StartDeployment
+                  - amplify:GetJob
+                  - amplify:ListJobs
+                  - amplify:GetDomainAssociation
+                  - amplify:CreateDomainAssociation
+                  - amplify:DeleteDomainAssociation
+                Resource:
+                  - !Sub arn:${AWS::Partition}:amplify:us-east-1:${AWS::AccountId}:apps/${HostingAppId}
+                  - !Sub arn:${AWS::Partition}:amplify:us-east-1:${AWS::AccountId}:apps/${HostingAppId}/*
+              - Sid: NeverDeleteOrReshapeTheApp
+                Effect: Deny
+                Action:
+                  - amplify:DeleteApp
+                  - amplify:DeleteBranch
+                  - amplify:UpdateApp
+                  - amplify:UpdateBranch
+                Resource:
+                  - !Sub arn:${AWS::Partition}:amplify:us-east-1:${AWS::AccountId}:apps/${HostingAppId}
+                  - !Sub arn:${AWS::Partition}:amplify:us-east-1:${AWS::AccountId}:apps/${HostingAppId}/*
         - PolicyName: Serv1BuilderGuard
           PolicyDocument:
             Version: "2012-10-17"

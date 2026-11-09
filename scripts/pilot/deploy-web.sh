@@ -29,7 +29,8 @@ aws amplify get-branch --app-id "$APP_ID" --branch-name "$BRANCH" >/dev/null ||
 # The single-page-app rewrite (every path without a file extension serves index.html) is already
 # set on this app; this only checks it, so the app's settings are never overwritten.
 if [ "$(aws amplify get-app --app-id "$APP_ID" \
-  --query "length(app.customRules[?target=='/index.html' && status=='200'])" --output text)" = "0" ]; then
+  --query "length(app.customRules[?target=='/index.html' && (status=='200' || status=='404-200')])" \
+  --output text)" = "0" ]; then
   echo "Warning: app $APP_ID has no index.html rewrite rule; deep links will 404 until one is added."
 fi
 
