@@ -60,17 +60,32 @@ bucket_must_be_empty() {
   echo "Bucket $BUCKET: $v versions, $d delete markers, $u unfinished uploads."
   "${CLI[@]}" bucket-empty "$v" "$d" "$u" || { echo "Stop: nothing is deleted."; exit 1; }
 }
-# The bucket's settings as they are, for undo-bucket (a setting the bucket lacks is saved as {}).
+# The bucket's settings as they are, for undo-bucket. A setting the bucket does not have is saved
+# as {}, but only on S3's own "not configured" error for it; any other failure (access denied,
+# expired credentials, network) stops before anything changes (Codex review of PR #24).
 save_bucket() {
-  local f
+  local f absent err
   for f in versioning encryption public-access-block lifecycle-configuration ownership-controls tagging; do
     case "$f" in
-      versioning) aws s3api get-bucket-versioning --bucket "$BUCKET" --output json >"$WORK/bucket-$f.json" ;;
-      public-access-block) aws s3api get-public-access-block --bucket "$BUCKET" --output json \
-        >"$WORK/bucket-$f.json" 2>/dev/null || echo '{}' >"$WORK/bucket-$f.json" ;;
-      *) aws s3api "get-bucket-$f" --bucket "$BUCKET" --output json \
-        >"$WORK/bucket-$f.json" 2>/dev/null || echo '{}' >"$WORK/bucket-$f.json" ;;
+      encryption) absent="ServerSideEncryptionConfigurationNotFoundError" ;;
+      public-access-block) absent="NoSuchPublicAccessBlockConfiguration" ;;
+      lifecycle-configuration) absent="NoSuchLifecycleConfiguration" ;;
+      ownership-controls) absent="OwnershipControlsNotFoundError" ;;
+      tagging) absent="NoSuchTagSet" ;;
+      *) absent="" ;;
     esac
+    local cmd="get-bucket-$f"
+    [ "$f" = "public-access-block" ] && cmd="get-public-access-block"
+    if ! aws s3api "$cmd" --bucket "$BUCKET" --output json >"$WORK/bucket-$f.json" 2>"$WORK/bucket-$f.err"; then
+      err="$(cat "$WORK/bucket-$f.err")"
+      if [ -n "$absent" ] && grep -q "($absent)" "$WORK/bucket-$f.err"; then
+        echo '{}' >"$WORK/bucket-$f.json"
+      else
+        echo "Could not save the bucket's $f setting: $err"
+        echo "Stop. Nothing changed."
+        exit 1
+      fi
+    fi
   done
   echo "Saved the bucket's settings to $WORK/bucket-*.json."
 }
@@ -344,44 +359,50 @@ JSON
 
   undo-bucket) # Before a successful bootstrap only: the empty bucket back in CDKToolkit as it was
     need cdktoolkit-prebucket.json drop-bucket
-    in_stack CDKToolkit StagingBucket && { echo "StagingBucket is in CDKToolkit already."; exit 0; }
-    V="$(aws ssm get-parameter --name /cdk-bootstrap/hnb659fds/version --query Parameter.Value --output text)"
-    [ "$V" -gt 6 ] && { echo "CDKToolkit is bootstrapped (version $V): run 'undo-bootstrap' first."; exit 1; }
-    if ! bucket_exists; then
-      echo "Re-creating the empty bucket $BUCKET with its saved settings."
-      confirm "RECREATE STAGING BUCKET"
-      aws s3api create-bucket --bucket "$BUCKET" >/dev/null
-      aws s3api wait bucket-exists --bucket "$BUCKET"
-      aws s3api put-bucket-versioning --bucket "$BUCKET" \
-        --versioning-configuration "$(json_at "$WORK/bucket-versioning.json")"
-      X="$(json_at "$WORK/bucket-encryption.json" ServerSideEncryptionConfiguration)"
-      [ -z "$X" ] || aws s3api put-bucket-encryption --bucket "$BUCKET" --server-side-encryption-configuration "$X"
-      X="$(json_at "$WORK/bucket-public-access-block.json" PublicAccessBlockConfiguration)"
-      [ -z "$X" ] || aws s3api put-public-access-block --bucket "$BUCKET" --public-access-block-configuration "$X"
-      X="$(json_at "$WORK/bucket-lifecycle-configuration.json" Rules)"
-      [ -z "$X" ] || aws s3api put-bucket-lifecycle-configuration --bucket "$BUCKET" \
-        --lifecycle-configuration "{\"Rules\":$X}"
-      X="$(json_at "$WORK/bucket-ownership-controls.json" OwnershipControls)"
-      [ -z "$X" ] || aws s3api put-bucket-ownership-controls --bucket "$BUCKET" --ownership-controls "$X"
-      X="$(json_at "$WORK/bucket-tagging.json" TagSet)"
-      [ -z "$X" ] || aws s3api put-bucket-tagging --bucket "$BUCKET" --tagging "{\"TagSet\":$X}"
-    fi
-    # Import the bucket alone (an IMPORT may not add the policy or change outputs), then the saved
-    # template, which adds back the bucket policy and the outputs.
-    aws cloudformation get-template --stack-name CDKToolkit --template-stage Original \
-      --output json >"$WORK/cdktoolkit-current.json"
-    "${CLI[@]}" reimport-bucket "$WORK/cdktoolkit-prebucket.json" "$WORK/cdktoolkit-current.json" \
-      "$WORK/cdktoolkit-bucket-reimport.json"
+    in_stack CDKToolkit StagingBucket && in_stack CDKToolkit StagingBucketPolicy &&
+      { echo "CDKToolkit holds the staging bucket and its policy already."; exit 0; }
     template_body "$WORK/cdktoolkit-prebucket.json" "$WORK/cdktoolkit-prebucket-body.json"
-    cat >"$WORK/bucket-reimport.json" <<JSON
+    # A run stopped after the import resumes at the update below (Codex review of PR #24).
+    if ! in_stack CDKToolkit StagingBucket; then
+      V="$(aws ssm get-parameter --name /cdk-bootstrap/hnb659fds/version --query Parameter.Value --output text)"
+      [ "$V" -gt 6 ] && { echo "CDKToolkit is bootstrapped (version $V): run 'undo-bootstrap' first."; exit 1; }
+      if ! bucket_exists; then
+        echo "Re-creating the empty bucket $BUCKET with its saved settings."
+        confirm "RECREATE STAGING BUCKET"
+        aws s3api create-bucket --bucket "$BUCKET" >/dev/null
+        aws s3api wait bucket-exists --bucket "$BUCKET"
+        aws s3api put-bucket-versioning --bucket "$BUCKET" \
+          --versioning-configuration "$(json_at "$WORK/bucket-versioning.json")"
+        X="$(json_at "$WORK/bucket-encryption.json" ServerSideEncryptionConfiguration)"
+        [ -z "$X" ] || aws s3api put-bucket-encryption --bucket "$BUCKET" --server-side-encryption-configuration "$X"
+        X="$(json_at "$WORK/bucket-public-access-block.json" PublicAccessBlockConfiguration)"
+        [ -z "$X" ] || aws s3api put-public-access-block --bucket "$BUCKET" --public-access-block-configuration "$X"
+        X="$(json_at "$WORK/bucket-lifecycle-configuration.json" Rules)"
+        [ -z "$X" ] || aws s3api put-bucket-lifecycle-configuration --bucket "$BUCKET" \
+          --lifecycle-configuration "{\"Rules\":$X}"
+        X="$(json_at "$WORK/bucket-ownership-controls.json" OwnershipControls)"
+        [ -z "$X" ] || aws s3api put-bucket-ownership-controls --bucket "$BUCKET" --ownership-controls "$X"
+        X="$(json_at "$WORK/bucket-tagging.json" TagSet)"
+        [ -z "$X" ] || aws s3api put-bucket-tagging --bucket "$BUCKET" --tagging "{\"TagSet\":$X}"
+      fi
+      # Import the bucket alone (an IMPORT may not add the policy or change outputs), then the saved
+      # template, which adds back the bucket policy and the outputs.
+      aws cloudformation get-template --stack-name CDKToolkit --template-stage Original \
+        --output json >"$WORK/cdktoolkit-current.json"
+      "${CLI[@]}" reimport-bucket "$WORK/cdktoolkit-prebucket.json" "$WORK/cdktoolkit-current.json" \
+        "$WORK/cdktoolkit-bucket-reimport.json"
+      cat >"$WORK/bucket-reimport.json" <<JSON
 [{"ResourceType":"AWS::S3::Bucket","LogicalResourceId":"StagingBucket","ResourceIdentifier":{"BucketName":"$BUCKET"}}]
 JSON
-    make_change_set CDKToolkit serv1-hosting-move-undo-bucket cs-undo-bucket \
-      --change-set-type IMPORT --template-body "file://$WORK/cdktoolkit-bucket-reimport.json" \
-      --resources-to-import "file://$WORK/bucket-reimport.json"
-    confirm "UNDO REMOVE STAGING BUCKET"
-    aws cloudformation execute-change-set --stack-name CDKToolkit --change-set-name serv1-hosting-move-undo-bucket
-    aws cloudformation wait stack-import-complete --stack-name CDKToolkit
+      make_change_set CDKToolkit serv1-hosting-move-undo-bucket cs-undo-bucket \
+        --change-set-type IMPORT --template-body "file://$WORK/cdktoolkit-bucket-reimport.json" \
+        --resources-to-import "file://$WORK/bucket-reimport.json"
+      confirm "UNDO REMOVE STAGING BUCKET"
+      aws cloudformation execute-change-set --stack-name CDKToolkit --change-set-name serv1-hosting-move-undo-bucket
+      aws cloudformation wait stack-import-complete --stack-name CDKToolkit
+    else
+      echo "StagingBucket is in CDKToolkit already; its policy and outputs are not. Resuming."
+    fi
     echo "Restoring the bucket policy and outputs (the saved template)."
     aws cloudformation update-stack --stack-name CDKToolkit \
       --template-body "file://$WORK/cdktoolkit-prebucket-body.json"
