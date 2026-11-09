@@ -389,7 +389,11 @@ JSON
         --lifecycle-configuration "{\"Rules\":$X}"
       X="$(json_at "$WORK/bucket-ownership-controls.json" OwnershipControls)"
       [ -z "$X" ] || aws s3api put-bucket-ownership-controls --bucket "$BUCKET" --ownership-controls "$X"
-      X="$(json_at "$WORK/bucket-tagging.json" TagSet)"
+      # Tags starting "aws:" (CloudFormation's own) are reserved and cannot be set by hand; the
+      # stack adds them back itself (Codex review of PR #24).
+      X="$(node -e 'const v=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));
+        const t=(v.TagSet||[]).filter(x=>!String(x.Key).startsWith("aws:"));
+        if(t.length)process.stdout.write(JSON.stringify(t))' "$WORK/bucket-tagging.json")"
       [ -z "$X" ] || aws s3api put-bucket-tagging --bucket "$BUCKET" --tagging "{\"TagSet\":$X}"
       # Import the bucket alone (an IMPORT may not add the policy or change outputs), then the saved
       # template, which adds back the bucket policy and the outputs.
