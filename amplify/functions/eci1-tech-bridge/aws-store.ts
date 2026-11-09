@@ -428,7 +428,9 @@ export function createAwsStore(cfg: AwsStoreConfig): BridgeStore {
           (j) => j.assignedTechId === identityId || (j.visitTechIds ?? []).includes(identityId),
         );
     },
-    async visits(jobId) {
+    async visits(jobId, opts) {
+      // The completion re-check must see visits added during this request (Codex review of #21).
+      if (opts?.fresh) scans.delete(cfg.tables.Visit);
       return (await scan(cfg.tables.Visit)).filter((r) => r.jobId === jobId).map(toVisit);
     },
     async getCustomer(id) {

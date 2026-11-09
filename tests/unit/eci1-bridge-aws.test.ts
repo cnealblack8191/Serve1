@@ -317,6 +317,14 @@ describe("store requests", () => {
       JobChanged,
     );
   });
+  it("a fresh visits read scans the table again; a normal read reuses this request's scan", async () => {
+    const { store, sent } = fake(() => ({ status: 200, json: { Items: [] } }));
+    await store.visits("mv");
+    await store.visits("mv");
+    assert.equal(sent.filter((x) => x.target === "DynamoDB_20120810.Scan").length, 1);
+    await store.visits("mv", { fresh: true });
+    assert.equal(sent.filter((x) => x.target === "DynamoDB_20120810.Scan").length, 2);
+  });
   it("job updates touch only the given fields and require the job to exist", async () => {
     const { store, sent } = fake(() => ({ status: 200, json: {} }));
     await store.updateJob(

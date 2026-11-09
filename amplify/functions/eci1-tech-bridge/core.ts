@@ -207,7 +207,8 @@ export interface BridgeStore {
   /** Jobs assigned to the tech, or with a visit of theirs (visitTechIds). */
   jobsAssignedTo(identityId: string): Promise<BJob[]>;
   /** The job's Visit rows (any status). */
-  visits(jobId: string): Promise<BVisit[]>;
+  /** The job's visits. `fresh` reads the table again rather than this request's earlier read. */
+  visits(jobId: string, opts?: { fresh?: boolean }): Promise<BVisit[]>;
   getCustomer(id: string): Promise<{ name: string; phone: string | null } | null>;
   getSite(
     id: string,
@@ -741,7 +742,7 @@ async function write(route: Route, b: Record<string, unknown>, c: WriteCtx): Pro
       // office change to a job's visits also writes the job (syncJobWithVisits), so a visit
       // added after this read cancels the save (JobChanged) and the phone's retry is refused.
       if (visit) {
-        const again = liveVisits(await store.visits(job.id));
+        const again = liveVisits(await store.visits(job.id, { fresh: true }));
         if (again.some((v) => v.id !== visit.id && OPEN_VISIT.includes(v.status)))
           return fail(
             "bad_transition",

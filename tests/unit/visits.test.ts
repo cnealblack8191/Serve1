@@ -183,6 +183,29 @@ describe("multi-visit jobs", () => {
     assert.ok(writes.includes("job-20"));
   });
 
+  it("a visit added while the job is being completed is cancelled, not left planned", async () => {
+    await as(b, OFFICE);
+    const job = (await b.jobs.get("job-20"))!;
+    const realCreate = b.visits.create;
+    // The completion lands right after the office creates the new visit.
+    b.visits.create = async (input) => {
+      const row = await realCreate(input);
+      await b.jobs.update("job-20", { status: "Complete" });
+      return row;
+    };
+    await assert.rejects(
+      v.addVisit(job, {
+        assignedTechId: "local-tech-1",
+        start: new Date(Date.now() + 9 * 86_400_000),
+        minutes: 60,
+      }),
+      /just marked Complete/,
+    );
+    b.visits.create = realCreate;
+    const added = (await b.visits.list()).find((x) => x.jobId === "job-20" && x.number === 4)!;
+    assert.equal(added.status, "Cancelled");
+  });
+
   it("Job complete is refused while another visit is planned, even if the screen said last", async () => {
     await as(b, TOM);
     let job = (await b.jobs.get("job-20"))!;

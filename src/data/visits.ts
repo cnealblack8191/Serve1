@@ -300,8 +300,19 @@ export async function addVisit(job: Job, plan: VisitPlan): Promise<Visit> {
   };
   const v = await backend().visits.create(input);
   await syncJobWithVisits(job.id);
+  // A completion (Serv1 screen or ECI1 bridge) may have landed between creating the visit and the
+  // job write above. Checked after that write, so either the completion saw the new visit and was
+  // refused, or it is visible here: then the new visit is cancelled, never left planned on a
+  // finished job (Codex review of PR #21).
+  const after = await backend().jobs.get(job.id);
+  if (after && FINISHED.includes(after.status)) {
+    await backend().visits.update(v.id, { status: "Cancelled" });
+    throw new Error(`This job was just marked ${after.status}. The new visit was not added.`);
+  }
   return v;
 }
+
+const FINISHED: Job["status"][] = ["Complete", "Reviewed", "Invoiced", "Paid", "Cancelled"];
 
 /** Office: move or reassign a visit that has not started. */
 export async function rescheduleVisit(visit: Visit, plan: VisitPlan): Promise<Visit> {
