@@ -80,6 +80,15 @@ function AuthPage() {
             </div>
           </div>
 
+          {/* Owner, 2026-11-09: the pilot holds demo data only until Serv1 joins the ECI ecosystem. */}
+          <p
+            role="note"
+            data-testid="demo-only-notice"
+            className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-center text-sm font-medium text-amber-950 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-100"
+          >
+            Demo only. Do not enter real customer, employee or pricing information.
+          </p>
+
           <form
             onSubmit={submit}
             className="space-y-4"
