@@ -13,6 +13,8 @@ cd "$(dirname "$0")/../.."
 
 unset SPECTRUM_CONNECTOR_URL SPECTRUM_INVOKE_RESOURCE ECI1_BRIDGE_DEPLOY ECI1_BRIDGE_ENABLED
 export AWS_REGION=us-east-1 AWS_DEFAULT_REGION=us-east-1
+# Pilot sign-ins are plain usernames (admin, user, tech, viewer): amplify/backend.ts.
+export SERV1_USERNAME_SIGNIN=true
 
 echo "Deploying as: $(aws sts get-caller-identity --query Arn --output text)"
 npm ci

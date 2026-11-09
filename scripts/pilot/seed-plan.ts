@@ -21,9 +21,9 @@ import {
 export interface PilotUser {
   /** The demo account it stands for, e.g. "local-tech-1". */
   demoIdentityId: string;
-  /** Sign-in name, e.g. "tech@serv1.ecinc.us". */
+  /** Contact email attribute, e.g. "tech@serv1.ecinc.us" (no mailbox, no mail sent). */
   email: string;
-  /** Cognito user id (sub) and username, as AdminCreateUser returned them. */
+  /** Cognito user id (sub) and username ("tech": the pilot signs in by username). */
   sub: string;
   username: string;
 }
@@ -33,15 +33,19 @@ export const cognitoIdentity = (u: Pick<PilotUser, "sub" | "username">) =>
   `${u.sub}::${u.username}`;
 
 /**
- * The four pilot sign-ins (owner, 2026-11-09: one per role) and the demo account each stands
- * for. The other demo techs stay on the roster and the dispatch board without a sign-in.
+ * The four pilot sign-ins, plain usernames (owner, 2026-11-09: "admin, user, tech", and "instead
+ * of share, make it viewer"), and the demo account each stands for. "viewer" is the read-only
+ * Owner role. The other demo techs stay on the roster and the dispatch board without a sign-in.
  */
 export const PILOT_SIGN_INS = [
   { local: "admin", demoIdentityId: "local-admin", group: "Admin" },
-  { local: "office", demoIdentityId: "local-office", group: "Office" },
-  { local: "owner", demoIdentityId: "local-owner", group: "Owner" },
+  { local: "user", demoIdentityId: "local-office", group: "Office" },
   { local: "tech", demoIdentityId: "local-tech-1", group: "Tech" },
+  { local: "viewer", demoIdentityId: "local-owner", group: "Owner" },
 ] as const;
+
+/** The pilot's time zone (the company's, as in amplify/functions/eci1-tech-bridge/resource.ts). */
+export const PILOT_TIME_ZONE = "America/New_York";
 
 /** Roster identity for a demo person who has no pilot sign-in (never matches a Cognito user). */
 export const noSignInIdentity = (demoIdentityId: string) => `no-sign-in:${demoIdentityId}`;

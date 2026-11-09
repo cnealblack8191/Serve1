@@ -98,14 +98,16 @@ function AuthPage() {
                 <div>
                   <h2 className="text-xl font-semibold tracking-tight">Sign in</h2>
                   <p className="mt-1 text-sm text-muted-foreground">
-                    Use your company email and password.
+                    Use your username (or company email) and password.
                   </p>
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="email">Email</Label>
+                  <Label htmlFor="email">Username or email</Label>
                   <Input
                     id="email"
-                    type="email"
+                    type="text"
+                    autoCapitalize="none"
+                    spellCheck={false}
                     autoComplete="username"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}

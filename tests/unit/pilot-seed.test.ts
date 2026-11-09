@@ -1,5 +1,6 @@
 /** Pilot seed plan: demo data mapped onto the pilot sign-ins. Synthetic only, no network. */
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { describe, it } from "node:test";
 
 import {
@@ -7,6 +8,7 @@ import {
   cognitoIdentity,
   noSignInIdentity,
   PILOT_SIGN_INS,
+  PILOT_TIME_ZONE,
   type PilotUser,
 } from "../../scripts/pilot/seed-plan.ts";
 import { SEED_JOBS } from "../../src/data/local/seed.ts";
@@ -15,7 +17,7 @@ const pilot: PilotUser[] = PILOT_SIGN_INS.map((p, i) => ({
   demoIdentityId: p.demoIdentityId,
   email: `${p.local}@serv1.ecinc.us`,
   sub: `00000000-0000-4000-8000-00000000000${i}`,
-  username: `00000000-0000-4000-8000-00000000000${i}`,
+  username: p.local,
 }));
 
 describe("pilot seed plan", () => {
@@ -35,11 +37,19 @@ describe("pilot seed plan", () => {
     );
     assert.ok(plan.users.every((u) => u.email.endsWith("@serv1.ecinc.us")));
   });
-  it("exactly four sign-ins; the other demo techs stay on the roster without one", () => {
+  it("exactly four plain-username sign-ins; the other demo techs stay on the roster without one", () => {
     assert.deepEqual(
-      PILOT_SIGN_INS.map((p) => p.local),
-      ["admin", "office", "owner", "tech"],
+      PILOT_SIGN_INS.map((p) => [p.local, p.group]),
+      [
+        ["admin", "Admin"],
+        ["user", "Office"],
+        ["tech", "Tech"],
+        ["viewer", "Owner"],
+      ],
     );
+    const plan0 = buildSeedPlan(pilot);
+    const viewer = plan0.users.find((u) => u.email === "viewer@serv1.ecinc.us")!;
+    assert.equal(viewer.role, "Owner");
     const plan = buildSeedPlan(pilot);
     const tom = plan.users.find((u) => u.name === "Tom Tech")!;
     assert.equal(tom.identityId, noSignInIdentity("local-tech-2"));
@@ -54,6 +64,27 @@ describe("pilot seed plan", () => {
         assert.ok(!("createdAt" in r) && !("updatedAt" in r));
       }
     assert.ok(plan.invoices.every((i) => !("id" in i) && typeof i.jobId === "string"));
+  });
+  it("pins the seed to the company's time zone, so demo jobs land in working hours", () => {
+    // CloudShell runs in UTC; seed-demo.ts sets TZ before it loads the seed. Same steps here.
+    const script = `process.env.TZ = ${JSON.stringify(PILOT_TIME_ZONE)};
+      const { SEED_JOBS } = await import(${JSON.stringify(new URL("../../src/data/local/seed.ts", import.meta.url).href)});
+      const f = new Intl.DateTimeFormat("en-US", { timeZone: ${JSON.stringify(PILOT_TIME_ZONE)}, hour: "numeric", hourCycle: "h23" });
+      console.log(JSON.stringify(SEED_JOBS.filter((j) => j.scheduledStart).map((j) => Number(f.format(new Date(j.scheduledStart))))));`;
+    const out = execFileSync(
+      process.execPath,
+      ["--import", "tsx", "--input-type=module", "-e", script],
+      {
+        env: { ...process.env, TZ: "UTC" },
+        encoding: "utf8",
+      },
+    );
+    const hours = JSON.parse(out) as number[];
+    assert.ok(hours.length > 0);
+    assert.ok(
+      hours.every((h) => h >= 7 && h < 18),
+      `hours outside the board: ${hours.join(", ")}`,
+    );
   });
   it("refuses to run with a demo account missing", () => {
     assert.throws(() => buildSeedPlan(pilot.slice(1)), /No pilot sign-in for: admin/);

@@ -4,7 +4,7 @@
  *
  *   npx tsx scripts/pilot/seed-demo.ts amplify_outputs.json scripts/pilot/pilot-users.json
  *
- * It signs in as the pilot Admin (the password is typed at the prompt, never an argument, a file
+ * It signs in as the pilot Admin, username "admin" (the shared pilot password is typed at the prompt, never an argument, a file
  * or a log line) and writes through the normal Serv1 data API, so every access rule applies.
  * Safe to run twice: a row whose id already exists is left as it is.
  */
@@ -15,7 +15,12 @@ import { Amplify } from "aws-amplify";
 import { signIn, signOut } from "aws-amplify/auth";
 import { generateClient } from "aws-amplify/data";
 
-import { buildSeedPlan, type PilotUser } from "./seed-plan";
+import type { PilotUser } from "./seed-plan";
+
+// The demo seed builds its times with local-clock hours (src/data/local/seed.ts), and CloudShell
+// runs in UTC. Pin the clock to the company's zone before the seed is loaded (dynamic import in
+// main), so a 9 AM demo job is 9 AM on the office's board.
+process.env.TZ = "America/New_York";
 
 type Model = {
   get(args: object): Promise<{ data: unknown; errors?: { message: string }[] }>;
@@ -44,13 +49,15 @@ async function main() {
   }
   const outputs = JSON.parse(readFileSync(outputsPath, "utf8"));
   const pilot = JSON.parse(readFileSync(usersPath, "utf8")) as { users: PilotUser[] };
+  const { buildSeedPlan, PILOT_TIME_ZONE } = await import("./seed-plan");
+  if (process.env.TZ !== PILOT_TIME_ZONE) throw new Error("Time zone mismatch in seed-demo.ts");
   const plan = buildSeedPlan(pilot.users);
   const admin = pilot.users.find((u) => u.demoIdentityId === "local-admin");
   if (!admin) throw new Error("pilot-users.json has no Admin sign-in");
 
   Amplify.configure(outputs);
-  const password = await askHidden(`Password for ${admin.email}: `);
-  const res = await signIn({ username: admin.email, password });
+  const password = await askHidden(`Pilot password (signing in as ${admin.username}): `);
+  const res = await signIn({ username: admin.username, password });
   if (!res.isSignedIn) throw new Error(`Sign-in did not finish (${res.nextStep.signInStep})`);
 
   const client = generateClient({ authMode: "userPool" });

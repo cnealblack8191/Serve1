@@ -4,9 +4,10 @@
 #
 #   bash scripts/pilot/create-users.sh amplify_outputs.json [domain] [--reset-passwords]
 #
-# domain defaults to serv1.ecinc.us, so the sign-ins are admin@, office@, owner@ and tech@serv1.ecinc.us
-# (owner, 2026-11-09: one per role, one simple password). They are sign-in names only: no mail is sent
-# to them (MessageAction SUPPRESS).
+# Four plain-username sign-ins (owner, 2026-11-09): admin (Admin), user (Office), tech (Tech) and
+# viewer (Owner, read-only). The pool signs in by username (deploy-backend.sh sets
+# SERV1_USERNAME_SIGNIN). Cognito still needs an email attribute: each gets <username>@<domain>
+# (default serv1.ecinc.us), with no mailbox and no mail sent (MessageAction SUPPRESS).
 #
 # Password: the owner types ONE password at a hidden prompt, and all four sign-ins use it. It is
 # never an argument, never echoed, and never written to a file, a log or the repository.
@@ -27,12 +28,12 @@ import json, sys
 o = json.load(open(sys.argv[1]))
 print(o["auth"]["user_pool_id"], o["auth"]["aws_region"])' "$OUTPUTS")
 
-# demo identity | local part | name | group  (PILOT_SIGN_INS in scripts/pilot/seed-plan.ts)
+# demo identity | username | name | group  (PILOT_SIGN_INS in scripts/pilot/seed-plan.ts)
 ACCOUNTS=(
   "local-admin|admin|Alex Admin|Admin"
-  "local-office|office|Olivia Office|Office"
-  "local-owner|owner|Owen Owner|Owner"
+  "local-office|user|Olivia Office|Office"
   "local-tech-1|tech|Tara Tech|Tech"
+  "local-owner|viewer|Owen Owner|Owner"
 )
 
 # The pool's rule (Amplify's default): 8+ characters with upper case, lower case, a digit and a symbol.
@@ -59,14 +60,14 @@ ask_password() {
   done
 }
 
-echo "User pool $POOL ($REGION), sign-ins @$DOMAIN"
+echo "User pool $POOL ($REGION)"
 
 # Ask only when a password will be set: a new user, or --reset-passwords.
 NEED_PW="$RESET"
 for row in "${ACCOUNTS[@]}"; do
   IFS='|' read -r _ LOCAL _ _ <<<"$row"
   if ! aws cognito-idp admin-get-user --region "$REGION" --user-pool-id "$POOL" \
-    --username "$LOCAL@$DOMAIN" >/dev/null 2>&1; then
+    --username "$LOCAL" >/dev/null 2>&1; then
     NEED_PW="yes"
   fi
 done
@@ -91,25 +92,26 @@ JSON_ROWS=()
 for row in "${ACCOUNTS[@]}"; do
   IFS='|' read -r DEMO LOCAL NAME GROUP <<<"$row"
   EMAIL="$LOCAL@$DOMAIN"
-  if aws cognito-idp admin-get-user --region "$REGION" --user-pool-id "$POOL" --username "$EMAIL" >/dev/null 2>&1; then
+  if aws cognito-idp admin-get-user --region "$REGION" --user-pool-id "$POOL" --username "$LOCAL" >/dev/null 2>&1; then
     STATE="kept"
     if [ "$RESET" = "yes" ]; then
-      set_password "$EMAIL"
+      set_password "$LOCAL"
       STATE="password reset"
     fi
   else
-    aws cognito-idp admin-create-user --region "$REGION" --user-pool-id "$POOL" --username "$EMAIL" \
+    aws cognito-idp admin-create-user --region "$REGION" --user-pool-id "$POOL" --username "$LOCAL" \
       --user-attributes Name=email,Value="$EMAIL" Name=email_verified,Value=true Name=name,Value="$NAME" \
       --message-action SUPPRESS >/dev/null
-    set_password "$EMAIL"
+    set_password "$LOCAL"
     STATE="created"
   fi
   aws cognito-idp admin-add-user-to-group --region "$REGION" --user-pool-id "$POOL" \
-    --username "$EMAIL" --group-name "$GROUP"
+    --username "$LOCAL" --group-name "$GROUP"
   read -r USERNAME SUB < <(aws cognito-idp admin-get-user --region "$REGION" --user-pool-id "$POOL" \
-    --username "$EMAIL" --query "[Username, UserAttributes[?Name=='sub'].Value | [0]]" --output text)
+    --username "$LOCAL" --query "[Username, UserAttributes[?Name=='sub'].Value | [0]]" --output text)
   JSON_ROWS+=("{\"demoIdentityId\":\"$DEMO\",\"email\":\"$EMAIL\",\"username\":\"$USERNAME\",\"sub\":\"$SUB\",\"group\":\"$GROUP\"}")
-  echo "  $EMAIL ($GROUP): $STATE"
+  [ "$USERNAME" = "$LOCAL" ] || { echo "The pool did not keep username $LOCAL (got $USERNAME): is it a username pool?"; exit 1; }
+  echo "  $LOCAL ($GROUP): $STATE"
 done
 PW=""
 
