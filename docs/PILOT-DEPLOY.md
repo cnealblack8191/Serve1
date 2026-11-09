@@ -110,7 +110,7 @@ certificate: _3f9c...e1.serv1.ecinc.us. CNAME _7a2b...c4.xxxxxxxx.acm-validation
 site:        serv1 CNAME d1abcd2efgh3ij.cloudfront.net
 ```
 
-The owner adds both records himself (2026-11-09: "I'll add the dns record", "ok keep the two
+The owner adds both records (2026-11-09: "I'll add the dns record", "ok keep the two
 cnames"). In Bluehost:
 
 1. Sign in at `https://my.bluehost.com` with the account that owns `ecinc.us`.
