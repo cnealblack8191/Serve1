@@ -107,6 +107,18 @@ describe("multi-visit jobs", () => {
     assert.equal(done.status, "Done");
     assert.equal(done.note, "Heads on poles 1 to 4");
 
+    // Tara cannot change the job before the office hands it over (only the office reassigns).
+    await as(b, TARA);
+    job = (await b.jobs.get("job-20"))!;
+    await assert.rejects(v.updateJobWithVisit(job, movePatch(job, "start")));
+    await as(b, OFFICE);
+    assert.deepEqual(
+      v.handoversDue(await b.jobs.list(), await b.visits.list()).map((j) => j.id),
+      ["job-20"],
+    );
+    await v.syncJobWithVisits("job-20");
+    assert.equal((await b.jobs.get("job-20"))!.assignedTechId, "local-tech-1");
+
     // Tara does the last visit and completes the job (the signature step's update).
     await as(b, TARA);
     job = (await b.jobs.get("job-20"))!;
@@ -268,5 +280,36 @@ describe("multi-visit jobs", () => {
       clashes.map((c) => (c as typeof v1).entryId),
       [v1.entryId],
     );
+  });
+
+  it("a tech with a visit on the job only reads it while another tech's visit is current", async () => {
+    // Codex review of PR #21: shared access is read-only on the server, not only in the screens.
+    await as(b, TARA);
+    assert.ok(await b.jobs.get("job-20"));
+    await assert.rejects(b.jobs.update("job-20", { status: "InProgress" }));
+    await assert.rejects(b.jobs.update("job-20", { notes: "not mine to write" }));
+    await as(b, TOM);
+    await b.jobs.update("job-20", { notes: "Tom's visit: heads delivered" });
+  });
+
+  it("removing a job's only visit sends the job back to Unscheduled", async () => {
+    await as(b, OFFICE);
+    const legacy = (await b.jobs.list()).find(
+      (j) => j.status === "Scheduled" && j.assignedTechId && !j.visitTechIds,
+    )!;
+    const added = await v.addVisit(legacy, {
+      assignedTechId: legacy.assignedTechId!,
+      start: new Date(Date.now() + 3 * 86_400_000),
+      minutes: 60,
+    });
+    await v.removeVisit(added);
+    const only = v.liveVisitRows(legacy.id, await b.visits.list());
+    assert.equal(only.length, 1);
+    await v.removeVisit(only[0]!);
+    const job = (await b.jobs.get(legacy.id))!;
+    assert.equal(job.status, "New");
+    assert.equal(job.assignedTechId, null);
+    assert.equal(job.scheduledStart, null);
+    assert.equal(v.visitsOf(job, await b.visits.list()).implied, true);
   });
 });

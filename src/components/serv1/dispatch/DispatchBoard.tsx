@@ -25,6 +25,7 @@ import {
   useVisitActions,
   useVisits,
   liveVisitRows,
+  handoversDue,
   visitEntries,
   withCurrentVisit,
   type Job,
@@ -101,6 +102,8 @@ export function DispatchBoard() {
     const e = j as Partial<VisitEntry>;
     return e.visit && e.implied === false ? e.visit : null;
   };
+  // A tech ended a visit and the next is another tech's: only the office reassigns a job.
+  const handovers = useMemo(() => handoversDue(allJobs, allVisits), [allJobs, allVisits]);
   const hasVisitRows = (j: Job) => liveVisitRows(j.id, allVisits).length > 0;
   const techs = useMemo(
     () => (techsQuery.data ?? []).filter((t) => !!t.identityId),
@@ -260,6 +263,32 @@ export function DispatchBoard() {
         <EmptyState title="Loading the board…" />
       ) : (
         <>
+          {handovers.length ? (
+            <section
+              role="status"
+              aria-label="Jobs to hand over"
+              className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-border bg-muted p-3 text-sm"
+            >
+              <span>
+                {handovers.length === 1
+                  ? `${jobLabel(handovers[0]!)} is ready for its next visit's tech.`
+                  : `${handovers.length} jobs are ready for their next visit's tech.`}{" "}
+                Hand over so that tech can work on it.
+              </span>
+              <Button
+                size="sm"
+                disabled={visitActions.handOver.isPending}
+                onClick={() =>
+                  visitActions.handOver.mutate(handovers, {
+                    onSuccess: () => toast.success("Handed over"),
+                    onError: (e) => toast.error("Couldn't hand over", { description: e.message }),
+                  })
+                }
+              >
+                Hand over
+              </Button>
+            </section>
+          ) : null}
           <AttentionQueue jobs={attentionJobs} customers={customerMap} />
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
             <section

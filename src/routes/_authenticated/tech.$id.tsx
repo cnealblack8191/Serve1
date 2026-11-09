@@ -89,7 +89,11 @@ function JobScreen({ id }: { id: string }) {
   const { visits: vs, implied } = visitsOf(j, visits.data ?? []);
   const cur = currentVisit(vs);
   const myId = me.data?.identityId ?? null;
-  const mine = implied || (!!cur && cur.assignedTechId === myId);
+  const myTurn = implied || (!!cur && cur.assignedTechId === myId);
+  // The job passes to the next visit's tech when the office hands it over (only the office
+  // reassigns a job); until then that tech sees the job but cannot change it.
+  const mine = myTurn && (implied || j.assignedTechId === myId);
+  const waitingHandover = myTurn && !mine;
   const myNext = vs.find((v) => isOpenVisit(v) && v.assignedTechId === myId) ?? null;
   const shown = (mine ? cur : myNext) ?? cur ?? vs[vs.length - 1]!;
   const lastVisit = !cur || isLastOpenVisit(vs, cur);
@@ -192,7 +196,12 @@ function JobScreen({ id }: { id: string }) {
         <p className="-mt-2 text-sm text-muted-foreground">Customer phone: {customer.phone}</p>
       ) : null}
 
-      {!mine && cur ? (
+      {waitingHandover ? (
+        <section className="rounded-md border border-border bg-muted p-4 text-base" role="status">
+          <p className="font-semibold">Your visit is next</p>
+          <p>The office is handing this job to you. Ask them if it does not change soon.</p>
+        </section>
+      ) : !mine && cur ? (
         <section className="rounded-md border border-border bg-muted p-4 text-base" role="status">
           <p className="font-semibold">
             Visit {cur.number} is {techName(cur.assignedTechId)}&apos;s

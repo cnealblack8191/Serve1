@@ -45,13 +45,13 @@ recommendations, as approved:
 
 ## Who may do what
 
-| Who                      | Visits                                                            | Job, photos, notes                                                                       |
-| ------------------------ | ----------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
-| Admin, Office            | Add, move, reassign, remove (not started), cancel                 | As before                                                                                |
-| Owner                    | Read                                                              | Read                                                                                     |
-| The current visit's tech | Move its status and note only, never its plan (field-level rules) | Work on the job, as the assigned tech can today                                          |
-| Another tech on the job  | Read all its visits                                               | Read the job, its photos, notes and signature; they act on their own visit when it comes |
-| A tech not on the job    | Nothing                                                           | Nothing                                                                                  |
+| Who                      | Visits                                                            | Job, photos, notes                                                                    |
+| ------------------------ | ----------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| Admin, Office            | Add, move, reassign, remove (not started), cancel                 | As before                                                                             |
+| Owner                    | Read                                                              | Read                                                                                  |
+| The current visit's tech | Move its status and note only, never its plan (field-level rules) | Work on the job once it is assigned to them (the office hands it over; see below)     |
+| Another tech on the job  | Read all its visits                                               | Read only: the job, its photos, notes and signature; the server refuses their changes |
+| A tech not on the job    | Nothing                                                           | Nothing                                                                               |
 
 The rules are in `amplify/data/resource.ts`: `ownersDefinedIn("visitTechIds")` and
 `ownersDefinedIn("jobTechIds")`, with field-level rules on the visit plan. The local demo backend
@@ -79,7 +79,23 @@ See `docs/ECI1-BRIDGE.md`, "Multi-visit jobs". The ECI-1X contract document
 (`docs/SERV1-TECH-API.md`, in the ECI-1X repository) needs the same additions. Its own session
 makes that change; this repository changes only Serv1's side.
 
+## Handing a job to the next visit's tech
+
+Only the office reassigns a job, and a tech never can, because that would let a tech hand a job
+to anyone. When a tech ends a visit and the next visit is another tech's:
+
+- The job stays assigned to the first tech.
+- The dispatch board shows "ready for its next visit's tech" with **Hand over**.
+- Any office change to the job's visits also hands it over.
+- Until then, the next tech sees "Your visit is next" and cannot change the job.
+
+The ECI1 bridge does not need this step. It checks the current visit itself, on the server.
+
 ## Known limits (pilot)
+
+- **The handover is a manual office step for now** (above). A small server-side handover, a custom
+  mutation that checks the current visit and reassigns the job, would remove it. That needs a new
+  function, so it is proposed to the owner and not built here.
 
 - **Other techs' photos taken in Serv1's own tech screens.** These are stored under the taking
   tech's private prefix (`tech-files/<storageId>/…`). Another tech's Serv1 screen therefore lists

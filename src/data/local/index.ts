@@ -310,7 +310,8 @@ export function createLocalBackend(): Backend {
     // jobs, only the work fields, and only to a status a tech may set (src/data/jobflow.ts).
     write: (job, me, op, patch) => {
       if (isOffice(me)) return true;
-      if (op !== "update" || job === null || !techOnJob(me, job)) return false;
+      // Only the assigned tech (the current visit's) updates the job; other visit techs read it.
+      if (op !== "update" || job === null || !techOwns(me, job.assignedTechId)) return false;
       const p = (patch ?? {}) as Partial<Job>;
       if (
         !Object.keys(p).every(

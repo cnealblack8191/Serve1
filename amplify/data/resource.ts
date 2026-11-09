@@ -203,10 +203,11 @@ const schema = a.schema({
     .authorization((allow) => [
       allow.groups(office).to(["create", "read", "update", "delete"]),
       allow.groups(["Owner"]).to(["read"]),
-      // A tech sees and updates only jobs whose assignedTechId is their identity, or on which
-      // they have a visit (visitTechIds).
+      // A tech updates only the job assigned to them: the current visit's tech, which the office
+      // keeps in step (src/data/visits.ts). Other techs with a visit on it only read it (Codex
+      // review of PR #21: shared access stays read-only on the server).
       allow.ownerDefinedIn("assignedTechId").to(["read", "update"]),
-      allow.ownersDefinedIn("visitTechIds").to(["read", "update"]),
+      allow.ownersDefinedIn("visitTechIds").to(["read"]),
     ]),
 
   // One trip to the site for a job (docs/VISITS.md). Additive: a job with no visits is one visit

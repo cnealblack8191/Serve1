@@ -235,6 +235,18 @@ export async function syncJobWithVisits(jobId: string): Promise<void> {
 }
 
 /**
+ * Jobs waiting to be handed to their next visit's tech: the current visit is another tech's
+ * than the job's assigned one (a tech ended a visit; only the office reassigns the job).
+ */
+export function handoversDue(jobs: Job[], visits: Visit[]): Job[] {
+  return jobs.filter((j) => {
+    const rows = liveVisitRows(j.id, visits);
+    const cur = rows.length ? currentVisit(rows) : null;
+    return !!cur && cur.assignedTechId !== j.assignedTechId;
+  });
+}
+
+/**
  * Office: the job's visit rows, writing visit 1 from the job's own schedule first when the job
  * has none yet (its first extra visit turns it into a multi-visit job).
  */
@@ -297,8 +309,19 @@ export async function removeVisit(visit: Visit): Promise<void> {
   if (visit.status !== "Scheduled")
     throw new Error("Only a visit that has not started can be removed.");
   const live = liveVisitRows(visit.jobId, await rowsOf(visit.jobId));
-  if (live.length < 2)
-    throw new Error("A job keeps at least one visit. Unschedule the job instead.");
+  if (live.length < 2) {
+    // The job's only visit: take it off the schedule, back to the Unscheduled queue (Codex
+    // review of PR #21). With no live visit left the job is its own one visit again.
+    await backend().visits.update(visit.id, { status: "Cancelled" });
+    await backend().jobs.update(visit.jobId, {
+      assignedTechId: null,
+      scheduledStart: null,
+      scheduledEnd: null,
+      status: "New",
+      visitTechIds: null,
+    });
+    return;
+  }
   await backend().visits.update(visit.id, { status: "Cancelled" });
   await syncJobWithVisits(visit.jobId);
   // Only finished visits left on unfinished work: hold it for a return visit, so the office sees
@@ -396,6 +419,12 @@ export function useVisitActions() {
     mutationFn: (visit: Visit) => removeVisit(visit),
     onSettled: refresh,
   });
+  const handOver = useMutation({
+    mutationFn: async (jobs: Job[]) => {
+      for (const j of jobs) await syncJobWithVisits(j.id);
+    },
+    onSettled: refresh,
+  });
   const finish = useMutation({
     mutationFn: (v: { job: Job; note: string | null }) => finishVisit(v.job, v.note),
     onSettled: refresh,
@@ -405,5 +434,5 @@ export function useVisitActions() {
     mutationFn: (v: { job: Job; patch: Partial<NewJob> }) => updateJobWithVisit(v.job, v.patch),
     onSettled: refresh,
   });
-  return { add, reschedule, remove, finish, updateJob };
+  return { add, reschedule, remove, finish, updateJob, handOver };
 }
