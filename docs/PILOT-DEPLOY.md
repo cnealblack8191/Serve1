@@ -110,7 +110,8 @@ certificate: _3f9c...e1.serv1.ecinc.us. CNAME _7a2b...c4.xxxxxxxx.acm-validation
 site:        serv1 CNAME d1abcd2efgh3ij.cloudfront.net
 ```
 
-Then, in Bluehost:
+The owner adds both records himself (2026-11-09: "I'll add the dns record", "ok keep the two
+cnames"). In Bluehost:
 
 1. Sign in at `https://my.bluehost.com` with the account that owns `ecinc.us`.
 2. Open **Domains**, find `ecinc.us` and choose **Manage** (or **Settings**), then the **DNS** tab.
@@ -160,8 +161,6 @@ Bluehost (same DNS page as above).
   without the restricted execution policy. The backend also expects the
   `serv1-permissions-boundary` policy from that stack. The role, and any Amplify Hosting permissions
   it needs for step 2, wait for the owner's decision.
-- **Who adds the two Bluehost records:** the owner, or whoever holds the Bluehost login for
-  `ecinc.us`.
 
 ## Cost
 
