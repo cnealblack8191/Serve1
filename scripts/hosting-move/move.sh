@@ -7,10 +7,12 @@
 #   bash scripts/hosting-move/move.sh remove       # 1. CDKToolkit forgets app, branch, ECR repo (Retain)
 #   bash scripts/hosting-move/move.sh import       # 2. stack serv1-hosting imports app and branch
 #   bash scripts/hosting-move/move.sh drop-ecr     # 3. deletes the empty retained ECR repo
+#   bash scripts/hosting-move/move.sh drop-bucket  # 3b. CDKToolkit drops the empty staging bucket
 #   bash scripts/hosting-move/move.sh bootstrap    # 4. stock cdk bootstrap, restricted policy
 #   bash scripts/hosting-move/move.sh verify       # read-only: checks the end state
 #
-# Undo, newest first: undo-bootstrap, undo-ecr, undo-import, undo-remove (RUNBOOK.md, "Undo").
+# Undo, newest first: undo-bootstrap, undo-bucket, undo-ecr, undo-import, undo-remove (RUNBOOK.md,
+# "Undo").
 #
 # Every change goes through a CloudFormation change set (or a single named call), is checked by
 # scripts/hosting-move/cli.ts, printed, and runs only after the person types the step's words.
@@ -27,10 +29,11 @@ HOSTING_TEMPLATE="infra/hosting-move/serv1-hosting.json"
 CLI=(npx --no-install tsx scripts/hosting-move/cli.ts)
 
 STEP="${1:-}"
-[ -n "$STEP" ] || { sed -n '2,15p' "$0"; exit 2; }
+[ -n "$STEP" ] || { sed -n '2,17p' "$0"; exit 2; }
 ACCOUNT="$(aws sts get-caller-identity --query Account --output text)"
 REPO="cdk-hnb659fds-container-assets-${ACCOUNT}-us-east-1"
 CFN_EXEC_ROLE="cdk-hnb659fds-cfn-exec-role-${ACCOUNT}-us-east-1"
+BUCKET="cdk-hnb659fds-assets-${ACCOUNT}-us-east-1"
 echo "Account $ACCOUNT, us-east-1, as $(aws sts get-caller-identity --query Arn --output text)"
 
 confirm() {
@@ -46,6 +49,40 @@ stack_status() {
 in_stack() {
   aws cloudformation describe-stack-resource --stack-name "$1" --logical-resource-id "$2" \
     >/dev/null 2>&1
+}
+bucket_exists() { aws s3api head-bucket --bucket "$BUCKET" >/dev/null 2>&1; }
+# Stops unless the staging bucket holds no object versions, delete markers or unfinished uploads.
+bucket_must_be_empty() {
+  local v d u
+  v="$(aws s3api list-object-versions --bucket "$BUCKET" --query "length(Versions || \`[]\`)" --output text)"
+  d="$(aws s3api list-object-versions --bucket "$BUCKET" --query "length(DeleteMarkers || \`[]\`)" --output text)"
+  u="$(aws s3api list-multipart-uploads --bucket "$BUCKET" --query "length(Uploads || \`[]\`)" --output text)"
+  echo "Bucket $BUCKET: $v versions, $d delete markers, $u unfinished uploads."
+  "${CLI[@]}" bucket-empty "$v" "$d" "$u" || { echo "Stop: nothing is deleted."; exit 1; }
+}
+# The bucket's settings as they are, for undo-bucket (a setting the bucket lacks is saved as {}).
+save_bucket() {
+  local f
+  for f in versioning encryption public-access-block lifecycle-configuration ownership-controls tagging; do
+    case "$f" in
+      versioning) aws s3api get-bucket-versioning --bucket "$BUCKET" --output json >"$WORK/bucket-$f.json" ;;
+      public-access-block) aws s3api get-public-access-block --bucket "$BUCKET" --output json \
+        >"$WORK/bucket-$f.json" 2>/dev/null || echo '{}' >"$WORK/bucket-$f.json" ;;
+      *) aws s3api "get-bucket-$f" --bucket "$BUCKET" --output json \
+        >"$WORK/bucket-$f.json" 2>/dev/null || echo '{}' >"$WORK/bucket-$f.json" ;;
+    esac
+  done
+  echo "Saved the bucket's settings to $WORK/bucket-*.json."
+}
+# Prints one key of a saved JSON file as JSON, or nothing when it is absent.
+json_at() {
+  node -e 'const v=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));
+    const x=process.argv[2]?v[process.argv[2]]:v; if(x!==undefined)process.stdout.write(JSON.stringify(x))' \
+    "$1" "${2:-}"
+}
+template_body() {
+  node -e 'const t=require(process.argv[1]); require("fs").writeFileSync(process.argv[2],
+    typeof t.TemplateBody==="string"?t.TemplateBody:JSON.stringify(t.TemplateBody))' "$1" "$2"
 }
 image_count() {
   aws ecr list-images --repository-name "$REPO" --query "length(imageIds)" --output text
@@ -144,6 +181,15 @@ case "$STEP" in
   import) # Step 2
     need hosting-before.json snapshot
     in_stack CDKToolkit HostingApp && { echo "HostingApp is still in CDKToolkit: run 'remove' first."; exit 1; }
+    if [ "$(stack_status serv1-hosting)" = "REVIEW_IN_PROGRESS" ]; then
+      # A previewed or refused IMPORT on a new stack leaves it here, holding nothing.
+      N="$(aws cloudformation list-stack-resources --stack-name serv1-hosting \
+        --query "length(StackResourceSummaries)" --output text)"
+      echo "Stack serv1-hosting is REVIEW_IN_PROGRESS with $N resources (an import that never ran)."
+      echo "If that is 0, delete it (aws cloudformation delete-stack --stack-name serv1-hosting),"
+      echo "wait for stack-delete-complete, then run 'import' again. RUNBOOK.md, step 2."
+      exit 1
+    fi
     [ "$(stack_status serv1-hosting)" = "NONE" ] || { echo "Stack serv1-hosting already exists."; exit 1; }
     aws amplify get-app --app-id "$APP_ID" --output json >"$WORK/app-now.json"
     aws amplify get-branch --app-id "$APP_ID" --branch-name "$BRANCH" --output json >"$WORK/branch-now.json"
@@ -191,7 +237,7 @@ JSON
     echo "Step 2 done. If any resource above shows MODIFIED, stop and report it before step 3."
     ;;
 
-  drop-ecr) # Step 3 (the one deletion: an empty repository CDK bootstrap re-creates)
+  drop-ecr) # Step 3 (deletes an empty repository CDK bootstrap re-creates)
     need ecr-before.json snapshot
     in_stack CDKToolkit ContainerAssetsRepository &&
       { echo "The ECR repo is still in CDKToolkit: run 'remove' first."; exit 1; }
@@ -201,7 +247,48 @@ JSON
     confirm "DELETE EMPTY ECR REPOSITORY"
     # No --force: ECR refuses if an image arrived since the check.
     aws ecr delete-repository --repository-name "$REPO" >/dev/null
-    echo "Step 3 done. Next: bootstrap."
+    echo "Step 3 done. Next: drop-bucket."
+    ;;
+
+  drop-bucket) # Step 3b. The stock bootstrap sets AccessControl on this bucket, which has ACLs
+    # disabled, so it cannot update it in place. The empty bucket leaves CDKToolkit and is deleted;
+    # the bootstrap creates a stock one (RUNBOOK.md, step 3b).
+    need hosting-before.json snapshot
+    in_stack CDKToolkit HostingApp && { echo "Run 'remove' first."; exit 1; }
+    case "$(stack_status CDKToolkit)" in
+      UPDATE_ROLLBACK_COMPLETE | UPDATE_COMPLETE | CREATE_COMPLETE) ;;
+      *) echo "CDKToolkit is $(stack_status CDKToolkit); expected a settled state."; exit 1 ;;
+    esac
+    if in_stack CDKToolkit StagingBucket; then
+      aws cloudformation get-template --stack-name CDKToolkit --template-stage Original \
+        --output json >"$WORK/cdktoolkit-prebucket.json"
+      save_bucket
+      bucket_must_be_empty
+      "${CLI[@]}" strip-bucket "$WORK/cdktoolkit-prebucket.json" "$WORK/cdktoolkit-nobucket.json"
+      make_change_set CDKToolkit serv1-hosting-move-drop-bucket cs-drop-bucket \
+        --change-set-type UPDATE --template-body "file://$WORK/cdktoolkit-nobucket.json"
+      "${CLI[@]}" bucket-remove-only "$WORK/cs-drop-bucket.json" ||
+        drop_change_set CDKToolkit serv1-hosting-move-drop-bucket
+      echo "CDKToolkit will stop managing the staging bucket (kept) and delete its bucket policy."
+      confirm "REMOVE STAGING BUCKET FROM CDKTOOLKIT"
+      aws cloudformation execute-change-set --stack-name CDKToolkit --change-set-name serv1-hosting-move-drop-bucket
+      aws cloudformation wait stack-update-complete --stack-name CDKToolkit
+      in_stack CDKToolkit StagingBucket && { echo "StagingBucket is still in CDKToolkit. Stop."; exit 1; }
+    else
+      echo "StagingBucket is already out of CDKToolkit."
+    fi
+    if bucket_exists; then
+      bucket_must_be_empty
+      echo "The empty bucket $BUCKET is deleted so the standard bootstrap can create its own."
+      confirm "DELETE EMPTY STAGING BUCKET"
+      # No --force and no 'rb --force': S3 refuses to delete a bucket that is not empty.
+      aws s3api delete-bucket --bucket "$BUCKET"
+      aws s3api wait bucket-not-exists --bucket "$BUCKET"
+    else
+      echo "Bucket $BUCKET does not exist."
+    fi
+    same_hosting
+    echo "Step 3b done. Next: bootstrap."
     ;;
 
   bootstrap) # Step 4
@@ -209,6 +296,8 @@ JSON
     in_stack CDKToolkit HostingApp && { echo "Run 'remove' first."; exit 1; }
     aws ecr describe-repositories --repository-names "$REPO" >/dev/null 2>&1 &&
       { echo "ECR $REPO still exists: run 'drop-ecr' first."; exit 1; }
+    in_stack CDKToolkit StagingBucket && { echo "Run 'drop-bucket' first."; exit 1; }
+    bucket_exists && { echo "Bucket $BUCKET still exists: run 'drop-bucket' first."; exit 1; }
     EXEC_POLICY="$(aws cloudformation describe-stacks --stack-name serv1-builder \
       --query "Stacks[0].Outputs[?OutputKey=='CdkExecutionPolicyArn'].OutputValue" --output text)"
     [ -n "$EXEC_POLICY" ] && [ "$EXEC_POLICY" != "None" ] ||
@@ -233,6 +322,10 @@ JSON
       { echo "The CloudFormation execution role must carry serv1-cdk-execution only. Stop."; exit 1; }
     in_stack serv1-hosting HostingApp && in_stack serv1-hosting HostingBranch ||
       { echo "serv1-hosting does not hold the app and branch."; exit 1; }
+    in_stack CDKToolkit StagingBucket && in_stack CDKToolkit StagingBucketPolicy ||
+      { echo "CDKToolkit does not hold the staging bucket and its policy."; exit 1; }
+    echo "Staging bucket object ownership: $(aws s3api get-bucket-ownership-controls --bucket "$BUCKET" \
+      --query "OwnershipControls.Rules[0].ObjectOwnership" --output text 2>/dev/null || echo "not set")"
     need hosting-before.json snapshot
     same_hosting
     echo "Verified."
@@ -247,6 +340,53 @@ JSON
     aws cloudformation execute-change-set --stack-name CDKToolkit --change-set-name serv1-hosting-move-undo-bootstrap
     aws cloudformation wait stack-update-complete --stack-name CDKToolkit
     echo "CDKToolkit is back to its post-step-1 template. A stock ECR repo it made may remain (Retain)."
+    ;;
+
+  undo-bucket) # Before a successful bootstrap only: the empty bucket back in CDKToolkit as it was
+    need cdktoolkit-prebucket.json drop-bucket
+    in_stack CDKToolkit StagingBucket && { echo "StagingBucket is in CDKToolkit already."; exit 0; }
+    V="$(aws ssm get-parameter --name /cdk-bootstrap/hnb659fds/version --query Parameter.Value --output text)"
+    [ "$V" -gt 6 ] && { echo "CDKToolkit is bootstrapped (version $V): run 'undo-bootstrap' first."; exit 1; }
+    if ! bucket_exists; then
+      echo "Re-creating the empty bucket $BUCKET with its saved settings."
+      confirm "RECREATE STAGING BUCKET"
+      aws s3api create-bucket --bucket "$BUCKET" >/dev/null
+      aws s3api wait bucket-exists --bucket "$BUCKET"
+      aws s3api put-bucket-versioning --bucket "$BUCKET" \
+        --versioning-configuration "$(json_at "$WORK/bucket-versioning.json")"
+      X="$(json_at "$WORK/bucket-encryption.json" ServerSideEncryptionConfiguration)"
+      [ -z "$X" ] || aws s3api put-bucket-encryption --bucket "$BUCKET" --server-side-encryption-configuration "$X"
+      X="$(json_at "$WORK/bucket-public-access-block.json" PublicAccessBlockConfiguration)"
+      [ -z "$X" ] || aws s3api put-public-access-block --bucket "$BUCKET" --public-access-block-configuration "$X"
+      X="$(json_at "$WORK/bucket-lifecycle-configuration.json" Rules)"
+      [ -z "$X" ] || aws s3api put-bucket-lifecycle-configuration --bucket "$BUCKET" \
+        --lifecycle-configuration "{\"Rules\":$X}"
+      X="$(json_at "$WORK/bucket-ownership-controls.json" OwnershipControls)"
+      [ -z "$X" ] || aws s3api put-bucket-ownership-controls --bucket "$BUCKET" --ownership-controls "$X"
+      X="$(json_at "$WORK/bucket-tagging.json" TagSet)"
+      [ -z "$X" ] || aws s3api put-bucket-tagging --bucket "$BUCKET" --tagging "{\"TagSet\":$X}"
+    fi
+    # Import the bucket alone (an IMPORT may not add the policy or change outputs), then the saved
+    # template, which adds back the bucket policy and the outputs.
+    aws cloudformation get-template --stack-name CDKToolkit --template-stage Original \
+      --output json >"$WORK/cdktoolkit-current.json"
+    "${CLI[@]}" reimport-bucket "$WORK/cdktoolkit-prebucket.json" "$WORK/cdktoolkit-current.json" \
+      "$WORK/cdktoolkit-bucket-reimport.json"
+    template_body "$WORK/cdktoolkit-prebucket.json" "$WORK/cdktoolkit-prebucket-body.json"
+    cat >"$WORK/bucket-reimport.json" <<JSON
+[{"ResourceType":"AWS::S3::Bucket","LogicalResourceId":"StagingBucket","ResourceIdentifier":{"BucketName":"$BUCKET"}}]
+JSON
+    make_change_set CDKToolkit serv1-hosting-move-undo-bucket cs-undo-bucket \
+      --change-set-type IMPORT --template-body "file://$WORK/cdktoolkit-bucket-reimport.json" \
+      --resources-to-import "file://$WORK/bucket-reimport.json"
+    confirm "UNDO REMOVE STAGING BUCKET"
+    aws cloudformation execute-change-set --stack-name CDKToolkit --change-set-name serv1-hosting-move-undo-bucket
+    aws cloudformation wait stack-import-complete --stack-name CDKToolkit
+    echo "Restoring the bucket policy and outputs (the saved template)."
+    aws cloudformation update-stack --stack-name CDKToolkit \
+      --template-body "file://$WORK/cdktoolkit-prebucket-body.json"
+    aws cloudformation wait stack-update-complete --stack-name CDKToolkit
+    echo "CDKToolkit holds the staging bucket and its policy again, as before step 3b."
     ;;
 
   undo-ecr) # Re-creates the empty repository with its original settings
@@ -283,9 +423,7 @@ JSON
       --output json >"$WORK/cdktoolkit-current.json"
     "${CLI[@]}" reimport "$WORK/cdktoolkit-before.json" "$WORK/cdktoolkit-current.json" \
       "$WORK/cdktoolkit-reimport.json"
-    node -e 'const t=require(process.argv[1]); require("fs").writeFileSync(process.argv[2],
-      typeof t.TemplateBody==="string"?t.TemplateBody:JSON.stringify(t.TemplateBody))' \
-      "$WORK/cdktoolkit-before.json" "$WORK/cdktoolkit-before-body.json"
+    template_body "$WORK/cdktoolkit-before.json" "$WORK/cdktoolkit-before-body.json"
     cat >"$WORK/reimport.json" <<JSON
 [
   {"ResourceType":"AWS::Amplify::App","LogicalResourceId":"HostingApp","ResourceIdentifier":{"Arn":"$APP_ARN"}},
