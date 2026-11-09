@@ -43,3 +43,4 @@ dist-ssr
 !.env.example
 # Amplify Gen 2 sandbox outputs
 amplify_outputs*.json
+scripts/pilot/pilot-users.json
