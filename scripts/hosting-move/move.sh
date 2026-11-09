@@ -366,25 +366,31 @@ JSON
     if ! in_stack CDKToolkit StagingBucket; then
       V="$(aws ssm get-parameter --name /cdk-bootstrap/hnb659fds/version --query Parameter.Value --output text)"
       [ "$V" -gt 6 ] && { echo "CDKToolkit is bootstrapped (version $V): run 'undo-bootstrap' first."; exit 1; }
-      if ! bucket_exists; then
+      # The saved settings are applied every time, not only right after the bucket is created,
+      # so a run stopped part-way through finishes them (each write is safe to repeat; Codex
+      # review of PR #24). An import does not change a resource's settings.
+      if bucket_exists; then
+        echo "Bucket $BUCKET exists; its saved settings are applied again before the import."
+        confirm "RESTORE STAGING BUCKET SETTINGS"
+      else
         echo "Re-creating the empty bucket $BUCKET with its saved settings."
         confirm "RECREATE STAGING BUCKET"
         aws s3api create-bucket --bucket "$BUCKET" >/dev/null
         aws s3api wait bucket-exists --bucket "$BUCKET"
-        aws s3api put-bucket-versioning --bucket "$BUCKET" \
-          --versioning-configuration "$(json_at "$WORK/bucket-versioning.json")"
-        X="$(json_at "$WORK/bucket-encryption.json" ServerSideEncryptionConfiguration)"
-        [ -z "$X" ] || aws s3api put-bucket-encryption --bucket "$BUCKET" --server-side-encryption-configuration "$X"
-        X="$(json_at "$WORK/bucket-public-access-block.json" PublicAccessBlockConfiguration)"
-        [ -z "$X" ] || aws s3api put-public-access-block --bucket "$BUCKET" --public-access-block-configuration "$X"
-        X="$(json_at "$WORK/bucket-lifecycle-configuration.json" Rules)"
-        [ -z "$X" ] || aws s3api put-bucket-lifecycle-configuration --bucket "$BUCKET" \
-          --lifecycle-configuration "{\"Rules\":$X}"
-        X="$(json_at "$WORK/bucket-ownership-controls.json" OwnershipControls)"
-        [ -z "$X" ] || aws s3api put-bucket-ownership-controls --bucket "$BUCKET" --ownership-controls "$X"
-        X="$(json_at "$WORK/bucket-tagging.json" TagSet)"
-        [ -z "$X" ] || aws s3api put-bucket-tagging --bucket "$BUCKET" --tagging "{\"TagSet\":$X}"
       fi
+      aws s3api put-bucket-versioning --bucket "$BUCKET" \
+        --versioning-configuration "$(json_at "$WORK/bucket-versioning.json")"
+      X="$(json_at "$WORK/bucket-encryption.json" ServerSideEncryptionConfiguration)"
+      [ -z "$X" ] || aws s3api put-bucket-encryption --bucket "$BUCKET" --server-side-encryption-configuration "$X"
+      X="$(json_at "$WORK/bucket-public-access-block.json" PublicAccessBlockConfiguration)"
+      [ -z "$X" ] || aws s3api put-public-access-block --bucket "$BUCKET" --public-access-block-configuration "$X"
+      X="$(json_at "$WORK/bucket-lifecycle-configuration.json" Rules)"
+      [ -z "$X" ] || aws s3api put-bucket-lifecycle-configuration --bucket "$BUCKET" \
+        --lifecycle-configuration "{\"Rules\":$X}"
+      X="$(json_at "$WORK/bucket-ownership-controls.json" OwnershipControls)"
+      [ -z "$X" ] || aws s3api put-bucket-ownership-controls --bucket "$BUCKET" --ownership-controls "$X"
+      X="$(json_at "$WORK/bucket-tagging.json" TagSet)"
+      [ -z "$X" ] || aws s3api put-bucket-tagging --bucket "$BUCKET" --tagging "{\"TagSet\":$X}"
       # Import the bucket alone (an IMPORT may not add the policy or change outputs), then the saved
       # template, which adds back the bucket policy and the outputs.
       aws cloudformation get-template --stack-name CDKToolkit --template-stage Original \
