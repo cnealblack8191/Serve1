@@ -5,6 +5,7 @@
  *   npx tsx scripts/hosting-move/cli.ts match <cdktoolkit.json> <serv1-hosting.json>
  *   npx tsx scripts/hosting-move/cli.ts remove-only <changeset.json>
  *   npx tsx scripts/hosting-move/cli.ts import-only <changeset.json>
+ *   npx tsx scripts/hosting-move/cli.ts reimport <cdktoolkit-before.json> <current.json> <out.json>
  *   npx tsx scripts/hosting-move/cli.ts live <get-app.json> <get-branch.json> <serv1-hosting.json>
  *
  * Exits 1 with the reasons when a check fails, so move.sh stops before executing anything.
@@ -16,6 +17,7 @@ import {
   checkRemoveOnly,
   hostingMatches,
   liveMatches,
+  reimportTemplate,
   stripHosting,
   type LiveApp,
   type LiveBranch,
@@ -44,6 +46,12 @@ try {
   } else if (cmd === "match" && a && b) {
     stop(hostingMatches(template(a), template(b)));
     console.log("serv1-hosting matches what CDKToolkit declared.");
+  } else if (cmd === "reimport" && a && b && process.argv[5]) {
+    writeFileSync(
+      process.argv[5],
+      JSON.stringify(reimportTemplate(template(a), template(b)), null, 2) + "\n",
+    );
+    console.log(`Wrote ${process.argv[5]}`);
   } else if (cmd === "live" && a && b && process.argv[5]) {
     stop(liveMatches(read(a) as LiveApp, read(b) as LiveBranch, template(process.argv[5])));
     console.log("The live app and branch match serv1-hosting.");
@@ -52,7 +60,7 @@ try {
     stop(cmd === "remove-only" ? checkRemoveOnly(changes) : checkImportOnly(changes));
     console.log(`Change set checked: ${cmd}.`);
   } else {
-    console.error("usage: cli.ts strip|match|live|remove-only|import-only ...");
+    console.error("usage: cli.ts strip|match|reimport|live|remove-only|import-only ...");
     process.exit(2);
   }
 } catch (e) {

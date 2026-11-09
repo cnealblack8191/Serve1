@@ -271,6 +271,12 @@ JSON
       { echo "Run 'undo-ecr' first."; exit 1; }
     APP_ARN="$(aws amplify get-app --app-id "$APP_ID" --query app.appArn --output text)"
     BRANCH_ARN="$(aws amplify get-branch --app-id "$APP_ID" --branch-name "$BRANCH" --query branch.branchArn --output text)"
+    # The import keeps CDKToolkit's current outputs (an IMPORT may not change them); the original
+    # outputs come back in a separate update below (Codex review of PR #22).
+    aws cloudformation get-template --stack-name CDKToolkit --template-stage Original \
+      --output json >"$WORK/cdktoolkit-current.json"
+    "${CLI[@]}" reimport "$WORK/cdktoolkit-before.json" "$WORK/cdktoolkit-current.json" \
+      "$WORK/cdktoolkit-reimport.json"
     node -e 'const t=require(process.argv[1]); require("fs").writeFileSync(process.argv[2],
       typeof t.TemplateBody==="string"?t.TemplateBody:JSON.stringify(t.TemplateBody))' \
       "$WORK/cdktoolkit-before.json" "$WORK/cdktoolkit-before-body.json"
@@ -282,11 +288,16 @@ JSON
 ]
 JSON
     make_change_set CDKToolkit serv1-hosting-move-undo-remove cs-undo-remove \
-      --change-set-type IMPORT --template-body "file://$WORK/cdktoolkit-before-body.json" \
+      --change-set-type IMPORT --template-body "file://$WORK/cdktoolkit-reimport.json" \
       --resources-to-import "file://$WORK/reimport.json"
     confirm "UNDO REMOVE FROM CDKTOOLKIT"
     aws cloudformation execute-change-set --stack-name CDKToolkit --change-set-name serv1-hosting-move-undo-remove
     aws cloudformation wait stack-import-complete --stack-name CDKToolkit
+    # Then the original template as saved, which only adds back the hosting outputs.
+    echo "Restoring CDKToolkit's original outputs (the saved template; resources unchanged)."
+    aws cloudformation update-stack --stack-name CDKToolkit \
+      --template-body "file://$WORK/cdktoolkit-before-body.json"
+    aws cloudformation wait stack-update-complete --stack-name CDKToolkit
     same_hosting
     echo "CDKToolkit holds the app, branch and ECR repo again, as before the move."
     ;;

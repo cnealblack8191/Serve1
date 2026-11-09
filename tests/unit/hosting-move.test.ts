@@ -11,6 +11,7 @@ import {
   checkRemoveOnly,
   hostingMatches,
   liveMatches,
+  reimportTemplate,
   stripHosting,
   type Template,
 } from "../../scripts/hosting-move/plan.ts";
@@ -124,5 +125,28 @@ describe("serv1-hosting imports the app as it is", () => {
       liveMatches(app, { branch: { ...branch.branch, stage: "PRODUCTION" } }, hosting()).join(),
       /stage is PRODUCTION/,
     );
+  });
+});
+
+describe("undo of step 1", () => {
+  it("re-imports with the current outputs; the original outputs come back afterwards", () => {
+    const before = live();
+    const current = stripHosting(before);
+    const t = reimportTemplate(before, current);
+    assert.deepEqual(t.Outputs, current.Outputs);
+    assert.deepEqual(t.Resources, before.Resources);
+    // The only difference from the stack's current template: the three imported resources.
+    assert.deepEqual(
+      Object.keys(t.Resources)
+        .filter((id) => !(id in current.Resources))
+        .sort(),
+      ["ContainerAssetsRepository", "HostingApp", "HostingBranch"],
+    );
+  });
+  it("refuses when a kept resource changed since the snapshot (for example after a bootstrap)", () => {
+    const before = live();
+    const current = structuredClone(stripHosting(before));
+    (current.Resources.CdkBootstrapVersion!.Properties as Record<string, unknown>).Value = "28";
+    assert.throws(() => reimportTemplate(before, current), /CdkBootstrapVersion differs/);
   });
 });

@@ -58,12 +58,12 @@ If anything differs, it stops.
 
 ## Undo (newest step first)
 
-| Step | Command                  | Effect                                                                                                                                                                          |
-| ---- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 4    | `move.sh undo-bootstrap` | Updates CDKToolkit back to the step 1 template, which removes the roles the bootstrap added. The stock ECR repository it made may stay (Retain); delete it only if it is empty. |
-| 3    | `move.sh undo-ecr`       | Re-creates the empty repository with its original settings (immutable tags, scan on push, AES256, `Project=serv1-demo`).                                                        |
-| 2    | `move.sh undo-import`    | Deletes stack `serv1-hosting`. The app and branch are `Retain` and stay, unchanged.                                                                                             |
-| 1    | `move.sh undo-remove`    | Imports the app, branch and repository back into CDKToolkit with its saved original template. Run `undo-import` and `undo-ecr` first.                                           |
+| Step | Command                  | Effect                                                                                                                                                                                                                                                                   |
+| ---- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 4    | `move.sh undo-bootstrap` | Updates CDKToolkit back to the step 1 template, which removes the roles the bootstrap added. The stock ECR repository it made may stay (Retain); delete it only if it is empty.                                                                                          |
+| 3    | `move.sh undo-ecr`       | Re-creates the empty repository with its original settings (immutable tags, scan on push, AES256, `Project=serv1-demo`).                                                                                                                                                 |
+| 2    | `move.sh undo-import`    | Deletes stack `serv1-hosting`. The app and branch are `Retain` and stay, unchanged.                                                                                                                                                                                      |
+| 1    | `move.sh undo-remove`    | Imports the app, branch and repository back into CDKToolkit, keeping its current outputs (an import may not change them). Then a separate update restores the saved original template, which only adds back the hosting outputs. Run `undo-import` and `undo-ecr` first. |
 
 ## Afterwards
 

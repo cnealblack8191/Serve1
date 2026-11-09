@@ -207,3 +207,19 @@ export function liveMatches(live: LiveApp, branch: LiveBranch, hosting: Template
   if (sorted(ownTags(b.tags)) !== sorted(tagMap(p.branch.Tags))) out.push("branch tags differ");
   return out;
 }
+
+/**
+ * Undo of step 1: the template that imports the app, branch and repository back into CDKToolkit.
+ * An IMPORT may add only the imported resources: every other part, the Outputs included, must
+ * equal the stack's current (stripped) template. The original outputs come back afterwards in a
+ * separate update (move.sh undo-remove; Codex review of PR #22).
+ */
+export function reimportTemplate(before: Template, current: Template): Template {
+  const out: Template = { ...before };
+  if (current.Outputs && Object.keys(current.Outputs).length) out.Outputs = current.Outputs;
+  else delete out.Outputs;
+  for (const [id, r] of Object.entries(current.Resources))
+    if (JSON.stringify(before.Resources[id]) !== JSON.stringify(r))
+      throw new Error(`${id} differs between the saved and the current template; stop.`);
+  return out;
+}
