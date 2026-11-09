@@ -1,8 +1,9 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 
-import { backend, nowIso } from "./backend";
+import { nowIso } from "./backend";
 import { keys } from "./hooks";
 import type { Job, JobStatus, NewJob, Role } from "./types";
+import { updateJobWithVisit } from "./visits";
 
 /**
  * Job status moves (Phase 3). One table so the tech screen, the office job page and the
@@ -36,8 +37,19 @@ export const JOB_MOVES: Record<JobAction, Move> = {
   reopen: { from: ["Cancelled"], to: "New", by: "office" },
 };
 
-/** Statuses a tech may set on their own job (Complete is set by the signature step). */
-export const TECH_SETTABLE: JobStatus[] = ["EnRoute", "InProgress", "OnHold", "Complete"];
+/**
+ * Statuses a tech may set on their own job (Complete is set by the signature step). Scheduled is
+ * set only when a visit ends and a later visit is planned (src/data/visits.ts, finishVisit).
+ */
+export const TECH_SETTABLE: JobStatus[] = [
+  "Scheduled",
+  "EnRoute",
+  "InProgress",
+  "OnHold",
+  "Complete",
+];
+/** Where a tech may end a visit from ("Visit done, return needed"). */
+export const VISIT_DONE_FROM: JobStatus[] = ["EnRoute", "InProgress", "OnHold"];
 
 /**
  * Whether a tech may move their job from the stored status `from` to `to`: one of the tech
@@ -47,6 +59,7 @@ export const TECH_SETTABLE: JobStatus[] = ["EnRoute", "InProgress", "OnHold", "C
 export function techMayMove(from: JobStatus, to: JobStatus): boolean {
   if (from === to) return true;
   if (from === "InProgress" && to === "Complete") return true;
+  if (to === "Scheduled") return VISIT_DONE_FROM.includes(from);
   return Object.values(JOB_MOVES).some(
     (m) => m.by === "tech" && m.to === to && m.from.includes(from),
   );
@@ -100,8 +113,12 @@ export function movePatch(job: Job, action: JobAction, reason?: string): Partial
 export function useJobMove() {
   const qc = useQueryClient();
   return useMutation({
+    // The job's current visit follows the move (multi-visit jobs, src/data/visits.ts).
     mutationFn: async (v: { job: Job; action: JobAction; reason?: string }) =>
-      backend().jobs.update(v.job.id, movePatch(v.job, v.action, v.reason)),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: keys.table("jobs") }),
+      updateJobWithVisit(v.job, movePatch(v.job, v.action, v.reason)),
+    onSettled: () => {
+      void qc.invalidateQueries({ queryKey: keys.table("jobs") });
+      void qc.invalidateQueries({ queryKey: keys.table("visits") });
+    },
   });
 }

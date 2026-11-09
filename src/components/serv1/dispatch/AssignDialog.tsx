@@ -23,6 +23,7 @@ import {
   toDateInput,
   type Job,
   type User,
+  type VisitEntry,
 } from "@/data";
 
 import { jobLabel } from "./board";
@@ -51,6 +52,7 @@ export function AssignDialog({
   onClose,
   onSubmit,
   onUnschedule,
+  onAddVisit,
   jobs = [],
 }: {
   /** All jobs, to warn about double booking (optional). */
@@ -62,6 +64,11 @@ export function AssignDialog({
   onClose: () => void;
   onSubmit: (job: Job, techIdentityId: string, start: Date, minutes: number) => void;
   onUnschedule: (job: Job) => void;
+  /**
+   * Multi-visit jobs (docs/VISITS.md): plan another trip with the tech, day and time chosen here,
+   * keeping the job's current visit as it is. Offered once the job is on the schedule.
+   */
+  onAddVisit?: (job: Job, techIdentityId: string, start: Date, minutes: number) => void;
 }) {
   const slots = dispatchSlots();
   const [techId, setTechId] = useState("");
@@ -89,6 +96,8 @@ export function AssignDialog({
       ? findOverlaps(jobs, job.id, techId, start, new Date(start.getTime() + hours * 3_600_000))
       : [];
   const lengths = LENGTHS.includes(hours) ? LENGTHS : [...LENGTHS, hours].sort((a, b) => a - b);
+  const realVisit = (job as Partial<VisitEntry> | null)?.implied === false;
+  const canAddVisit = !!onAddVisit && !!job?.assignedTechId && !!job.scheduledStart;
 
   return (
     <Dialog open={!!job} onOpenChange={(open) => !open && onClose()}>
@@ -170,7 +179,7 @@ export function AssignDialog({
                 disabled={busy}
                 onClick={() => onUnschedule(job)}
               >
-                Move back to Unscheduled
+                {realVisit ? "Remove this visit" : "Move back to Unscheduled"}
               </Button>
             ) : (
               <span />
@@ -179,6 +188,19 @@ export function AssignDialog({
               <Button type="button" variant="outline" onClick={onClose}>
                 Cancel
               </Button>
+              {canAddVisit ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={!valid || busy}
+                  onClick={() => {
+                    if (valid && parsedDay)
+                      onAddVisit(job, techId, atMinutes(parsedDay, slot), Math.round(hours * 60));
+                  }}
+                >
+                  Add as another visit
+                </Button>
+              ) : null}
               <Button type="submit" disabled={!valid || busy}>
                 {clashes.length ? "Schedule anyway" : "Schedule"}
               </Button>

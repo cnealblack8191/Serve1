@@ -190,6 +190,40 @@ export interface Job extends BaseRecord {
   materials?: JobMaterial[] | null;
   materialsAt?: string | null;
   techStatusAt?: string | null;
+  // ---- Multi-visit jobs (docs/VISITS.md). Optional: older records have none. ----
+  /** Identities of every tech with a visit on this job: each may read it (Visit rows). */
+  visitTechIds?: string[] | null;
+}
+
+/**
+ * One trip to the site for a job (docs/VISITS.md). A job with no Visit rows is treated as one
+ * visit built from its own schedule fields (src/data/visits.ts, visitsOf).
+ */
+export type VisitStatus = "Scheduled" | "EnRoute" | "InProgress" | "OnHold" | "Done" | "Cancelled";
+export const VISIT_STATUSES: VisitStatus[] = [
+  "Scheduled",
+  "EnRoute",
+  "InProgress",
+  "OnHold",
+  "Done",
+  "Cancelled",
+];
+export interface Visit extends BaseRecord {
+  jobId: string;
+  /** 1, 2, 3… in the order the office planned them. */
+  number: number;
+  scheduledStart: string | null;
+  scheduledEnd: string | null;
+  /** Identity of the tech doing this visit. Only the office changes it. */
+  assignedTechId: string | null;
+  /** The job's visitTechIds, copied so every tech on the job may read every visit. */
+  jobTechIds: string[] | null;
+  status: VisitStatus;
+  startedAt: string | null;
+  completedAt: string | null;
+  holdReason: string | null;
+  /** The tech's words when the visit ends with a return needed. */
+  note: string | null;
 }
 
 export type NoSignatureReason = "not_on_site" | "unable_to_sign" | "other";
@@ -202,6 +236,8 @@ export interface JobMaterial {
 /** A note a tech added from the ECI1 phone app. */
 export interface TechNote extends BaseRecord {
   jobId: string;
+  /** Same rule as Attachment.jobTechIds. */
+  jobTechIds?: string[] | null;
   assignedTechId: string | null;
   text: string;
   by: string | null;
@@ -293,6 +329,8 @@ export interface Opportunity extends BaseRecord {
 
 export interface Attachment extends BaseRecord {
   jobId: string;
+  /** The job's visitTechIds when the row was added: other techs on the job may read it. */
+  jobTechIds?: string[] | null;
   /** Identity of the tech assigned to the job when the file was added; null for office uploads
    *  on unassigned jobs. The backend lets a tech read only rows carrying their own identity. */
   assignedTechId: string | null;
@@ -304,6 +342,8 @@ export interface Attachment extends BaseRecord {
 
 export interface Signature extends BaseRecord {
   jobId: string;
+  /** Same rule as Attachment.jobTechIds. */
+  jobTechIds?: string[] | null;
   /** Same rule as Attachment.assignedTechId. */
   assignedTechId: string | null;
   signerName: string;
@@ -350,6 +390,7 @@ export type NewOpportunity = Input<Opportunity>;
 export type NewSpectrumCheck = Input<SpectrumCheck>;
 export type NewTechNote = Input<TechNote>;
 export type NewTechReceipt = Input<TechReceipt>;
+export type NewVisit = Input<Visit>;
 
 export type TableName =
   | "users"
@@ -362,7 +403,8 @@ export type TableName =
   | "opportunities"
   | "spectrumChecks"
   | "techNotes"
-  | "techReceipts";
+  | "techReceipts"
+  | "visits";
 
 export const TABLES: TableName[] = [
   "users",
@@ -376,6 +418,7 @@ export const TABLES: TableName[] = [
   "spectrumChecks",
   "techNotes",
   "techReceipts",
+  "visits",
 ];
 
 /** The signed-in person, as every screen sees them. */

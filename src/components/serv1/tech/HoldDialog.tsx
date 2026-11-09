@@ -22,6 +22,7 @@ export function HoldDialog({
   description = "Say why, so the office knows what is needed (for example: waiting on a part).",
   label = "Reason",
   saveLabel = "Put on hold",
+  optional = false,
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
@@ -31,6 +32,8 @@ export function HoldDialog({
   description?: string;
   label?: string;
   saveLabel?: string;
+  /** The text may be left empty (for example: ending a visit when the next one is planned). */
+  optional?: boolean;
 }) {
   const [reason, setReason] = useState("");
   return (
@@ -60,7 +63,7 @@ export function HoldDialog({
           </Button>
           <Button
             className="h-12"
-            disabled={!reason.trim() || busy}
+            disabled={(!optional && !reason.trim()) || busy}
             onClick={() => onSave(reason.trim())}
           >
             {busy ? "Saving…" : saveLabel}

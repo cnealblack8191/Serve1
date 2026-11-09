@@ -4,10 +4,13 @@ import { DataRow, EmptyState, PageHeader, SectionHeading } from "@/components/ec
 import { JobStatusBadge } from "@/components/serv1/office/JobStatusBadge";
 import { JobActions } from "@/components/serv1/office/JobActions";
 import { JobTracking } from "@/components/serv1/office/JobTracking";
+import { JobVisits } from "@/components/serv1/office/JobVisits";
 import { StoredImage } from "@/components/serv1/office/StoredImage";
 import { TechWork } from "@/components/serv1/office/TechWork";
 import { Button } from "@/components/ui/button";
 import {
+  useVisits,
+  withCurrentVisit,
   useAttachments,
   useCustomer,
   useJob,
@@ -47,6 +50,7 @@ function Page() {
   const attachments = useAttachments();
   const signatures = useSignatures();
   const invoices = useInvoices();
+  const visits = useVisits();
 
   if (job.isLoading) return <p className="text-sm text-muted-foreground">Loading…</p>;
   if (!job.data) {
@@ -58,9 +62,11 @@ function Page() {
     );
   }
   const j = job.data;
+  // Tech and time of the visit the job is on now (multi-visit jobs, docs/VISITS.md).
+  const now = withCurrentVisit(j, visits.data ?? []);
   const site = (sites.data ?? []).find((s) => s.id === j.siteId);
-  const tech = j.assignedTechId
-    ? (techs.data ?? []).find((t) => t.identityId === j.assignedTechId)
+  const tech = now.assignedTechId
+    ? (techs.data ?? []).find((t) => t.identityId === now.assignedTechId)
     : undefined;
   const photos = (attachments.data ?? []).filter((a) => a.jobId === id);
   const sigs = (signatures.data ?? []).filter((s) => s.jobId === id);
@@ -128,7 +134,9 @@ function Page() {
         <DataRow
           label="Scheduled"
           value={
-            j.scheduledStart ? `${fmt(j.scheduledStart)} – ${fmt(j.scheduledEnd)}` : "Not scheduled"
+            now.scheduledStart
+              ? `${fmt(now.scheduledStart)} – ${fmt(now.scheduledEnd)}`
+              : "Not scheduled"
           }
         />
         <DataRow label="Description" value={j.description} />
@@ -136,6 +144,8 @@ function Page() {
         <DataRow label="Started" value={fmt(j.startedAt)} />
         <DataRow label="Completed" value={fmt(j.completedAt)} />
       </section>
+
+      <JobVisits job={j} canEdit={isOffice} roster={techs.data ?? []} />
 
       <JobTracking
         job={j}

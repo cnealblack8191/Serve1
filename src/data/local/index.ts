@@ -5,6 +5,7 @@ import type {
   AuthUser,
   BaseRecord,
   Job,
+  Visit,
   Signature,
   SignInResult,
   TableName,
@@ -22,6 +23,7 @@ import {
   SEED_TECH_NOTES,
   SEED_TECH_RECEIPTS,
   SEED_USERS,
+  SEED_VISITS,
 } from "./seed";
 import { LocalFileStore } from "./file-store";
 import { TECH_SETTABLE, techMayMove } from "../jobflow";
@@ -62,6 +64,7 @@ function load(): Tables {
     spectrumChecks: [],
     techNotes: [...SEED_TECH_NOTES],
     techReceipts: [...SEED_TECH_RECEIPTS],
+    visits: [...SEED_VISITS],
   };
 }
 
@@ -111,6 +114,7 @@ export function createLocalBackend(): Backend {
         listeners.forEach((l) => l("spectrumChecks"));
         listeners.forEach((l) => l("techNotes"));
         listeners.forEach((l) => l("techReceipts"));
+        listeners.forEach((l) => l("visits"));
       }
     });
   }
@@ -282,6 +286,12 @@ export function createLocalBackend(): Backend {
   const jobOf = (id: string) => (tables.jobs as Job[]).find((j) => j.id === id) ?? null;
   const techOwns = (me: AuthUser | null, techId: string | null) =>
     isTech(me) && techId !== null && techId === me?.identityId;
+  /** A tech with a visit on the job (docs/VISITS.md): listed in the row's visit-tech ids. */
+  const techListed = (me: AuthUser | null, ids: string[] | null | undefined) =>
+    isTech(me) && !!me && (ids ?? []).includes(me.identityId);
+  /** The assigned tech, or any tech with a visit on the job. */
+  const techOnJob = (me: AuthUser | null, job: Job | null) =>
+    !!job && (techOwns(me, job.assignedTechId) || techListed(me, job.visitTechIds));
 
   /** Fields a tech may change on their own job: the work itself, never the schedule or billing. */
   const TECH_FIELDS = new Set([
@@ -294,15 +304,21 @@ export function createLocalBackend(): Backend {
     "techStatusAt",
   ]);
   const jobRules: Rules<Job> = {
-    read: (job, me) => isOffice(me) || me?.role === "Owner" || techOwns(me, job.assignedTechId),
+    read: (job, me) => isOffice(me) || me?.role === "Owner" || techOnJob(me, job),
     // Office creates and edits everything; a tech may update (not create or delete) their own
     // jobs, only the work fields, and only to a status a tech may set (src/data/jobflow.ts).
     write: (job, me, op, patch) => {
       if (isOffice(me)) return true;
-      if (op !== "update" || job === null || !techOwns(me, job.assignedTechId)) return false;
+      if (op !== "update" || job === null || !techOnJob(me, job)) return false;
       const p = (patch ?? {}) as Partial<Job>;
-      if (!Object.keys(p).every((k) => TECH_FIELDS.has(k) || k === "assignedTechId")) return false;
+      if (
+        !Object.keys(p).every(
+          (k) => TECH_FIELDS.has(k) || k === "assignedTechId" || k === "visitTechIds",
+        )
+      )
+        return false;
       if ("assignedTechId" in p && p.assignedTechId !== job.assignedTechId) return false;
+      if ("visitTechIds" in p && String(p.visitTechIds) !== String(job.visitTechIds)) return false;
       return (
         p.status === undefined ||
         (TECH_SETTABLE.concat(job.status).includes(p.status) && techMayMove(job.status, p.status))
@@ -312,22 +328,46 @@ export function createLocalBackend(): Backend {
 
   /** Attachments and signatures: tagged with the job's tech; a tech reads and adds only their own. */
   const fileRowRules = <
-    T extends { jobId: string; assignedTechId: string | null },
+    T extends { jobId: string; assignedTechId: string | null; jobTechIds?: string[] | null },
   >(): Rules<T> => ({
-    read: (row, me) => isOffice(me) || me?.role === "Owner" || techOwns(me, row.assignedTechId),
+    read: (row, me) =>
+      isOffice(me) ||
+      me?.role === "Owner" ||
+      techOwns(me, row.assignedTechId) ||
+      techListed(me, row.jobTechIds),
     write: (row, me, op) => {
       if (isOffice(me)) return true;
       if (op !== "create" || row === null || !isTech(me)) return false;
-      // A tech may add a row only for a job assigned to them, tagged with their own identity.
-      const job = jobOf(row.jobId);
-      return !!job && techOwns(me, job.assignedTechId) && row.assignedTechId === me?.identityId;
+      // A tech may add a row only for a job they are on, tagged with their own identity.
+      return techOnJob(me, jobOf(row.jobId)) && row.assignedTechId === me?.identityId;
     },
   });
 
-  const techRowRules = <T extends { assignedTechId: string | null }>(): Rules<T> => ({
-    read: (row, me) => isOffice(me) || me?.role === "Owner" || techOwns(me, row.assignedTechId),
+  const techRowRules = <
+    T extends { assignedTechId: string | null; jobTechIds?: string[] | null },
+  >(): Rules<T> => ({
+    read: (row, me) =>
+      isOffice(me) ||
+      me?.role === "Owner" ||
+      techOwns(me, row.assignedTechId) ||
+      techListed(me, row.jobTechIds),
     write: (_r, me) => isOffice(me),
   });
+
+  /** Fields the visit's own tech may change: its progress, never its plan (mirrors Amplify). */
+  const VISIT_TECH_FIELDS = new Set(["status", "startedAt", "completedAt", "holdReason", "note"]);
+  const visitRules: Rules<Visit> = {
+    read: (v, me) =>
+      isOffice(me) ||
+      me?.role === "Owner" ||
+      techOwns(me, v.assignedTechId) ||
+      techListed(me, v.jobTechIds),
+    write: (v, me, op, patch) => {
+      if (isOffice(me)) return true;
+      if (op !== "update" || v === null || !techOwns(me, v.assignedTechId)) return false;
+      return Object.keys(patch ?? {}).every((k) => VISIT_TECH_FIELDS.has(k));
+    },
+  };
 
   /** When the office reassigns a job, its attachments, signatures, tech notes and receipts follow
    *  it (Codex reviews of PRs #1 and #18). */
@@ -442,6 +482,7 @@ export function createLocalBackend(): Backend {
     // reviews; a tech reads only rows on their own jobs.
     techNotes: repo("techNotes", techRowRules()),
     techReceipts: repo("techReceipts", techRowRules()),
+    visits: repo<Visit, import("../types").NewVisit>("visits", visitRules),
     files: filesApi,
     onChange(listener) {
       listeners.add(listener);
