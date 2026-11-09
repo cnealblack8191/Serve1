@@ -21,7 +21,7 @@ import {
 export interface PilotUser {
   /** The demo account it stands for, e.g. "local-tech-1". */
   demoIdentityId: string;
-  /** Sign-in name, e.g. "tech1@serv1.ecinc.us". */
+  /** Sign-in name, e.g. "tech@serv1.ecinc.us". */
   email: string;
   /** Cognito user id (sub) and username, as AdminCreateUser returned them. */
   sub: string;
@@ -32,9 +32,19 @@ export interface PilotUser {
 export const cognitoIdentity = (u: Pick<PilotUser, "sub" | "username">) =>
   `${u.sub}::${u.username}`;
 
-/** The pilot sign-in name for each demo account: same local part, the pilot's domain. */
-export const pilotEmail = (demoEmail: string, domain: string) =>
-  `${demoEmail.split("@")[0]}@${domain}`;
+/**
+ * The four pilot sign-ins (owner, 2026-11-09: one per role) and the demo account each stands
+ * for. The other demo techs stay on the roster and the dispatch board without a sign-in.
+ */
+export const PILOT_SIGN_INS = [
+  { local: "admin", demoIdentityId: "local-admin", group: "Admin" },
+  { local: "office", demoIdentityId: "local-office", group: "Office" },
+  { local: "owner", demoIdentityId: "local-owner", group: "Owner" },
+  { local: "tech", demoIdentityId: "local-tech-1", group: "Tech" },
+] as const;
+
+/** Roster identity for a demo person who has no pilot sign-in (never matches a Cognito user). */
+export const noSignInIdentity = (demoIdentityId: string) => `no-sign-in:${demoIdentityId}`;
 
 const strip = <T extends { createdAt?: string; updatedAt?: string }>(r: T) => {
   const { createdAt: _c, updatedAt: _u, ...rest } = r;
@@ -43,19 +53,22 @@ const strip = <T extends { createdAt?: string; updatedAt?: string }>(r: T) => {
 
 export function buildSeedPlan(pilotUsers: PilotUser[]) {
   const byDemo = new Map(pilotUsers.map((u) => [u.demoIdentityId, u]));
-  const missing = DEMO_ACCOUNTS.filter((a) => !byDemo.has(a.identityId)).map((a) => a.email);
+  const missing = PILOT_SIGN_INS.filter((p) => !byDemo.has(p.demoIdentityId)).map((p) => p.local);
   if (missing.length) throw new Error(`No pilot sign-in for: ${missing.join(", ")}`);
+  const demoIds = new Set(DEMO_ACCOUNTS.map((a) => a.identityId));
   const identity = (local: string | null) => {
     if (local === null) return null;
+    if (!demoIds.has(local)) throw new Error(`Seed refers to an unknown demo identity: ${local}`);
     const u = byDemo.get(local);
-    if (!u) throw new Error(`Seed refers to an unknown demo identity: ${local}`);
-    return cognitoIdentity(u);
+    return u ? cognitoIdentity(u) : noSignInIdentity(local);
   };
+  // Demo people without a sign-in keep a name-only email on the pilot domain (no mailbox, no login).
+  const domain = pilotUsers[0]!.email.split("@")[1]!;
 
   return {
     users: SEED_USERS.map((u) => ({
       ...strip(u),
-      email: byDemo.get(u.identityId!)!.email,
+      email: byDemo.get(u.identityId!)?.email ?? `${u.email.split("@")[0]}.no-sign-in@${domain}`,
       identityId: identity(u.identityId),
     })),
     customers: SEED_CUSTOMERS.map(strip),
